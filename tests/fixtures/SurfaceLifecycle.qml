@@ -37,6 +37,7 @@ TestCase {
     property var service: testService
     property bool opened: true
     property bool busy: false
+    property string error: ""
     property string view: "lookup"
     property string contentAccess: "fixture"
     property string query: ""
@@ -63,7 +64,7 @@ TestCase {
     return item
   }
   function init() {
-    controller.opened=true;controller.busy=false;controller.plays=0;controller.stops=0;controller.actions=[]
+    controller.opened=true;controller.busy=false;controller.error="";controller.plays=0;controller.stops=0;controller.actions=[]
     controller.session=null;controller.detail=null;controller.query="";controller.searching=false
     controller.searchSequence=0;controller.contentAccess="fixture"
     service.hold=false;service.ready=true;service.locked=false;service.requests=[];service.pending=[]

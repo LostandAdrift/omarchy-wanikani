@@ -7,7 +7,7 @@ from datetime import datetime
 from .common import UserError, accessible_subject, epoch, plain, stamp
 from .media_files import available_file
 from .grading import grade, validate_subject_answers
-from . import comparisons, editor, history, milestones
+from . import comparisons, editor, history, lesson_flow, milestones
 
 DEFAULTS = {
     "batch_size": 5, "notifications": True, "quiet_start": 22, "quiet_end": 8,
@@ -345,6 +345,8 @@ class Engine:
             session = {"id": str(uuid.uuid4()), "mode": mode, "queue": queue, "index": 0,
                 "phase": "lesson" if mode == "lessons" else "question", "part": "meaning", "feedback": None,
                 "draft": "", "lesson_index": 0, "completed": 0, "overrides": 0, "started_at": stamp(self.now()), "ended_at": None}
+            if mode == "lessons":
+                session["lesson_step"] = "meaning"
             self.store.save_session(session)
             return self.session_view(session)
 
@@ -495,6 +497,7 @@ class Engine:
                     view = restricted_session(view)
                 else:
                     view["unavailable"] = str(error)
+        view["lesson_flow"] = lesson_flow.project(session, view.get("subject"))
         return view
 
     def confirm_demo(self):
@@ -642,6 +645,7 @@ class Engine:
             "draft": lambda: self.draft(args.get("text", "")), "answer": lambda: self.answer(args.get("text", "")),
             "advance": self.advance, "correct": self.correct, "finish": self.finish,
             "lesson_next": lambda: self.lesson_next(args.get("back", False)),
+            "lesson_navigate": lambda: lesson_flow.navigate(self, args),
             "set_material": lambda: self.set_material(int(args["subject_id"]), args.get("values", {}), args.get("editor_draft")),
             "editor_draft": lambda: editor.write(self, int(args["subject_id"]), args.get("values")),
             "editor_discard": lambda: editor.discard(self, int(args["subject_id"]), args.get("expected")),
@@ -663,7 +667,10 @@ class Engine:
                     value = decode(rows[0][0])
                 except UnreadableReply:
                     raise UserError("This request is already recorded, but its saved reply cannot be read. Your work was retained. Close and resume study to load the saved session; restore a backup or reinstall the current plugin if the problem continues.", "reply_unavailable") from None
-                return replay(self, value)
+                value = replay(self, value)
+                if isinstance(value, dict) and value.get("mode") == "lessons" and value.get("phase") == "lesson":
+                    value["lesson_flow"] = lesson_flow.project(value, value.get("subject"))
+                return value
             value = handlers[method]()
             self.store.execute("INSERT INTO commands VALUES(?,?)", (request_id, encode(value)))
             return value

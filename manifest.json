@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.lostandadrift.wanikani",
   "name": "WaniKani",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "lostandadrift",
   "description": "Five reviews, then back to work. Native lessons, offline study, kanji lookup, and a little crab for your Omarchy desktop.",
   "kinds": ["service", "bar-widget", "panel"],

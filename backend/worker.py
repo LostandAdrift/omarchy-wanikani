@@ -347,7 +347,7 @@ class Worker:
             "last_study_at": self.engine.store.get("last_study_at", 0)}
 
     def note_study_activity(self, method):
-        if method in ("start", "answer", "advance", "lesson_next", "listen", "listen_media"):
+        if method in ("start", "answer", "advance", "lesson_next", "lesson_navigate", "listen", "listen_media"):
             now = self.engine.now()
             # A thirty-second observation is enough for gentle reminder
             # suppression; avoid a second journal flush on every keystroke.
@@ -593,7 +593,7 @@ class Worker:
         else:
             result = self.command(rid, method, args)
         self.emit({"v": 1, "id": rid, "ok": True, "data": result})
-        session_only = method in ("answer", "correct", "finish", "lesson_next", "start")
+        session_only = method in ("answer", "correct", "finish", "lesson_next", "lesson_navigate", "start")
         if method == "advance" and previous_session:
             current = self.engine.store.session()
             session_only = bool(current and current["id"] == previous_session["id"]

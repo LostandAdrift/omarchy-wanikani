@@ -23,6 +23,7 @@ RUNTIME_ROOTS = {"qml", "backend", "vendor", "assets"}
 RUNTIME_FILES = {"manifest.json", "Service.qml", "Panel.qml", "LICENSE"}
 REQUIRED_RUNTIME = ("manifest.json", "Service.qml", "Panel.qml", "backend/worker.py",
     "backend/wanikani/listening.py", "backend/wanikani/lessons.py", "backend/wanikani/reminders.py",
+    "backend/wanikani/listening_preparation.py", "backend/wanikani/lesson_flow.py",
     "backend/wanikani/insights.py", "qml/LearningActivity.qml",
     "qml/Listening.qml", "qml/StudyOverview.qml", "qml/StudyRhythm.qml")
 
@@ -320,7 +321,7 @@ QA_DRIVER = r'''
     try {
       var action = JSON.parse(encoded)
       if (action.kind === "open" || action.kind === "measure-open") {
-        var views = ["dashboard", "review-overview", "lesson-overview", "progress", "listen", "lessons", "reviews", "resume", "lookup", "practice-library", "settings", "zen", "help", "recovery"]
+        var views = ["dashboard", "review-overview", "lesson-overview", "progress", "activity", "listen", "lessons", "reviews", "resume", "lookup", "practice-library", "settings", "zen", "help", "recovery"]
         if (views.indexOf(action.view) < 0) throw new Error("Unknown QA view")
         if (action.kind === "measure-open") {
           if (root.opened) throw new Error("Close the QA panel before measuring its opening")
@@ -901,10 +902,28 @@ def smoke(run):
             capture(run, view + "-narrow")
             action(run, {"kind": "bounds"})
         if view == "lessons":
-            page = wait_snapshot(run, lambda s: button(s, "Tell them apart · 1") and settled(s))
-            for note in ("My reminder: sunlight through the kitchen window.", "My sound cue: say にち with the morning calendar."):
-                if note not in page["labels"]:
-                    raise RuntimeError("Personal study notes are missing from lesson discovery.")
+            page = wait_snapshot(run, lambda s: s["session"].get("lesson_flow") and settled(s))
+            first_id = page["session"]["subject"]["id"]
+            meaning_note = "My reminder: sunlight through the kitchen window."
+            reading_note = "My sound cue: say にち with the morning calendar."
+            if page["session"]["lesson_flow"]["step"] != "meaning" or meaning_note not in page["labels"] or reading_note in page["labels"]:
+                raise RuntimeError("The guided lesson did not open at its focused Meaning step.")
+            capture(run, "lesson-meaning")
+            action(run, {"kind": "activate", "selector": {"objectName": "lesson-next"}})
+            page = wait_snapshot(run, lambda s: s["session"]["lesson_flow"]["step"] == "reading" and settled(s))
+            if reading_note not in page["labels"] or meaning_note in page["labels"]:
+                raise RuntimeError("The Reading step mixed or lost the learner's personal notes.")
+            capture(run, "lesson-reading")
+            saved = page["session"]
+            plays = page["audio"]["plays"]
+            action(run, {"kind": "close"})
+            action(run, {"kind": "open", "view": "lessons"})
+            page = wait_snapshot(run, lambda s: s["session"].get("lesson_flow", {}).get("step") == "reading" and settled(s))
+            if page["session"]["id"] != saved["id"] or page["session"]["subject"]["id"] != first_id or page["audio"]["plays"] != plays:
+                raise RuntimeError("Reopening a guided lesson lost its place or started audio.")
+            action(run, {"kind": "activate", "selector": {"objectName": "lesson-next"}})
+            page = wait_snapshot(run, lambda s: s["session"]["lesson_flow"]["step"] == "context" and button(s, "Tell them apart · 1") and settled(s))
+            capture(run, "lesson-context")
             action(run, {"kind": "activate", "selector": {"text": "Tell them apart · 1"}})
             page = wait_snapshot(run, lambda s: "eye" in s["labels"] and button(s, "Close comparison"))
             control = next(c for c in page["controls"] if c["text"] == "Close comparison")
@@ -962,9 +981,17 @@ def smoke(run):
                 raise RuntimeError("Returning from a reading-trail word lost the passage.")
     action(run, {"kind": "open", "view": "resume"})
     snapshot = wait_snapshot(run, lambda s: s.get("session") is not None)
-    while snapshot["session"]["phase"] == "lesson":
-        action(run, {"kind": "backend", "method": "lesson_next"})
+    for _ in range(12):
+        if snapshot["session"]["phase"] != "lesson":
+            break
+        flow = snapshot["session"].get("lesson_flow")
+        if not flow:
+            raise RuntimeError("Guided lesson navigation is unavailable.")
+        name = "lesson-start-quiz" if flow["can_quiz"] else "lesson-next"
+        action(run, {"kind": "activate", "selector": {"objectName": name}})
         snapshot = wait_snapshot(run)
+    if snapshot["session"]["phase"] != "question":
+        raise RuntimeError("The explicit lesson quiz action did not reach its first question.")
     capture(run, "lesson-quiz")
     action(run, {"kind": "backend", "method": "draft", "args": {"text": "saved fixture draft"}})
     wait_snapshot(run)
@@ -1070,6 +1097,14 @@ def cleanup(run):
         expected = {"id": run["id"], "root": run["root"]}
         if json.loads((target / ".native-qa.json").read_text()) != expected:
             raise RuntimeError("The installed QA marker differs; nothing was removed.")
+        try:
+            # Omarchy removal reloads every shell service, including lock.
+            # A lock beginning during a scenario must also defer its cleanup.
+            require_unlocked_desktop()
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+            run["status"] = "cleanup-deferred"
+            write_json(Path(run["root"]) / "run.json", run)
+            raise RuntimeError("QA cleanup is deferred while the desktop is locked or its state is unknown. Run cleanup with this record after normal unlock; do not remove its files or reload the shell during lock.") from None
         command(["omarchy", "plugin", "remove", run["id"], "--yes"])
     run["status"] = "removed"
     write_json(Path(run["root"]) / "run.json", run)

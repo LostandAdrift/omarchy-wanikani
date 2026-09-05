@@ -10,33 +10,42 @@ ColumnLayout {
   required property var controller
   readonly property var session: controller.session
   readonly property var subject: session ? session.subject : null
+  readonly property var lessonFlow: session && session.phase === "lesson" ? session.lesson_flow || null : null
+  readonly property string lessonSection: lessonFlow ? lessonFlow.step : "all"
   readonly property bool promptReady: !subject || subjectGlyph.displayReady
   readonly property bool interactive: controller.opened && controller.service && controller.service.ready && !controller.service.locked
   readonly property bool feedback: session && session.phase === "feedback"
   readonly property color subjectColor: !subject ? Color.accent : subject.type === "radical" ? "#48a9de" : subject.type === "kanji" ? "#e56cb0" : "#a68be8"
   property bool converting: false
   property string questionKey: ""
+  property var lessonAutoplayIntent: null
   spacing: Style.space(16)
 
   function focusInput() {
     if (!interactive)
       return
-    if (root.session && root.session.phase === "lesson")
-      subjectCard.forceActiveFocus(Qt.OtherFocusReason)
-    else if (root.session && root.session.phase === "complete")
+    if (root.session && root.session.phase === "lesson") {
+      if (root.lessonFlow && root.lessonFlow.can_quiz)
+        lessonQuiz.forceActiveFocus(Qt.TabFocusReason)
+      else
+        subjectCard.forceActiveFocus(Qt.OtherFocusReason)
+    } else if (root.session && root.session.phase === "complete")
       returnToWork.forceActiveFocus(Qt.TabFocusReason)
     else if (root.session)
       input.forceActiveFocus()
   }
   function restoreInput() {
     if (!session || !subject || !input) {
+      lessonAutoplayIntent = null
       if (questionKey && typeof controller.stopAudio === "function")
         controller.stopAudio()
       questionKey = ""
       return
     }
-    var key = session.id + ":" + subject.id + ":" + session.part + ":" + session.phase
+    var key = session.id + ":" + subject.id + ":" + session.part + ":" + session.phase + ":" + lessonSection
     if (key !== questionKey) {
+      var lessonAudio = lessonAutoplayIntent
+      lessonAutoplayIntent = null
       if (typeof controller.stopAudio === "function")
         controller.stopAudio()
       questionKey = key
@@ -46,7 +55,7 @@ ColumnLayout {
       Qt.callLater(focusInput)
       if (interactive && session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
         controller.play(subject)
-      else if (interactive && session.phase === "lesson" && controller.snapshot.settings.autoplay_lessons)
+      else if (interactive && session.phase === "lesson" && controller.snapshot.settings.autoplay_lessons && (!lessonFlow || (lessonAudio && lessonSection === "reading" && session.id === lessonAudio.sessionId && session.revision > lessonAudio.revision && subject.id === lessonAudio.subjectId && (controller.contentAccess || "") === lessonAudio.access)))
         controller.play(subject)
     }
   }
@@ -89,11 +98,49 @@ ColumnLayout {
       })
   }
   function nextLesson(back) {
-    if (!interactive || controller.busy || !session || session.phase !== "lesson" || !subject || (back !== true && !promptReady))
+    if (!interactive || controller.busy || !session || session.phase !== "lesson")
+      return
+    if (lessonFlow) {
+      if (back === true ? !lessonFlow.can_back : !lessonFlow.can_next || !subject || !promptReady)
+        return
+      navigateLesson(back === true ? "back" : "next")
+      return
+    }
+    if (!subject || (back !== true && !promptReady))
       return
     controller.studyAction("lesson_next", {
       back: back === true
     })
+  }
+  function navigateLesson(action) {
+    if (!interactive || controller.busy || !lessonFlow || !session)
+      return
+    if (["next", "back", "quiz"].indexOf(action) < 0)
+      return
+    if (action === "back" ? !lessonFlow.can_back : !subject || !promptReady || !(action === "quiz" ? lessonFlow.can_quiz : lessonFlow.can_next))
+      return
+    var target = lessonFlow.position - 1 + (action === "back" ? -1 : 1)
+    var next = action !== "quiz" && lessonFlow.steps[target]
+    lessonAutoplayIntent = next && next.id === "reading" && subject ? {
+      sessionId: session.id,
+      revision: session.revision,
+      subjectId: subject.id,
+      access: controller.contentAccess || ""
+    } : null
+    controller.studyAction("lesson_navigate", {
+      action: action,
+      session_id: session.id,
+      revision: session.revision
+    })
+  }
+  onInteractiveChanged: if (!interactive)
+    lessonAutoplayIntent = null
+  Connections {
+    target: root.controller
+    function onErrorChanged() {
+      if (root.controller.error)
+        root.lessonAutoplayIntent = null
+    }
   }
   onSessionChanged: Qt.callLater(restoreInput)
   onSubjectChanged: Qt.callLater(restoreInput)
@@ -111,6 +158,13 @@ ColumnLayout {
     text: "This subject is no longer accessible with the current account. Your saved answers are retained; refresh your account in Settings."
     textColor: Color.urgent
   }
+  Action {
+    objectName: "lesson-unavailable-back"
+    visible: !!root.lessonFlow && !root.subject && root.lessonFlow.can_back
+    text: "Back to the previous lesson"
+    enabled: root.interactive && !root.controller.busy
+    onClicked: root.nextLesson(true)
+  }
   Label {
     Layout.fillWidth: true
     visible: !!(root.session && root.session.unavailable)
@@ -121,16 +175,14 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.session !== null
     Label {
+      Layout.fillWidth: true
       text: !root.session ? "" : (root.session.mode === "practice" ? "PRACTICE" : root.session.mode === "lessons" ? "LESSONS" : "REVIEWS") + " · " + (root.session.phase === "lesson" ? "LEARN" : root.session.phase === "complete" ? "COMPLETE" : (root.session.mode === "lessons" ? "QUIZ · " : "") + (root.session.part === "reading" ? "READING" : "MEANING"))
       font.pixelSize: Style.font.bodySmall
       font.letterSpacing: 2
       secondary: true
     }
-    Item {
-      Layout.fillWidth: true
-    }
     Label {
-      text: root.session ? root.session.completed + " / " + root.session.total + " subjects" : ""
+      text: root.session ? root.session.phase === "lesson" ? "Subject " + (root.session.lesson_index + 1) + " of " + root.session.total : root.session.completed + " / " + root.session.total + " subjects" : ""
       secondary: true
       font.pixelSize: Style.font.bodySmall
     }
@@ -140,7 +192,7 @@ ColumnLayout {
     height: Style.space(5)
     color: Qt.alpha(Color.foreground, 0.1)
     radius: 2
-    visible: root.session !== null
+    visible: root.session !== null && !root.lessonFlow
     Rectangle {
       height: parent.height
       width: parent.width * (root.session ? root.session.completed / Math.max(1, root.session.total) : 0)
@@ -217,6 +269,45 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.subject !== null && root.session && root.session.phase !== "complete"
     spacing: Style.space(14)
+    Flow {
+      objectName: "lesson-path"
+      Layout.fillWidth: true
+      visible: !!root.lessonFlow
+      spacing: Style.space(8)
+      Repeater {
+        model: root.lessonFlow ? root.lessonFlow.steps : []
+        Rectangle {
+          required property var modelData
+          required property int index
+          readonly property bool current: root.lessonSection === modelData.id
+          readonly property color surfaceColor: Theme.surface(parent, Color.background)
+          readonly property color textColor: Theme.foreground(parent, Color.foreground)
+          readonly property color kaniSurface: color
+          readonly property color kaniText: textColor
+          width: lessonStepLabel.implicitWidth + Style.space(22)
+          height: lessonStepLabel.implicitHeight + Style.space(14)
+          radius: Style.cornerRadius
+          color: Theme.tint(textColor, surfaceColor, current ? 0.12 : 0.035)
+          border.color: current ? Theme.indicator(Color.accent, color, textColor) : "transparent"
+          Accessible.role: Accessible.StaticText
+          Accessible.name: (index + 1) + ". " + modelData.label + (current ? ", current step" : "")
+          Label {
+            id: lessonStepLabel
+            anchors.centerIn: parent
+            text: (index + 1) + " · " + modelData.label
+            font.bold: parent.current
+            font.pixelSize: Style.font.bodySmall
+            Accessible.ignored: true
+          }
+        }
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      visible: !!root.lessonFlow && root.lessonFlow.adjusted
+      text: "This lesson's available content changed. Your place has moved to the nearest available step."
+      secondary: true
+    }
     Card {
       id: subjectCard
       Layout.fillWidth: true
@@ -349,6 +440,7 @@ ColumnLayout {
       Layout.fillWidth: true
       subject: root.subject
       controller: root.controller
+      section: root.lessonSection
       visible: root.session && (root.session.phase === "lesson" || (root.feedback && root.session && root.session.feedback && !root.session.feedback.correct))
       showMeaning: root.session && (root.session.phase === "lesson" || root.session.part === "meaning")
       showReading: root.session && (root.session.phase === "lesson" || root.session.part === "reading")
@@ -365,20 +457,40 @@ ColumnLayout {
       visible: root.session && root.session.phase === "lesson"
       Action {
         text: "Previous"
-        enabled: root.interactive && root.session && root.session.lesson_index > 0 && !root.controller.busy
+        objectName: "lesson-previous"
+        enabled: root.interactive && root.session && (root.lessonFlow ? root.lessonFlow.can_back : root.session.lesson_index > 0) && !root.controller.busy
         onClicked: root.nextLesson(true)
       }
       Action {
         id: lessonNext
-        text: root.session && root.session.lesson_index + 1 >= root.session.total ? "Start the quiz →" : "Next subject →"
+        objectName: "lesson-next"
+        visible: !root.lessonFlow || root.lessonFlow.can_next
+        text: root.lessonFlow ? root.lessonFlow.next_label + " →" : root.session && root.session.lesson_index + 1 >= root.session.total ? "Start the quiz →" : "Next subject →"
         selected: true
         enabled: root.interactive && !root.controller.busy && root.promptReady
         onClicked: root.nextLesson(false)
       }
       Action {
+        id: lessonQuiz
+        objectName: "lesson-start-quiz"
+        visible: !!root.lessonFlow && root.lessonFlow.can_quiz
+        text: "Start lesson quiz →"
+        selected: true
+        enabled: root.interactive && !root.controller.busy && root.promptReady
+        accessibleHint: "Begin the quiz for this batch of lessons"
+        onClicked: root.navigateLesson("quiz")
+      }
+      Action {
         text: "Save & return to work"
         onClicked: root.controller.dismiss()
       }
+    }
+    Label {
+      Layout.fillWidth: true
+      visible: !!root.lessonFlow && root.lessonFlow.can_quiz
+      text: "Ready to recall this batch? The quiz checks meanings and applicable readings. Your lessons are completed only after their quiz answers are checked and acknowledged."
+      secondary: true
+      font.pixelSize: Style.font.bodySmall
     }
   }
 }

@@ -539,6 +539,63 @@ Item {
     function status(): string {
       var saved = root.snapshot.saved_sessions || {}
       var level = root.snapshot.learning_progress || {}
+      function section(value) {
+        return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null
+      }
+      function count(value, maximum) {
+        maximum = maximum === undefined ? 1000000000 : maximum
+        return typeof value === "number" && isFinite(value) && Math.floor(value) === value && value >= 0 && value <= maximum ? value : null
+      }
+      function flag(value) {
+        return typeof value === "boolean" ? value : null
+      }
+      function timestamp(value) {
+        return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : null
+      }
+      function counters(value, keys) {
+        value = section(value)
+        if (!value)
+          return null
+        var result = {}
+        for (var key of keys)
+          result[key] = count(value[key])
+        return result
+      }
+      var readiness = section(root.snapshot.readiness)
+      if (readiness) {
+        var source = readiness
+        readiness = {
+          complete: flag(source.complete),
+          checking: flag(source.checking),
+          checked_at: timestamp(source.checked_at)
+        }
+        for (var mode of ["reviews", "lessons", "upcoming_reviews"]) {
+          var group = counters(source[mode], ["total", "checked", "ready", "missing_text", "missing_images", "audio_total", "audio_cached"])
+          if (group)
+            group.total_complete = flag(source[mode].total_complete)
+          readiness[mode] = group
+        }
+      }
+      var sync = section(root.snapshot.sync_progress)
+      if (sync) {
+        var stages = ["idle", "account", "resets", "subjects", "assignments", "study_materials", "review_statistics", "level_progressions", "spaced_repetition_systems", "summary", "unlocks", "reconcile", "submitting", "media", "complete", "cancelled", "starting", "online", "offline", "disconnected", "demo", "clock_changed", "unauthorized", "forbidden", "rate_limited", "api_error", "sync_error", "access_restricted", "vacation", "invalid_request"]
+        sync = {
+          stage: typeof sync.stage === "string" ? stages.indexOf(sync.stage) >= 0 ? sync.stage : "unknown" : null,
+          active: flag(sync.active),
+          completed: count(sync.completed),
+          total: count(sync.total)
+        }
+      }
+      var cache = section(root.snapshot.cache)
+      if (cache) {
+        var limit = count((root.snapshot.settings || {}).cache_limit_mb, 1024)
+        cache = {
+          files: count(cache.files),
+          subjects: count(cache.subjects),
+          bytes: count(cache.bytes, 9007199254740991),
+          limit_bytes: limit !== null && limit >= 32 ? limit * 1048576 : null
+        }
+      }
       return JSON.stringify({
         schemaVersion: 1,
         ready: root.ready,
@@ -557,6 +614,10 @@ Item {
         last_sync: root.snapshot.last_sync || null,
         next_reviews_at: root.snapshot.next_reviews_at || null,
         listening_due: null,
+        outbox_counts: counters(root.snapshot.outbox_counts, ["pending", "inflight", "confirmed", "conflicted", "uncertain", "blocked", "discarded"]),
+        readiness: readiness,
+        sync: sync,
+        cache: cache,
         saved_sessions: {
           reviews: !!saved.reviews,
           lessons: !!saved.lessons,

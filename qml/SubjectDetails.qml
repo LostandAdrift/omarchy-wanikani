@@ -12,6 +12,7 @@ ColumnLayout {
   required property var controller
   property bool showMeaning: true
   property bool showReading: true
+  property string section: "all"
   property bool editable: false
   property bool editorReady: false
   property bool restoringEditor: false
@@ -32,6 +33,10 @@ ColumnLayout {
   readonly property string meaningNoteText: subject && subject.material ? subject.material.meaning_note || "" : ""
   readonly property string readingNoteText: subject && subject.material ? subject.material.reading_note || "" : ""
   spacing: Style.space(12)
+
+  function sectionVisible(name) {
+    return section === "all" || section === name
+  }
 
   function rawEditor() {
     return {
@@ -194,33 +199,33 @@ ColumnLayout {
   Label {
     objectName: "subject-meaning-heading"
     Layout.fillWidth: true
-    visible: root.showMeaning
+    visible: root.showMeaning && root.sectionVisible("meaning")
     text: "Meaning"
     font.bold: true
     secondary: true
   }
   Label {
     Layout.fillWidth: true
-    visible: root.showMeaning
+    visible: root.showMeaning && root.sectionVisible("meaning")
     text: root.subject ? root.subject.meanings.join(" · ") : ""
     font.pixelSize: Style.font.title
     textColor: Color.accent
   }
   Label {
     Layout.fillWidth: true
-    visible: root.showMeaning
+    visible: root.showMeaning && root.sectionVisible("meaning")
     text: root.subject ? root.subject.meaning_mnemonic : ""
   }
   Label {
     Layout.fillWidth: true
-    visible: root.showMeaning && text !== ""
+    visible: root.showMeaning && root.sectionVisible("meaning") && text !== ""
     text: root.subject ? root.subject.meaning_hint : ""
     secondary: true
   }
   ColumnLayout {
     objectName: "subject-meaning-note"
     Layout.fillWidth: true
-    visible: !root.editable && root.showMeaning && root.meaningNoteText.trim() !== ""
+    visible: !root.editable && root.showMeaning && root.sectionVisible("meaning") && root.meaningNoteText.trim() !== ""
     spacing: Style.space(4)
     Label {
       text: "Your meaning note"
@@ -237,14 +242,14 @@ ColumnLayout {
   Label {
     objectName: "subject-reading-heading"
     Layout.fillWidth: true
-    visible: root.showReading && root.subject && root.subject.readings.length > 0
+    visible: root.showReading && root.sectionVisible("reading") && root.subject && root.subject.readings.length > 0
     text: "Reading"
     font.bold: true
     secondary: true
   }
   Label {
     Layout.fillWidth: true
-    visible: root.showReading && text !== ""
+    visible: root.showReading && root.sectionVisible("reading") && text !== ""
     text: root.subject ? root.subject.readings.map(function (r) {
       return r.reading + (r.type ? " (" + r.type + ")" : "")
     }).join(" · ") : ""
@@ -252,19 +257,19 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    visible: root.showReading && text !== ""
+    visible: root.showReading && root.sectionVisible("reading") && text !== ""
     text: root.subject ? root.subject.reading_mnemonic : ""
   }
   Label {
     Layout.fillWidth: true
-    visible: root.showReading && text !== ""
+    visible: root.showReading && root.sectionVisible("reading") && text !== ""
     text: root.subject ? root.subject.reading_hint : ""
     secondary: true
   }
   ColumnLayout {
     objectName: "subject-reading-note"
     Layout.fillWidth: true
-    visible: !root.editable && root.showReading && root.readingNoteText.trim() !== ""
+    visible: !root.editable && root.showReading && root.sectionVisible("reading") && root.readingNoteText.trim() !== ""
     spacing: Style.space(4)
     Label {
       text: "Your reading note"
@@ -280,20 +285,20 @@ ColumnLayout {
   }
   Pronunciation {
     Layout.fillWidth: true
-    visible: root.showReading && root.subject && root.subject.audio_available
+    visible: root.showReading && root.sectionVisible("reading") && root.subject && root.subject.audio_available
     controller: root.controller
     subject: root.subject
   }
   Label {
     objectName: "subject-context-heading"
     Layout.fillWidth: true
-    visible: root.showMeaning && root.showReading && root.subject && root.subject.sentences.length > 0
+    visible: root.showMeaning && root.showReading && root.sectionVisible("context") && root.subject && root.subject.sentences.length > 0
     text: "In context"
     font.bold: true
     secondary: true
   }
   Repeater {
-    model: root.showMeaning && root.showReading && root.subject ? root.subject.sentences : []
+    model: root.showMeaning && root.showReading && root.sectionVisible("context") && root.subject ? root.subject.sentences : []
     ColumnLayout {
       required property var modelData
       Layout.fillWidth: true
@@ -313,18 +318,18 @@ ColumnLayout {
   Lookalikes {
     Layout.fillWidth: true
     subject: root.subject
-    showMeaning: root.showMeaning
-    showReading: root.showReading
+    showMeaning: root.showMeaning && root.sectionVisible("context")
+    showReading: root.showReading && root.sectionVisible("context")
   }
   Label {
     text: "Made from"
     font.bold: true
-    visible: root.showMeaning && root.subject && root.subject.components.length > 0
+    visible: root.showMeaning && root.sectionVisible("context") && root.subject && root.subject.components.length > 0
   }
   Flow {
     Layout.fillWidth: true
     spacing: Style.space(6)
-    visible: root.showMeaning
+    visible: root.showMeaning && root.sectionVisible("context")
     Repeater {
       model: root.subject ? root.subject.components : []
       Action {
@@ -338,12 +343,12 @@ ColumnLayout {
   Label {
     text: "Related subjects"
     font.bold: true
-    visible: root.showMeaning && root.showReading && root.subject && root.subject.related.length > 0
+    visible: root.showMeaning && root.showReading && root.sectionVisible("context") && root.subject && root.subject.related.length > 0
   }
   Flow {
     Layout.fillWidth: true
     spacing: Style.space(6)
-    visible: root.showMeaning && root.showReading
+    visible: root.showMeaning && root.showReading && root.sectionVisible("context")
     Repeater {
       model: root.subject ? root.subject.related : []
       Action {

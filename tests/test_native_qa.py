@@ -167,6 +167,32 @@ finally:
                     qa.hosted(self.record)
                 command.assert_called_once_with(['omarchy-shell', 'lock', 'status'])
 
+    def test_lock_beginning_during_scenario_defers_cleanup_and_preserves_owned_marker(self):
+        with tempfile.TemporaryDirectory(prefix="wanikani-qa-cleanup-") as temporary:
+            directory = Path(temporary)
+            run = {"id": self.record["id"], "root": str(directory / "run")}
+            Path(run["root"]).mkdir()
+            home = directory / "home"
+            installed = home / ".config/omarchy/plugins" / run["id"]
+            installed.mkdir(parents=True)
+            marker = installed / ".native-qa.json"
+            marker.write_text(json.dumps(run))
+            for state in ({"locked": True, "requested": True, "pending": True, "sessionLocked": False}, {}):
+                with self.subTest(state=state), patch.object(Path, "home", return_value=home), \
+                        patch.object(qa, "command", return_value=json.dumps(state)) as command:
+                    with self.assertRaisesRegex(RuntimeError, "cleanup is deferred"):
+                        qa.cleanup(run)
+                    command.assert_called_once_with(["omarchy-shell", "lock", "status"])
+                    self.assertEqual("cleanup-deferred", json.loads((Path(run["root"]) / "run.json").read_text())["status"])
+                    self.assertEqual({"id": run["id"], "root": run["root"]}, json.loads(marker.read_text()))
+            unlocked = {key: False for key in ("locked", "requested", "pending", "sessionLocked")}
+            with patch.object(Path, "home", return_value=home), \
+                    patch.object(qa, "command", return_value=json.dumps(unlocked)) as command:
+                qa.cleanup(run)
+                self.assertEqual([["omarchy-shell", "lock", "status"],
+                    ["omarchy", "plugin", "remove", run["id"], "--yes"]], [call.args[0] for call in command.call_args_list])
+                self.assertEqual("removed", run["status"])
+
 
 if __name__ == "__main__":
     unittest.main()

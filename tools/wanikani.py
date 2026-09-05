@@ -22,6 +22,11 @@ BOOLS = ("ready", "connected", "demo", "syncing", "vacation", "panel_open", "stu
 RHYTHM_STATUSES = {"off", "demo", "desktop_not_ready", "account_not_ready", "dnd", "locked", "fullscreen",
     "studying", "vacation", "clock_untrusted", "skip_today", "quiet", "snoozed", "daily_limit", "no_work", "recent_study", "cooldown", "ready"}
 OUTBOX_STATES = ("pending", "inflight", "confirmed", "conflicted", "uncertain", "blocked", "discarded")
+READINESS_GROUPS = ("reviews", "lessons", "upcoming_reviews")
+READINESS_COUNTS = ("total", "checked", "ready", "missing_text", "missing_images", "audio_total", "audio_cached")
+SYNC_STAGES = STATUSES | {"idle", "account", "resets", "subjects", "assignments", "study_materials", "review_statistics",
+    "level_progressions", "spaced_repetition_systems", "summary", "unlocks", "reconcile", "submitting", "media", "complete", "cancelled"}
+MAX_SAFE_INTEGER = 2**53 - 1
 MAX_RESPONSE = 65536
 
 
@@ -62,6 +67,10 @@ def capabilities():
             "learning_progress": "Confirmed current-level requirement; required/remaining may be unknown while the cache is incomplete.",
             "saved_sessions": "Only presence flags; no questions, drafts, or subject IDs.",
             "reminders": "Current suppression status and next opportunity; never proof that a notification was delivered.",
+            "readiness": "Cached last-check counts for due reviews, lessons and the next 24 hours. Partial or checking counts do not prove current offline availability; audio is optional for graded study.",
+            "sync": "Cached synchronization stage and counts; no account request is initiated and no freeform error is returned.",
+            "cache": "Registered cache file/byte counts and configured limit, not a fresh filesystem measurement or proof of playable audio.",
+            "doctor.guidance": "Static suggestions from cached aggregates; separate from transport health and never executed automatically.",
             "null": "Unavailable in the installed service, not zero."},
         "exit_codes": {"0": "Read succeeded or action dispatch accepted.", "2": "Invalid arguments.",
             "3": "Missing dependency, inaccessible shell/plugin, or incomplete doctor.",
@@ -122,8 +131,8 @@ def _json(value):
         raise CliError("invalid_response", "The shell returned an invalid JSON response.") from exc
 
 
-def _count(value):
-    if value is not None and (type(value) is not int or not 0 <= value <= 1_000_000_000):
+def _count(value, maximum=1_000_000_000):
+    if value is not None and (type(value) is not int or not 0 <= value <= maximum):
         raise CliError("invalid_response", "An aggregate status field has an invalid type or range.")
     return value
 
@@ -138,6 +147,12 @@ def _object(value):
     if not isinstance(value, dict):
         raise CliError("invalid_response", "An aggregate status section is malformed.")
     return value
+
+
+def _enum(value, allowed):
+    if value is not None and not isinstance(value, str):
+        raise CliError("invalid_response", "An aggregate status label is malformed.")
+    return value if value in allowed else "unknown" if value is not None else None
 
 
 def _timestamp(value):
@@ -191,6 +206,28 @@ def status(timeout=5):
             raise CliError("invalid_response", "The next reminder time is malformed.")
         result["reminders"] = {"status": state if state in RHYTHM_STATUSES else "unknown" if state is not None else None,
             "next_at": deadline, "remaining_today": _count(rhythm.get("remaining_today"))}
+    result["readiness"] = None
+    if value.get("readiness") is not None:
+        readiness = _object(value["readiness"])
+        result["readiness"] = {key: _boolean(readiness.get(key)) for key in ("complete", "checking")}
+        result["readiness"]["checked_at"] = _timestamp(readiness.get("checked_at"))
+        for mode in READINESS_GROUPS:
+            group = readiness.get(mode)
+            if group is not None:
+                group = _object(group)
+                group = {**{key: _count(group.get(key)) for key in READINESS_COUNTS},
+                    "total_complete": _boolean(group.get("total_complete"))}
+            result["readiness"][mode] = group
+    result["sync"] = None
+    if value.get("sync") is not None:
+        sync = _object(value["sync"])
+        result["sync"] = {"stage": _enum(sync.get("stage"), SYNC_STAGES), "active": _boolean(sync.get("active")),
+            "completed": _count(sync.get("completed")), "total": _count(sync.get("total"))}
+    result["cache"] = None
+    if value.get("cache") is not None:
+        cache = _object(value["cache"])
+        result["cache"] = {**{key: _count(cache.get(key)) for key in ("files", "subjects")},
+            **{key: _count(cache.get(key), MAX_SAFE_INTEGER) for key in ("bytes", "limit_bytes")}}
     # No unknown key, freeform message, username, subject, answer, or path enters
     # the output, even if a future service accidentally includes one.
     return result
@@ -240,6 +277,55 @@ def dispatch(args):
     return result, 0
 
 
+def _guidance(status):
+    """Suggest native controls using cached evidence, without taking an action."""
+    if status is None:
+        return []
+    result = []
+
+    def add(code, action):
+        result.append({"code": code, "action": action})
+
+    counts = status.get("outbox_counts") or {}
+    if (counts.get("uncertain") or 0) > 0:
+        add("uncertain_work", "Open Recovery to inspect uncertain submissions. Never force or blindly repeat a write.")
+    elif (status.get("attention") or 0) > 0:
+        add("recovery_attention", "Open Recovery to inspect saved operations that need attention.")
+    elif (status.get("pending") or 0) > 0:
+        add("pending_work", "Work is saved locally. Refresh only when you intend to synchronize; it may submit already completed pending work.")
+    if status.get("status") in ("unauthorized", "forbidden", "access_restricted", "disconnected"):
+        add("account_attention", "Open Settings to inspect account access. This diagnostic has not checked credentials or contacted WaniKani.")
+    elif status.get("status") == "clock_changed":
+        add("clock_attention", "Inspect the system clock and the account status in Settings before relying on offline schedules.")
+    sync = status.get("sync") or {}
+    if sync.get("active") is True:
+        add("sync_in_progress", "Synchronization is already active. Read status again later instead of starting another refresh.")
+    readiness = status.get("readiness")
+    if readiness is None:
+        add("offline_readiness_unknown", "Offline readiness is unavailable in this cached status. Open Settings to inspect supported cache checks.")
+    else:
+        groups = [readiness.get(mode) for mode in READINESS_GROUPS]
+        known = (readiness.get("complete") is True and readiness.get("checking") is False
+            and readiness.get("checked_at") is not None and all(group is not None
+                and group.get("total_complete") is True and all(group.get(key) is not None for key in READINESS_COUNTS)
+                and group["checked"] == group["total"] and group["ready"] <= group["checked"]
+                and group["missing_text"] <= group["checked"] and group["missing_images"] <= group["checked"]
+                and group["audio_cached"] <= group["audio_total"] <= group["checked"]
+                for group in groups))
+        if readiness.get("checking") is True:
+            add("offline_checking", "Offline availability is being checked. Counts may be from a previous check; read status again when it finishes.")
+        elif not known:
+            add("offline_readiness_incomplete", "The cached offline check is incomplete. Open Settings and choose Check offline availability; no account refresh is started by this diagnostic.")
+        elif any(group["missing_text"] or group["missing_images"] for group in groups):
+            add("required_media_missing", "Required text or radical images were missing at the last check. Inspect offline availability in Settings; an explicit account refresh may also submit completed pending work.")
+        elif any(group["audio_cached"] < group["audio_total"] for group in groups):
+            add("optional_audio_missing", "Some pronunciation audio was missing at the last check. This does not block text-based graded study; open Settings for cache coverage, or Listen for its separate familiar-word recording check.")
+    cache = status.get("cache") or {}
+    if cache.get("bytes") is not None and cache.get("limit_bytes") is not None and cache["bytes"] > cache["limit_bytes"]:
+        add("cache_over_limit", "Registered cache bytes exceed the configured limit. Inspect cache management in Settings; this diagnostic neither measures files nor deletes them.")
+    return result
+
+
 def doctor(timeout=5):
     dependencies = {name: {"present": shutil.which(name) is not None, "required": required}
         for name, required in (("python3", True), ("omarchy-shell", True), ("qs", True), ("secret-tool", False), ("wl-paste", False))}
@@ -275,6 +361,7 @@ def doctor(timeout=5):
         except CliError as error:
             result["issues"].append({"code": error.code, "action": error.action})
     result["healthy"] = (not result["issues"] and result["shell_accessible"] and result["plugin"]["service_accessible"])
+    result["guidance"] = _guidance(result["status"])
     result["limits"] = ["Does not check the token, keyring contents, audio device, network, or WaniKani account correctness.",
         "For a bar widget, manager_enabled describes bar placement; service_accessible is the direct service check.",
         "Pending records are local work, not confirmed progress. Inspect attention in Recovery; never force a retry."]
