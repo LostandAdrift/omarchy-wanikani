@@ -224,6 +224,9 @@ Item {
  property var detail: null
  property bool progressReturn: false
  property var progressNavigation: ({})
+ property var trailPracticeSelection: ({})
+ property var trailPracticeReturn: null
+ property int trailPracticeSequence: 0
  property var session: null
  property string error: ""
  property string observedSync: ""

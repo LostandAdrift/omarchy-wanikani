@@ -8,18 +8,20 @@ ColumnLayout {
   id: root
   objectName: "wanikani-reading-trail"
   required property var controller
+  readonly property var service: controller.service
   readonly property string query: controller.query || ""
   readonly property bool eligible: UnicodeText.characters(query).length > 1 && UnicodeText.characters(query).some(function (character) {
     var point = character.codePointAt(0)
     return point >= 0x3040 && point <= 0x30ff || point >= 0x3400 && point <= 0x9fff || point >= 0xf900 && point <= 0xfaff || point >= 0x20000 && point <= 0x323af || point === 0x3005
   })
   readonly property bool active: eligible && controller.opened && controller.view === "lookup" && !controller.detail && controller.service && controller.service.ready && !controller.service.locked
-  readonly property string contentKey: JSON.stringify([controller.contentAccess || "", controller.snapshot ? controller.snapshot.last_sync || "" : "", controller.snapshot ? controller.snapshot.session_revision || 0 : 0])
+  readonly property string contentKey: JSON.stringify([controller.contentAccess || "", controller.snapshot ? controller.snapshot.last_sync || "" : "", controller.snapshot ? controller.snapshot.session_revision || 0 : 0, controller.snapshot ? controller.snapshot.state_revision : null, controller.snapshot ? controller.snapshot.pending : null, controller.snapshot ? controller.snapshot.attention : null, controller.snapshot ? controller.snapshot.syncing : null, controller.snapshot ? controller.snapshot.status : null])
   property var report: null
   property var selectedIds: []
   property bool wordsExpanded: false
   property bool loading: false
   property bool fetching: false
+  property int inFlight: -1
   property bool dirty: true
   property bool initialized: false
   property int serial: 0
@@ -40,6 +42,10 @@ ColumnLayout {
     wordsExpanded = false
     notice = ""
     settle.stop()
+    if (!active) {
+      fetching = false
+      inFlight = -1
+    }
     if (active && initialized)
       settle.restart()
   }
@@ -48,15 +54,18 @@ ColumnLayout {
       return
     var expected = serial
     var text = query
+    var owner = service
     dirty = false
     fetching = true
+    inFlight = expected
     loading = true
-    controller.service.request("reading_trail", {
+    owner.request("reading_trail", {
       text: text
     }, function (ok, data, message) {
-      if (!root)
+      if (!root || root.inFlight !== expected || root.service !== owner)
         return
       root.fetching = false
+      root.inFlight = -1
       if (root.active && expected === root.serial && root.query === text) {
         root.loading = false
         if (ok && root.validReport(data, text))
@@ -126,6 +135,11 @@ ColumnLayout {
   }
   onQueryChanged: invalidate()
   onContentKeyChanged: invalidate()
+  onServiceChanged: {
+    fetching = false
+    inFlight = -1
+    invalidate()
+  }
   onActiveChanged: invalidate()
   Component.onCompleted: {
     initialized = true
@@ -226,6 +240,17 @@ ColumnLayout {
     visible: root.selectedIds.length === 0 && root.matches.length > 8
     text: root.wordsExpanded ? "Show fewer words" : "Show all " + root.matches.length + " words"
     onClicked: root.wordsExpanded = !root.wordsExpanded
+  }
+  TrailPractice {
+    objectName: "reading-trail-practice"
+    Layout.fillWidth: true
+    visible: root.report !== null && root.matches.length > 0
+    controller: root.controller
+    passage: root.query
+    matches: root.matches
+    savedSelection: root.controller.trailPracticeSelection || ({})
+    onSelectionSaved: state => root.controller.trailPracticeSelection = state
+    onStartRequested: (preview, replacePractice) => root.controller.beginTrailPractice(preview, replacePractice)
   }
   Action {
     visible: root.selectedIds.length > 0

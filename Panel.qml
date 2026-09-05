@@ -42,6 +42,9 @@ Item {
   readonly property string progressContext: JSON.stringify([contentAccess, snapshot.last_sync, snapshot.session_epoch, snapshot.session_revision, snapshot.pending, snapshot.attention, snapshot.syncing, snapshot.status])
   onProgressContextChanged: invalidateProgressDetails()
   property string query: ""
+  property var trailPracticeSelection: ({})
+  property var trailPracticeReturn: null
+  property int trailPracticeSequence: 0
   property bool queryTruncated: false
   property string searchType: "all"
   property string searchState: "all"
@@ -77,6 +80,9 @@ Item {
     // Presentation caches must not outlive the account or its content grant.
     // Durable answers remain owned by the worker and are revalidated there.
     detail = null
+    trailPracticeSelection = ({})
+    trailPracticeReturn = null
+    trailPracticeSequence++
     progressReturn = false
     progressNavigation = ({})
     listenSequence++
@@ -252,6 +258,47 @@ Item {
         root.session = data
       Qt.callLater(root.focusContent)
     })
+  }
+  function beginTrailPractice(preview, replaceExisting) {
+    if (!opened || view !== "lookup" || detail || busy || !service || !service.ready || service.locked || !preview || preview.text !== query || preview.data_epoch !== sessionEpoch || preview.can_start !== true || !Array.isArray(preview.subject_ids) || preview.subject_ids.length < 1 || preview.subject_ids.length > 20)
+      return
+    var request = ++trailPracticeSequence
+    var navigation = navigationSequence
+    var access = contentAccess
+    var owner = service
+    var passage = query
+    var ids = preview.subject_ids.slice()
+    call("trail_practice_start", {
+      text: passage,
+      subject_ids: ids,
+      expected_data_epoch: preview.data_epoch,
+      expected_saved_practice_revision: preview.saved_practice ? preview.saved_practice.revision : null,
+      replace_existing: replaceExisting === true
+    }, function (ok, data) {
+      if (root.trailPracticeSequence !== request || root.navigationSequence !== navigation || root.contentAccess !== access || root.service !== owner || !root.opened || root.view !== "lookup" || root.detail || root.query !== passage || !owner.ready || owner.locked)
+        return
+      if (ok && data && data.mode === "practice" && typeof data.id === "string") {
+        root.trailPracticeSelection = {
+          schema: 1,
+          text: passage,
+          ids: ids
+        }
+        root.trailPracticeReturn = {
+          session_id: data.id,
+          text: passage
+        }
+        root.navigate("study")
+        root.session = data
+        Qt.callLater(root.focusContent)
+      }
+    })
+  }
+  function returnToTrail() {
+    if (!opened || !service || !service.ready || service.locked || view !== "study" || !session || session.mode !== "practice" || !trailPracticeReturn || trailPracticeReturn.session_id !== session.id)
+      return
+    var passage = trailPracticeReturn.text
+    navigate("lookup")
+    search(passage)
   }
   function studyAction(method, args) {
     call(method, args, function (ok, data) {
@@ -925,6 +972,14 @@ Item {
           visible: root.busy
           secondary: true
           text: root.snapshot.syncing ? "Refreshing your progress… Cached study remains saved." : "Saving…"
+        }
+        Kani.Action {
+          objectName: "returnToReadingTrail"
+          visible: root.view === "study" && !!root.session && root.session.mode === "practice" && !!root.trailPracticeReturn && root.trailPracticeReturn.session_id === root.session.id
+          text: "← Back to passage"
+          accessibleHint: "Keep this practice session saved and return to the selected Japanese passage"
+          enabled: !root.busy
+          onClicked: root.returnToTrail()
         }
         Controls.ScrollView {
           id: scroll

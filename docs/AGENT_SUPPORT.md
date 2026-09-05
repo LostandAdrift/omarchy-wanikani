@@ -162,3 +162,8 @@ Use `status --json` and `doctor --json` for the morning handoff alongside the te
 For a requested weekly or thirty-day recap, add `report --days 7 --json` or `report --days 30 --json` and retain its own timestamp and freshness label in the handoff. A successful cached report is not evidence that today's latest session was included.
 
 The helper creates no cron job or Codex automation. Periodic user invitations belong to the native Study rhythm policy, with its shared budget and desktop suppression rules. Runtime progress remains in the private local store. The fourteen-day qualification log in [DAILY_USE.md](DAILY_USE.md), audible live vocabulary verification, and remaining native interaction gates require actual evidence; CLI success is not a substitute.
+
+
+## Practice from selected text
+
+Lookup's native reading trail includes **Choose words to practise** for a deliberate one-to-twenty-word ungraded selection. Preview, selection, replacement of earlier ungraded practice and starting a batch belong to the learner. The ordinary `open lookup` action still opens lookup only; no new agent start or answer command is added. **Back to passage** preserves the new practice session and returns to the same selected text. The passage and selected IDs are panel memory, not a diagnostic or report export. See [the flow and protection contract](TRAIL_PRACTICE.md).

@@ -383,7 +383,7 @@ class Worker:
             "last_study_at": self.engine.store.get("last_study_at", 0)}
 
     def note_study_activity(self, method):
-        if method in ("start", "answer", "advance", "lesson_next", "lesson_navigate", "listen", "listen_media", "dictation", "dictation_media"):
+        if method in ("start", "trail_practice_start", "answer", "advance", "lesson_next", "lesson_navigate", "listen", "listen_media", "dictation", "dictation_media"):
             now = self.engine.now()
             # A thirty-second observation is enough for gentle reminder
             # suppression; avoid a second journal flush on every keystroke.
@@ -458,6 +458,15 @@ class Worker:
         elif method == "reading_trail":
             from wanikani.trail import reading_trail
             result = reading_trail(self.engine, args.get("text", ""))
+        elif method == "trail_practice_preview":
+            from wanikani.trail_practice import preview
+            if set(args) != {"text", "subject_ids"}:
+                raise UserError("Choose only the reading trail passage and selected words.", "invalid_request")
+            result = preview(self.engine, args["text"], args["subject_ids"])
+        elif method == "trail_practice_start":
+            if set(args) != {"text", "subject_ids", "expected_data_epoch", "expected_saved_practice_revision", "replace_existing"}:
+                raise UserError("Use the current reading trail selection and practice choice.", "invalid_request")
+            result = self.command(rid, method, args)
         elif method == "practice_catalogue":
             from wanikani.practice import catalogue
             result = catalogue(self.engine, group=args.get("group", "suggested"), query=args.get("query", ""),
@@ -689,14 +698,14 @@ class Worker:
             with self.snapshot_lock:
                 reply["learning_after_revision"] = self.snapshot_sequence
         self.emit(reply)
-        session_only = method in ("answer", "correct", "finish", "lesson_next", "lesson_navigate", "start")
+        session_only = method in ("answer", "correct", "finish", "lesson_next", "lesson_navigate", "start", "trail_practice_start")
         if method == "advance" and previous_session:
             current = self.engine.store.session()
             session_only = bool(current and current["id"] == previous_session["id"]
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "dictation_state", "dictation", "dictation_media", "dictation_draft", "progress", "srs_catalogue", "progress_details", "learning_insights", "level_history", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "trail_practice_preview", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "dictation_state", "dictation", "dictation_media", "dictation_draft", "progress", "srs_catalogue", "progress_details", "learning_insights", "level_history", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

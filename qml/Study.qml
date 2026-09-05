@@ -155,7 +155,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     visible: root.session && root.session.restricted === true
-    text: "This subject is no longer accessible with the current account. Your saved answers are retained; refresh your account in Settings."
+    text: root.session && root.session.unavailable ? root.session.unavailable : "This subject is no longer accessible with the current account. Your saved answers are retained; refresh your account in Settings."
     textColor: Color.urgent
   }
   Action {
@@ -167,7 +167,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    visible: !!(root.session && root.session.unavailable)
+    visible: !!(root.session && root.session.unavailable && !root.session.restricted)
     text: root.session ? root.session.unavailable || "" : ""
     textColor: Color.urgent
   }

@@ -161,17 +161,25 @@ ColumnLayout {
       anchors.margins: Style.space(14)
       spacing: Style.space(8)
       Label {
-        text: "Give your eyes a break"
+        text: "Practise by ear"
         font.bold: true
       }
       Label {
         Layout.fillWidth: true
-        text: "Hear familiar vocabulary, reveal the word, then choose Got it or Again. Listening has its own local practice schedule."
+        text: "Recall a familiar word’s meaning, or type the kana you hear. Both use original vocabulary recordings and keep their own local progress."
         secondary: true
       }
-      Action {
-        text: "Open Listen 5 →"
-        onClicked: root.controller.navigate("listen")
+      Flow {
+        Layout.fillWidth: true
+        spacing: Style.space(8)
+        Action {
+          text: "Recall meaning →"
+          onClicked: root.controller.navigate("listen")
+        }
+        Action {
+          text: "Type kana →"
+          onClicked: root.controller.navigate("dictation")
+        }
       }
     }
   }

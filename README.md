@@ -4,15 +4,19 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.2.7 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.8 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
 The same lookup follows [Tokyo Night](docs/screenshots/lookup-dark.png) and [Flexoki Light](docs/screenshots/lookup-light.png). See the [kanji gallery and companion](docs/screenshots/zen-dark.png). These are captures of the installed plugin, using independently authored demo content.
 
+The reading trail can also turn words from an explicitly selected Japanese passage into a chosen ungraded practice batch. Select up to twenty cached words, check their readiness, and return to the exact passage from study. Saved lessons and reviews remain intact; replacing an earlier ungraded practice batch is a separate, explicit action. See [practice from a passage](docs/TRAIL_PRACTICE.md).
+
 ## Install
 
 The current development installation is a Git clone of the local workspace repository. Its `origin` points to that workspace, not to a public GitHub repository. No public repository or contest submission has been published.
+
+Install or update with the desktop unlocked and study closed. This machine’s [lock/reload incident](docs/LOCK_RELOAD_INCIDENT.md) currently defers installed verification.
 
 The repository root is a valid Omarchy plugin. To install a committed local checkout, run `omarchy plugin add /absolute/path/to/omarchy-wanikani --enable`. After publishing a reviewed copy to your Git host, use its repository URL in the same command. Keep private account state outside the repository; do not copy your state or keyring into a release.
 

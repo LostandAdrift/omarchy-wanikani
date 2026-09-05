@@ -12,6 +12,20 @@ Ui.BarWidget {
   readonly property color kaniText: root.bar ? root.bar.barForeground : Color.bar.text
   readonly property var service: bar && bar.shell ? bar.shell.serviceFor(moduleName) : null
   readonly property var info: service ? service.snapshot : ({})
+  readonly property real nextReviewTime: typeof info.next_reviews_at === "string" ? Date.parse(info.next_reviews_at) : NaN
+  property real countdownNow: Date.now()
+  readonly property bool countdownEligible: visible && Window.window && Window.window.visible && service && service.ready && !service.locked && !info.syncing && !(info.attention > 0) && info.status !== "offline" && !(info.pending > 0) && !!info.username && info.reviews === 0 && isFinite(nextReviewTime)
+  readonly property bool scheduleNeedsRefresh: !!info.next_reviews_at && info.reviews === 0 && (!isFinite(nextReviewTime) || nextReviewTime <= countdownNow)
+  onInfoChanged: countdownNow = Date.now()
+  onCountdownEligibleChanged: countdownNow = Date.now()
+
+  SystemClock {
+    id: countdownClock
+    precision: SystemClock.Minutes
+    enabled: root.countdownEligible && root.nextReviewTime > root.countdownNow
+    onDateChanged: root.countdownNow = date.getTime()
+  }
+
   readonly property string label: {
     if (!service || !service.ready)
       return "…"
@@ -28,7 +42,9 @@ Ui.BarWidget {
     if (info.reviews > 0)
       return String(info.reviews)
     if (info.next_reviews_at) {
-      var minutes = Math.max(1, Math.ceil((Date.parse(info.next_reviews_at) - Date.now()) / 60000))
+      if (!isFinite(nextReviewTime) || nextReviewTime <= countdownNow)
+        return "…"
+      var minutes = Math.ceil((nextReviewTime - countdownNow) / 60000)
       return minutes < 60 ? minutes + "m" : Math.ceil(minutes / 60) + "h"
     }
     return "✓"
@@ -40,7 +56,7 @@ Ui.BarWidget {
     bar: root.bar
     text: ""
     hasVisualContent: true
-    tooltipText: "WaniKani · " + (root.info.status || "starting") + " · " + (root.info.reviews || 0) + " reviews · Click for Today, middle-click to study, right-click for Settings"
+    tooltipText: "WaniKani · " + (root.info.status || "starting") + " · " + (root.info.reviews || 0) + " reviews · " + (root.scheduleNeedsRefresh ? "Review schedule needs a refresh · " : "") + "Click for Today, middle-click to study, right-click for Settings"
     onPressed: function (button) {
       if (!root.service)
         return

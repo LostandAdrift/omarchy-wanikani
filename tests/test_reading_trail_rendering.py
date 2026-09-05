@@ -1,4 +1,5 @@
 """Actual ReadingTrail QML with authored local replies and Qt-only controls."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -8,6 +9,28 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = Path('/usr/lib/qt6/bin/qmltestrunner')
+
+
+def practice_contract():
+    """Use the real read-only trail/preview projections on authored storage."""
+    from test_trail_practice import TrailPracticeTests
+    from wanikani.trail import reading_trail
+
+    fixture = TrailPracticeTests()
+    fixture.setUp()
+    try:
+        text = '  山と火山🌊\nありがとう。<b>&\t  '
+        fixture.engine.start('practice', 2, [2, 3], replace_practice=True)
+        fixture.engine.draft('PRIVATE EARLIER DRAFT')
+        before = fixture.store.db.serialize()
+        value = {'trail': reading_trail(fixture.engine, text), 'preview': fixture.preview(text, [8, 2])}
+        if fixture.store.db.serialize() != before:
+            raise AssertionError('Fixture preview must not mutate earlier practice')
+        if 'PRIVATE' in json.dumps(value):
+            raise AssertionError('Fixture projections must not expose the earlier draft')
+        return value
+    finally:
+        fixture.tearDown()
 
 QML = r'''
 import QtQuick
@@ -25,10 +48,13 @@ Rectangle {
     property bool hold: false
     property bool protectedSubject: false
     property bool aliases: false
+    property bool practiceCase: false
+    property var practiceContract: __PRACTICE_CONTRACT__
     property var requests: []
     property var pending: []
-    property var snapshot: ({last_sync: "fixture", session_revision: 1})
+    property var snapshot: ({last_sync: "fixture", session_revision: 1,max_level:60})
     function fixture(text) {
+      if(practiceCase){if(text!==practiceContract.trail.text)throw new Error("Exact authored passage required");return practiceContract.trail}
       var at = text.indexOf("山")
       var segments = at < 0 ? [{text:text,subject_ids:[]}] : [
         {text:text.slice(0,at),subject_ids:[]},
@@ -40,7 +66,12 @@ Rectangle {
     }
     function request(method,args,callback) {
       requests=requests.concat([{method:method,args:args}])
-      var data=fixture(args.text)
+      var data
+      if(method==="reading_trail")data=fixture(args.text)
+      else if(method==="trail_practice_preview"&&practiceCase){
+        if(args.text!==practiceContract.preview.text||JSON.stringify(args.subject_ids)!==JSON.stringify(practiceContract.preview.subject_ids))throw new Error("Preview requires exact authored selection order")
+        data=practiceContract.preview
+      }else throw new Error("Only read-only trail and preview requests are allowed")
       if(hold) pending=pending.concat([{callback:callback,data:data}])
       else callback(true,data,"")
     }
@@ -55,8 +86,15 @@ Rectangle {
     property string contentAccess: "fixture-account"
     property var detail: null
     property var openedIds: []
+    property var trailPracticeSelection: ({})
+    property int navigationSequence: 0
+    property bool busy: false
+    property var practiceStarts: []
+    property var practiceResumes: []
+    function beginTrailPractice(preview,replace) { practiceStarts=practiceStarts.concat([{preview:preview,replace:replace}]) }
+    function begin(mode,limit) { practiceResumes=practiceResumes.concat([{mode:mode,limit:limit}]) }
     readonly property var snapshot: service ? service.snapshot : ({})
-    function showSubject(id) { openedIds=openedIds.concat([id]) }
+    function showSubject(id) { openedIds=openedIds.concat([id]);if(service.practiceCase)detail={id:id} }
   }
   TextEdit { id: plainProbe; visible: false; textFormat: TextEdit.RichText; text: trail ? trail.passageHtml() : "" }
   TestCase {
@@ -67,8 +105,10 @@ Rectangle {
     function init() {
       failOnWarning(/.*/)
       service.ready=true;service.locked=false;service.hold=false;service.protectedSubject=false;service.aliases=false
-      service.requests=[];service.pending=[];service.snapshot={last_sync:"fixture",session_revision:1}
+      service.practiceCase=false
+      service.requests=[];service.pending=[];service.snapshot={last_sync:"fixture",session_revision:1,max_level:60}
       owner.service=service;owner.opened=true;owner.view="lookup";owner.query="山が見えます。";owner.contentAccess="fixture-account";owner.detail=null;owner.openedIds=[]
+      owner.trailPracticeSelection={};owner.practiceStarts=[];owner.practiceResumes=[];owner.navigationSequence=0;owner.busy=false
       Color.accent="#006699"
     }
     function cleanup() { if(trail) trail.destroy();trail=null;wait(1) }
@@ -77,6 +117,32 @@ Rectangle {
       compare(service.requests.length,1);compare(service.requests[0].method,"reading_trail")
       compare(service.requests[0].args.text,owner.query)
       wait(180);compare(service.requests.length,1)
+    }
+    function test_combined_practice_selection_survives_details_close_and_explicit_replacement() {
+      function picker(){var value=findChild(trail,"reading-trail-practice");verify(value!==null);return value}
+      function action(name){var button=findChild(trail,name);verify(button!==null&&button.visible&&button.enabled,name);button.forceActiveFocus();keyClick(Qt.Key_Space);wait(1)}
+      function ready(){tryVerify(function(){return picker().preview!==null&&!picker().loading},1000);verify(picker().canStart)}
+      service.practiceCase=true;owner.query=service.practiceContract.trail.text
+      service.snapshot={last_sync:"fixture",session_revision:1,max_level:60,session_epoch:service.practiceContract.preview.data_epoch}
+      make();settle();verify(!picker().expanded)
+      compare(service.requests.map(function(value){return value.method}),["reading_trail"])
+      action("trail-practice-choose");action("trail-practice-word-8");action("trail-practice-word-2");ready()
+      compare(owner.trailPracticeSelection,{schema:1,text:owner.query,ids:[8,2]})
+      compare(picker().preview,service.practiceContract.preview);compare(owner.practiceStarts,[]);compare(owner.practiceResumes,[])
+      var saved=JSON.stringify(owner.trailPracticeSelection),reads=service.requests.length
+      trail.openSubject(8);compare(owner.openedIds,[8]);verify(owner.detail!==null);compare(trail.report,null)
+      wait(180);compare(service.requests.length,reads);compare(JSON.stringify(owner.trailPracticeSelection),saved)
+      owner.detail=null;settle();ready();compare(picker().currentIds,[8,2]);compare(JSON.stringify(owner.trailPracticeSelection),saved)
+      owner.opened=false;reads=service.requests.length;wait(180);compare(service.requests.length,reads)
+      trail.destroy();trail=null;wait(1);compare(JSON.stringify(owner.trailPracticeSelection),saved)
+      owner.opened=true;make();settle();compare(picker().selectedIds,[8,2]);verify(!picker().expanded)
+      reads=service.requests.length;wait(180);compare(service.requests.length,reads)
+      action("trail-practice-choose");ready();compare(owner.practiceStarts,[])
+      compare(findChild(trail,"trail-practice-start").text,"Start new practice")
+      action("trail-practice-start")
+      compare(owner.practiceStarts,[{preview:service.practiceContract.preview,replace:true}])
+      compare(owner.practiceResumes,[]);verify(JSON.stringify(owner.practiceStarts).indexOf("PRIVATE")<0)
+      verify(service.requests.every(function(value){return value.method==="reading_trail"||value.method==="trail_practice_preview"}))
     }
     function test_single_character_and_non_japanese_do_not_read() {
       owner.query="山";make();wait(170);compare(service.requests.length,0)
@@ -99,6 +165,19 @@ Rectangle {
       service.reply();compare(trail.report,null)
       tryVerify(function(){return service.pending.length===1});compare(service.requests.length,2)
       service.reply();settle();compare(trail.report.text,owner.query)
+    }
+    function test_changed_service_owner_drops_old_reply_without_blocking_new_owner() {
+      service.hold=true;make();tryVerify(function(){return service.pending.length===1})
+      owner.service=null;owner.service=service
+      tryVerify(function(){return service.pending.length===2})
+      service.reply();compare(trail.report,null);verify(trail.fetching)
+      service.reply();settle();compare(trail.report.text,owner.query)
+    }
+    function test_partial_sync_invalidates_links_without_a_new_last_sync() {
+      make();settle();verify(trail.report.matches[0].can_open)
+      service.protectedSubject=true
+      service.snapshot={last_sync:"fixture",session_revision:1,max_level:60,state_revision:2,status:"offline",syncing:false}
+      compare(trail.report,null);settle();compare(trail.report.matches[0].can_open,false)
     }
     function test_new_study_revision_invalidates_old_openable_reply() {
       service.hold=true;make();tryVerify(function(){return service.pending.length===1})
@@ -186,7 +265,7 @@ class ReadingTrailRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / 'qml'
             qml.mkdir()
-            for name in ('ReadingTrail.qml', 'Label.qml', 'Card.qml', 'UnicodeText.mjs', 'Theme.mjs'):
+            for name in ('ReadingTrail.qml', 'TrailPractice.qml', 'Label.qml', 'Card.qml', 'UnicodeText.mjs', 'Theme.mjs'):
                 shutil.copyfile(ROOT / 'qml' / name, qml / name)
             (qml / 'Action.qml').write_text('import QtQuick\nimport QtQuick.Controls\nButton {\n'
                 ' property bool selected: false\n property string accessibleName: text\n property string accessibleHint: ""\n'
@@ -200,7 +279,7 @@ class ReadingTrailRenderingTests(unittest.TestCase):
                 ' readonly property int cornerRadius: 6\n}\n')
             (common / 'Color.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject {\n'
                 ' readonly property color background: \"#ffffff\"\n readonly property color foreground: "#202020"\n property color accent: "#006699"\n}\n')
-            (directory / 'tst_ReadingTrail.qml').write_text(QML)
+            (directory / 'tst_ReadingTrail.qml').write_text(QML.replace('__PRACTICE_CONTRACT__', json.dumps(practice_contract())))
             result = subprocess.run([str(RUNNER), '-input', str(directory), '-import', str(directory)],
                 capture_output=True, text=True, timeout=30,
                 env={**os.environ,'QT_QPA_PLATFORM':'offscreen','QT_QPA_PLATFORMTHEME':'','QT_QUICK_CONTROLS_STYLE':'Basic'})

@@ -26,6 +26,19 @@ def report(engine, session_id=None):
     if session_id is not None and (not isinstance(session_id, str) or not session_id or len(session_id) > 160):
         raise UserError("Choose a completed local session.")
     session = engine.store.session(session_id)
+    if session and session.get("practice_source") == "reading_trail":
+        # A recap is also an answer-bearing projection. Retain the completed
+        # practice, but recheck its original account and every selected word
+        # before revealing rows under the same protection context.
+        with engine.store.lock:
+            session = engine.store.session(session_id)
+            if session:
+                engine.ensure_trail_practice(session)
+            return _report(engine, session)
+    return _report(engine, session)
+
+
+def _report(engine, session):
     if not session or session.get("phase") != "complete":
         raise UserError("The batch recap is available after the session ends.", "session_unfinished")
     if session.get("mode") not in ("reviews", "lessons", "practice"):

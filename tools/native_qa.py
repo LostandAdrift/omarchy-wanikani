@@ -30,6 +30,7 @@ REQUIRED_RUNTIME = ("manifest.json", "Service.qml", "Panel.qml", "backend/worker
     "backend/wanikani/dictation.py", "qml/Dictation.qml", "qml/DictationState.qml",
     "backend/wanikani/insights.py", "qml/LearningActivity.qml",
     "backend/wanikani/learning_digest.py", "qml/LearningDigest.mjs",
+    "backend/wanikani/trail_practice.py", "qml/TrailPractice.qml",
     "qml/Listening.qml", "qml/StudyOverview.qml", "qml/StudyRhythm.qml")
 
 # This wrapper exists only in the generated plugin. API and Secret Service are

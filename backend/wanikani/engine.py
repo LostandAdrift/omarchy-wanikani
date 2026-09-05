@@ -350,12 +350,78 @@ class Engine:
             self.store.save_session(session)
             return self.session_view(session)
 
+    def _trail_practice_context(self):
+        """Private identity binding; never include it in a session reply."""
+        from .api import ApiError, user_id, validate_user
+        try:
+            identity = user_id(validate_user(self.store.get("user")))
+        except ApiError:
+            raise UserError("Reload this reading trail for the current account.", "trail_changed") from None
+        return {"data_epoch": self.store.get("session_epoch"), "demo": self.demo,
+            "account_id": self.store.get("account_id"), "user_id": identity}
+
+    def ensure_trail_practice(self, session):
+        """Recheck only a marked session's bounded selection, never its passage."""
+        if session.get("practice_source") != "reading_trail":
+            return
+        from .trail_practice import guard_ids
+        with self.store.lock:
+            context = session.get("trail_practice_context")
+            current = self._trail_practice_context()
+            if (session.get("mode") != "practice" or not isinstance(context, dict)
+                    or set(context) != set(current) or any(type(context[key]) is not type(value)
+                        or context[key] != value for key, value in current.items())):
+                raise UserError("This practice belongs to an earlier account or data context. Your saved work is retained.", "trail_changed")
+            queue = session.get("queue")
+            if (not isinstance(queue, list) or not 1 <= len(queue) <= 20
+                    or any(not isinstance(entry, dict) or type(entry.get("done")) is not bool for entry in queue)):
+                raise UserError("This saved practice selection could not be checked. Your work is retained.", "protected_study")
+            guard_ids(self, [entry.get("subject_id") for entry in queue])
+
+    def start_trail_practice(self, args):
+        from .trail_practice import MAX_ID, preview
+        fields = {"text", "subject_ids", "expected_data_epoch", "expected_saved_practice_revision", "replace_existing"}
+        if not isinstance(args, dict) or set(args) != fields:
+            raise UserError("Use the current reading trail selection and practice choice.", "invalid_request")
+        expected_epoch = args["expected_data_epoch"]
+        try:
+            valid_epoch = isinstance(expected_epoch, str) and len(expected_epoch) == 36 and str(uuid.UUID(expected_epoch)) == expected_epoch
+        except ValueError:
+            valid_epoch = False
+        expected_revision = args["expected_saved_practice_revision"]
+        if (not valid_epoch or type(args["replace_existing"]) is not bool
+                or (expected_revision is not None and (type(expected_revision) is not int or not 0 <= expected_revision <= MAX_ID))):
+            raise UserError("Reload the reading trail preview before starting practice.", "invalid_request")
+        with self.store.transaction():
+            if expected_epoch != self.store.get("session_epoch"):
+                raise UserError("This reading trail belongs to earlier account data. Reload it before starting practice.", "trail_changed")
+            prepared = preview(self, args["text"], args["subject_ids"])
+            saved = prepared["saved_practice"]
+            if not saved["valid"] or expected_revision != saved["revision"]:
+                raise UserError("Your saved practice changed. Reload the preview and choose whether to resume or replace it.", "practice_changed")
+            if saved["present"] and not args["replace_existing"]:
+                raise UserError("Resume your saved practice or explicitly choose Start new practice.", "practice_choice_required")
+            if not prepared["can_start"]:
+                if any(item["reason"] == "protected_study" for item in prepared["items"]):
+                    raise UserError("A selected word belongs to unfinished graded study. Your saved sessions are unchanged.", "protected_study")
+                raise UserError("Some selected words are unavailable offline. Reload the selection before starting practice.", "content_unavailable")
+            context = self._trail_practice_context()
+            self.start("practice", len(prepared["subject_ids"]), prepared["subject_ids"], replace_practice=True)
+            session = self.store.session()
+            if {entry["subject_id"] for entry in session["queue"]} != set(prepared["subject_ids"]):
+                raise UserError("The selected words changed before practice could start. Your saved sessions are unchanged.", "trail_changed")
+            session["practice_source"] = "reading_trail"
+            session["trail_practice_context"] = context
+            self.store.save_session(session)
+            return self.session_view(session)
+
     def require_session(self):
         session = self.store.session()
         if not session or session["phase"] == "complete":
             raise UserError("There is no active session.")
         if session.get("mode") not in ("reviews", "lessons", "practice"):
             raise UserError("Unknown saved study mode. Your saved work was retained.", "invalid_mode")
+        self.ensure_trail_practice(session)
         index = session["lesson_index"] if session["phase"] == "lesson" else session["index"]
         self.ensure_study_content(self.store.subject(session["queue"][index]["subject_id"]))
         return session
@@ -475,6 +541,15 @@ class Engine:
 
     def session_view(self, session=None):
         session = session or self.store.session()
+        # Direct read-only session requests do not have command()'s outer
+        # transaction. Keep this bounded selection check and its one-card
+        # presentation in the same account/protection context too.
+        if session and session.get("practice_source") == "reading_trail":
+            with self.store.lock:
+                return self._session_view(session)
+        return self._session_view(session)
+
+    def _session_view(self, session):
         if not session:
             return None
         view = {key: session[key] for key in ("id", "mode", "phase", "part", "feedback", "draft", "completed", "overrides", "started_at", "ended_at", "lesson_index")}
@@ -486,15 +561,34 @@ class Engine:
         view["errors"] = sum(sum(item["errors"].values()) for item in session["queue"])
         index = session["lesson_index"] if session["phase"] == "lesson" else session["index"]
         view["subject"] = None
+        if session.get("practice_source") == "reading_trail":
+            view["practice_source"] = "reading_trail"
+            context = session.get("trail_practice_context")
+            view["practice_data_epoch"] = None
+            try:
+                self.ensure_trail_practice(session)
+            except UserError as error:
+                from .journal import restricted_session
+                view = restricted_session(view)
+                view["unavailable"] = str(error)
+                view["lesson_flow"] = None
+                return view
+            view["practice_data_epoch"] = context["data_epoch"]
         if session["phase"] != "complete" and index < len(session["queue"]):
             try:
                 subject = self.store.subject(session["queue"][index]["subject_id"])
                 self.ensure_study_content(subject)
-                view["subject"] = self.details(subject["id"])
+                if session.get("practice_source") == "reading_trail":
+                    from .srs_explorer import guarded_details
+                    view["subject"] = guarded_details(self, subject["id"])
+                else:
+                    view["subject"] = self.details(subject["id"])
             except UserError as error:
-                if error.code == "access_restricted":
+                if error.code == "access_restricted" or session.get("practice_source") == "reading_trail":
                     from .journal import restricted_session
                     view = restricted_session(view)
+                    if session.get("practice_source") == "reading_trail":
+                        view["unavailable"] = str(error)
                 else:
                     view["unavailable"] = str(error)
         view["lesson_flow"] = lesson_flow.project(session, view.get("subject"))
@@ -642,6 +736,7 @@ class Engine:
 
     def command(self, request_id, method, args):
         handlers = {"start": lambda: self.start(args.get("mode", "reviews"), args.get("limit"), args.get("subjects"), args.get("replace_practice", False)),
+            "trail_practice_start": lambda: self.start_trail_practice(args),
             "draft": lambda: self.draft(args.get("text", "")), "answer": lambda: self.answer(args.get("text", "")),
             "advance": self.advance, "correct": self.correct, "finish": self.finish,
             "lesson_next": lambda: self.lesson_next(args.get("back", False)),
@@ -667,6 +762,8 @@ class Engine:
                     value = decode(rows[0][0])
                 except UnreadableReply:
                     raise UserError("This request is already recorded, but its saved reply cannot be read. Your work was retained. Close and resume study to load the saved session; restore a backup or reinstall the current plugin if the problem continues.", "reply_unavailable") from None
+                if method == "trail_practice_start" and (not isinstance(value, dict) or value.get("practice_source") != "reading_trail"):
+                    raise UserError("This request already belongs to another action. Reload the reading trail to continue.", "request_conflict")
                 value = replay(self, value)
                 if isinstance(value, dict) and value.get("mode") == "lessons" and value.get("phase") == "lesson":
                     value["lesson_flow"] = lesson_flow.project(value, value.get("subject"))
