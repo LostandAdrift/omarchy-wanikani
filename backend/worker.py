@@ -60,6 +60,8 @@ class Worker:
     def startup(self):
         if self.engine.demo:
             return
+        if self.engine.store.get("credential_storage") == "session":
+            return
         token = self.keyring.get(self.engine.store.get("account_id"))
         if token:
             self.configure_sync(token)
@@ -151,6 +153,10 @@ class Worker:
         elif method == "tick":
             now, monotonic = time.time(), time.monotonic()
             clock_change = abs((now - self.last_clock) - (monotonic - self.last_monotonic)) > 30
+            if clock_change and not self.engine.demo:
+                self.engine.clock_untrusted = True
+                self.engine.status = "clock_changed"
+                self.engine.message = "The clock changed or the computer woke. Refresh to verify the time before graded study."
             self.last_clock, self.last_monotonic = now, monotonic
             interval = 60 if self.engine.status == "offline" else 300
             if self.sync and not self.job_lock.locked() and (clock_change or now - self.last_attempt >= interval):

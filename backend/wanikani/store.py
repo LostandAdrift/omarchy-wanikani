@@ -23,6 +23,8 @@ class Store:
             kind TEXT NOT NULL, id TEXT NOT NULL, body TEXT NOT NULL,
             PRIMARY KEY(kind,id));
           CREATE INDEX IF NOT EXISTS resource_subject ON resources(kind,json_extract(body,'$.data.subject_id'));
+          CREATE INDEX IF NOT EXISTS resource_subject_numeric ON resources(kind,CAST(json_extract(body,'$.data.subject_id') AS INTEGER));
+          CREATE INDEX IF NOT EXISTS resource_numeric_id ON resources(kind,CAST(id AS INTEGER));
           CREATE INDEX IF NOT EXISTS resource_level ON resources(kind,json_extract(body,'$.data.level'));
           CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS outbox (

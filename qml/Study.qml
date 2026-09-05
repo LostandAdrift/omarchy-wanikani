@@ -70,8 +70,9 @@ ColumnLayout {
         }) : input.text
       })
   }
-  onSessionChanged: restoreInput()
-  Component.onCompleted: restoreInput()
+  onSessionChanged: Qt.callLater(restoreInput)
+  onSubjectChanged: Qt.callLater(restoreInput)
+  Component.onCompleted: Qt.callLater(restoreInput)
 
   Label {
     Layout.fillWidth: true

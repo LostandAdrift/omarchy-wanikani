@@ -43,6 +43,8 @@ class Synchronizer:
                 raise UserError("The token belongs to a different account. Disconnect and remove local account data before switching.", "account_mismatch")
             self.store.set("user", user)
             engine.clock_offset = self.api.server_offset
+            engine.clock_untrusted = abs(engine.clock_offset) > 300
+            self.store.execute("UPDATE outbox SET state='pending' WHERE state='blocked' AND detail='This subject is outside current subscription access.'")
             reset_before = self.store.get("reset_cursor")
             reset_now = stamp(engine.now())
             reset_params = {"updated_after": reset_before} if reset_before else {}
@@ -81,6 +83,9 @@ class Synchronizer:
             engine.connected = True
             engine.status = "online"
             engine.message = ""
+            if engine.clock_untrusted:
+                engine.status = "clock_changed"
+                engine.message = "The system clock differs from WaniKani. Correct it before graded study or submission."
             self.store.set("last_sync", stamp(engine.now()))
             self.changed()
             self.cache_media()
@@ -272,7 +277,7 @@ class Synchronizer:
     def cache_media(self):
         # Bounded incremental prefetch: eligible current/upcoming study first.
         rows = self.store.rows("""SELECT s.id FROM resources s LEFT JOIN resources a
-          ON a.kind='assignment' AND json_extract(a.body,'$.data.subject_id')=CAST(s.id AS INTEGER)
+          ON a.kind='assignment' AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
           WHERE s.kind IN ('radical','kanji','vocabulary','kana_vocabulary')
           ORDER BY CASE
             WHEN json_extract(a.body,'$.data.unlocked_at') IS NOT NULL AND json_extract(a.body,'$.data.started_at') IS NULL THEN 0

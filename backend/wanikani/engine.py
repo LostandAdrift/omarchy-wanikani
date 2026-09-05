@@ -34,6 +34,7 @@ class Engine:
         self.status = "demo" if demo else "disconnected"
         self.message = ""
         self.clock_offset = 0
+        self.clock_untrusted = False
         if demo:
             from .demo import populate
             populate(store, clock())
@@ -76,14 +77,23 @@ class Engine:
         if not subject or subject["data"].get("hidden_at") or subject["data"].get("level", 61) > self.max_level():
             raise UserError("This subject is outside your current WaniKani access.", "access_restricted")
 
-    def assignments(self, mode="reviews"):
-        rows = self.store.rows(f"""SELECT a.body,s.body FROM resources a JOIN resources s
-          ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=json_extract(a.body,'$.data.subject_id')
+    def assignments(self, mode="reviews", count_only=False):
+        eligibility = """json_extract(a.body,'$.data.started_at') IS NULL
+          AND julianday(json_extract(a.body,'$.data.unlocked_at'))<=julianday(?)""" if mode == "lessons" else """
+          json_extract(a.body,'$.data.started_at') IS NOT NULL
+          AND json_extract(a.body,'$.data.burned_at') IS NULL
+          AND julianday(json_extract(a.body,'$.data.available_at'))<=julianday(?)"""
+        columns = "COUNT(*)" if count_only else "a.body,s.body"
+        rows = self.store.rows(f"""SELECT {columns} FROM resources a JOIN resources s
+          ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)
           WHERE a.kind='assignment' AND json_extract(s.body,'$.data.level')<=?
           AND json_extract(s.body,'$.data.hidden_at') IS NULL
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0
           AND NOT EXISTS(SELECT 1 FROM outbox o WHERE o.subject_id=CAST(s.id AS INTEGER)
-            AND o.kind IN ('review','lesson') AND o.state IN {BUSY_STATES})""", (self.max_level(),))
+            AND o.kind IN ('review','lesson') AND o.state IN {BUSY_STATES})
+          AND {eligibility}""", (self.max_level(), stamp(self.now())))
+        if count_only:
+            return rows[0][0]
         result = []
         for row in rows:
             assignment, subject = json.loads(row[0]), json.loads(row[1])
@@ -167,7 +177,7 @@ class Engine:
                 raise UserError("Connect your account or try the demo first.")
             if mode != "practice" and self.user().get("current_vacation_started_at"):
                 raise UserError("WaniKani vacation mode is active. Ungraded practice is still available.", "vacation")
-            if mode != "practice" and abs(self.clock_offset) > 300:
+            if mode != "practice" and (abs(self.clock_offset) > 300 or self.clock_untrusted):
                 raise UserError("The system clock differs from WaniKani. Correct it before graded study.", "clock_changed")
             count = max(1, min(20, int(limit or self.settings()["batch_size"])))
             if mode == "practice":
@@ -223,6 +233,7 @@ class Engine:
     def answer(self, text):
         with self.store.transaction():
             session = self.require_session()
+            self.ensure_study_state(session)
             if session["phase"] != "question":
                 return self.session_view(session)
             entry = session["queue"][session["index"]]
@@ -260,6 +271,7 @@ class Engine:
     def lesson_next(self, back=False):
         with self.store.transaction():
             session = self.require_session()
+            self.ensure_study_state(session)
             if session["phase"] != "lesson":
                 raise UserError("The lesson presentation is already complete.")
             session["lesson_index"] = max(0, session["lesson_index"] + (-1 if back else 1))
@@ -271,6 +283,7 @@ class Engine:
     def advance(self):
         with self.store.transaction():
             session = self.require_session()
+            self.ensure_study_state(session)
             if session["phase"] != "feedback":
                 raise UserError("Check your answer before advancing.")
             entry = session["queue"][session["index"]]
@@ -300,6 +313,14 @@ class Engine:
             if self.demo:
                 self.confirm_demo()
             return self.session_view(session)
+
+    def ensure_study_state(self, session):
+        if session["mode"] == "practice":
+            return
+        if self.user().get("current_vacation_started_at"):
+            raise UserError("Vacation mode is active. Your partial session is saved.", "vacation")
+        if self.clock_untrusted or abs(self.clock_offset) > 300:
+            raise UserError("The clock changed. Refresh to verify the time before continuing graded study.", "clock_changed")
 
     def finish(self):
         # Finish the current group of five, including all of its error counts.
@@ -393,7 +414,7 @@ class Engine:
 
     def ambient(self):
         rows = self.store.rows(f"""SELECT s.id FROM resources s JOIN resources a ON a.kind='assignment'
-          AND json_extract(a.body,'$.data.subject_id')=CAST(s.id AS INTEGER)
+          AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
           WHERE s.kind IN {SUBJECTS} AND json_extract(s.body,'$.data.level')<=?
           AND json_extract(s.body,'$.data.hidden_at') IS NULL AND json_extract(a.body,'$.data.srs_stage')>=5
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0
@@ -406,15 +427,15 @@ class Engine:
         now = self.now()
         level = self.user().get("level", 0)
         counts = self.store.rows(f"""SELECT COUNT(*),SUM(CASE WHEN json_extract(a.body,'$.data.srs_stage')>=5 THEN 1 ELSE 0 END)
-          FROM resources s LEFT JOIN resources a ON a.kind='assignment' AND json_extract(a.body,'$.data.subject_id')=CAST(s.id AS INTEGER)
+          FROM resources s LEFT JOIN resources a ON a.kind='assignment' AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
           WHERE s.kind='kanji' AND json_extract(s.body,'$.data.level')=? AND json_extract(s.body,'$.data.hidden_at') IS NULL
           AND json_extract(s.body,'$.data.level')<=?""", (level, self.max_level()))[0]
-        due = len(self.assignments("reviews"))
-        lessons = len(self.assignments("lessons"))
+        due = self.assignments("reviews", count_only=True)
+        lessons = self.assignments("lessons", count_only=True)
         forecast = [0] * 24
         next_at = None
         for r in self.store.rows(f"""SELECT json_extract(a.body,'$.data.available_at') FROM resources a JOIN resources s
-          ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=json_extract(a.body,'$.data.subject_id')
+          ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)
           WHERE a.kind='assignment' AND json_extract(a.body,'$.data.burned_at') IS NULL
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0 AND json_extract(s.body,'$.data.hidden_at') IS NULL
           AND json_extract(s.body,'$.data.level')<=? AND NOT EXISTS(SELECT 1 FROM outbox o

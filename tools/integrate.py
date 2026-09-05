@@ -66,7 +66,8 @@ def integrate(home, source, remove=False, runtime=True):
                 backup = state / ("bindings-before-" + str(int(time.time())) + ".lua")
                 backup.write_text(text)
                 previous["bindings_backup"] = str(backup)
-            previous.setdefault("bindings_original", text)
+            backup_path = Path(previous.get("bindings_backup", ""))
+            previous.setdefault("bindings_original", backup_path.read_text() if backup_path.is_file() else text)
             updated = cleaned.rstrip() + "\n\n" + START + "\n" + "\n".join(lines) + "\n" + END + "\n"
             bindings.write_text(updated)
             previous["bindings_installed"] = digest(updated)

@@ -91,6 +91,36 @@ class EngineFixture:
 
 
 class EngineTests(EngineFixture, unittest.TestCase):
+    def test_finish_current_group_preserves_answers(self):
+        for a in self.store.all('assignment'):
+            if a['data']['started_at']:
+                a['data']['available_at']=stamp(NOW-1);self.store.put(a)
+        view=self.engine.start('reviews',12)
+        self.engine.answer('wrong');view=self.engine.finish()
+        self.assertEqual('feedback',view['phase']);self.assertEqual(1,view['errors'])
+        view=self.engine.advance()
+        while view['phase']!='complete':
+            self.engine.answer(self.correct_answer(view));view=self.engine.advance()
+        self.assertEqual(5,view['completed']);self.assertEqual(5,self.engine.snapshot()['pending'])
+
+    def test_pin_and_conflict_require_explicit_recovery(self):
+        self.engine.pin(16,True)
+        self.assertEqual(16,self.engine.difficult()[0]['id'])
+        self.engine.pin(16,False)
+        self.assertFalse(self.engine.details(16)['pinned'])
+        self.complete(limit=5)
+        self.store.execute("UPDATE outbox SET state='conflicted'")
+        self.assertEqual(0,self.engine.snapshot()['reviews'])
+
+    def test_clock_change_and_vacation_preserve_current_session(self):
+        self.engine.start('reviews',1);self.engine.draft('partly typed')
+        self.engine.clock_untrusted=True
+        with self.assertRaises(UserError):self.engine.answer('wrong')
+        self.assertEqual('partly typed',self.engine.session_view()['draft'])
+        self.engine.clock_untrusted=False
+        u=self.store.get('user');u['data']['current_vacation_started_at']=stamp(NOW);self.store.set('user',u)
+        with self.assertRaises(UserError):self.engine.answer('wrong')
+
     def test_counts_and_lookup(self):
         state=self.engine.snapshot()
         self.assertEqual((5,3),(state["reviews"],state["lessons"]))
