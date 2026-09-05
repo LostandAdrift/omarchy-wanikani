@@ -248,12 +248,17 @@ Item {
       return
     }
     session = null
+    var requestedNavigation = navigationSequence
+    var requestedAccess = contentAccess
+    var requestedService = service
     call("start", {
       mode: mode,
       limit: limit || snapshot.settings.batch_size || 5,
       subjects: subjects,
       replace_practice: replacePractice === true
     }, function (ok, data) {
+      if (!root.opened || root.view !== "study" || root.navigationSequence !== requestedNavigation || root.contentAccess !== requestedAccess || root.service !== requestedService || !requestedService || !requestedService.ready || requestedService.locked)
+        return
       if (ok)
         root.session = data
       Qt.callLater(root.focusContent)

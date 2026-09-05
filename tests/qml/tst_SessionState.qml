@@ -174,7 +174,7 @@ TestCase {
     function test_old_rpc_does_not_overwrite_session_or_change_its_context() {
         var state = State.full(State.initial(), snapshot(1, 5))
         state = State.reply(state, session(4), state.context)
-        compare(state.replyAccepted, true)
+        compare(state.replyAccepted, false)
         compare(state.sessionAccepted, false)
         compare(state.sessionRevision, 5)
     }

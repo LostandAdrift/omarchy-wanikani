@@ -89,6 +89,10 @@ export function reply(state, incoming, issuedContext) {
     if ((issuedContext !== null && state.context !== null && issuedContext !== state.context)
             || epoch(incoming.session_epoch) !== epoch(state.sessionEpoch))
         return Object.assign({}, state, {replyAccepted: false});
+    // An ignored older payload must not reach a surface callback as a success:
+    // the callback could otherwise replace the newer visible question.
+    if (revision(incoming.revision) < state.sessionRevision)
+        return Object.assign({}, state, {replyAccepted: false, sessionAccepted: false, catalogueAccepted: false});
     const result = mergeSession(state, {session: incoming,
         paused_graded: state.snapshot.paused_graded, saved_sessions: state.snapshot.saved_sessions, session_revision: incoming.revision,
         session_epoch: epoch(incoming.session_epoch)});

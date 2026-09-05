@@ -19,7 +19,7 @@ Open the crab in the bar for **Today**. Reviews and Lessons have separate overvi
 | **Listen → Type kana** | Hear a familiar recording and type its kana. | A separate saved draft, batch and local dictation intervals. |
 | **Zen → Quiet recall** | Reveal learned words at your own pace. | No scores or submissions. |
 
-An unfinished Review session and an unfinished Lesson session are saved independently. Switching modes preserves each question, answer draft, discovery step and error count. Explicit Reviews or Lessons actions resume their own mode. Generic Resume prefers saved graded work, then saved ungraded practice. Practice can coexist with paused graded work; it does not erase it.
+An unfinished Review session and an unfinished Lesson session are saved independently. Switching modes preserves each question, answer draft, discovery step and error count. If an earlier start is still refreshing, your later study choice takes precedence; the older request cannot switch the active mode back. Explicit Reviews or Lessons actions resume their own mode. Generic Resume prefers saved graded work, then saved ungraded practice. Practice can coexist with paused graded work; it does not erase it.
 
 **Escape** saves your place and returns to work. **Expand** changes the presentation without restarting. **Enter** checks an answer and, after feedback, advances. Holding Enter cannot check and immediately skip the feedback. **F1** opens keyboard help. **Ctrl+0** opens Type kana inside the panel when focus is outside a text field. Navigation shortcuts leave answer fields and IME composition alone, and focused controls scroll into view.
 

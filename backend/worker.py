@@ -33,6 +33,7 @@ class Worker:
         self.account_job = False
         self.snapshot_lock = threading.Lock()
         self.snapshot_sequence = 0
+        self.start_generation = 0
         self.last_attempt = 0
         self.last_clock = time.time()
         self.last_monotonic = time.monotonic()
@@ -153,6 +154,39 @@ class Worker:
         if mode == "practice":
             return True  # Ungraded local study never needs a network preflight.
         return self.engine.saved_session(mode) is not None
+
+    def start_context(self, engine):
+        try:
+            identity = user_id(engine.store.get("user"))
+        except (ApiError, TypeError, ValueError):
+            identity = None
+        return (engine.demo, engine.store.get("account_id"), identity,
+                engine.store.get("session_epoch"))
+
+    def register_start(self, rid):
+        engine = self.engine
+        with engine.store.lock:
+            # A completed request is a journal replay, not a new user intent.
+            # An uncommitted duplicate may supersede its earlier preflight;
+            # Engine.command still commits that request ID at most once.
+            if engine.store.execute("SELECT 1 FROM commands WHERE id=?", (rid,)).fetchone():
+                return None
+            self.start_generation += 1
+            return engine, self.start_generation, self.start_context(engine)
+
+    def finish_start(self, rid, method, args, ticket):
+        engine, generation, context = ticket
+        error = UserError("This study request was replaced. Open the session you want to continue.", "stale_start")
+        # Mode changes may close the previous store: check ownership before
+        # reading it, then keep intent validation and activation indivisible.
+        if self.engine is not engine:
+            raise error
+        with engine.store.lock:
+            if (self.stopping or self.engine is not engine
+                    or generation != self.start_generation
+                    or context != self.start_context(engine)):
+                raise error
+            return self.command(rid, method, args)
 
     def job(self, request_id, fn, account=False):
         if not self.job_lock.acquire(blocking=False):
@@ -425,13 +459,20 @@ class Worker:
             else:
                 raise UserError("Connect your account in Settings.", "disconnected")
             result = {"synced": True}
-        elif method == "start" and self.sync and not self.resumable_start(args) and not self.job_lock.locked() and time.time() - self.last_attempt > 60:
-            def prepare():
-                self.last_attempt = time.time()
-                self.sync.run(for_study=True)
-                return self.command(rid, method, args)
-            self.job(rid, prepare)
-            return
+        elif method == "start":
+            ticket = self.register_start(rid)
+            if ticket is None:
+                result = self.command(rid, method, args)
+            elif self.sync and not self.resumable_start(args) and not self.job_lock.locked() and time.time() - self.last_attempt > 60:
+                synchronizer = self.sync
+                def prepare():
+                    self.last_attempt = time.time()
+                    synchronizer.run(for_study=True)
+                    return self.finish_start(rid, method, args, ticket)
+                self.job(rid, prepare)
+                return
+            else:
+                result = self.finish_start(rid, method, args, ticket)
         elif method == "tick":
             now, monotonic, elapsed = time.time(), time.monotonic(), elapsed_clock()
             # Linux monotonic time excludes suspend; boottime includes it. A
@@ -464,9 +505,10 @@ class Worker:
                 raise UserError("Choose only the reading trail passage and selected words.", "invalid_request")
             result = preview(self.engine, args["text"], args["subject_ids"])
         elif method == "trail_practice_start":
+            ticket = self.register_start(rid)
             if set(args) != {"text", "subject_ids", "expected_data_epoch", "expected_saved_practice_revision", "replace_existing"}:
                 raise UserError("Use the current reading trail selection and practice choice.", "invalid_request")
-            result = self.command(rid, method, args)
+            result = self.command(rid, method, args) if ticket is None else self.finish_start(rid, method, args, ticket)
         elif method == "practice_catalogue":
             from wanikani.practice import catalogue
             result = catalogue(self.engine, group=args.get("group", "suggested"), query=args.get("query", ""),
