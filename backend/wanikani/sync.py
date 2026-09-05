@@ -7,7 +7,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
-from .api import ApiError, NoRedirect, validate_user
+from .api import ApiError, NoRedirect, user_id, validate_user
 from .common import UserError, epoch, private_dir, stamp
 from .engine import baseline
 from . import media_plan, milestones
@@ -67,7 +67,7 @@ class Synchronizer:
             self.check_cancelled()
             user, _ = self.api.request("user")
             validate_user(user)
-            if user.get("id") != self.store.get("account_id"):
+            if user_id(user) != self.store.get("account_id"):
                 raise UserError("The token belongs to a different account. Disconnect and remove local account data before switching.", "account_mismatch")
             self.store.set("user", user)
             engine.clock_offset = self.api.server_offset
@@ -170,7 +170,7 @@ class Synchronizer:
         self.report("unlocks", "Checking newly unlocked lessons and account progress")
         user, _ = self.api.request("user")
         validate_user(user)
-        if user.get("id") != self.store.get("account_id"):
+        if user_id(user) != self.store.get("account_id"):
             raise UserError("The account changed while refreshing progress. Saved results were retained.", "account_mismatch")
         self.store.set("user", user)
         self.engine.clock_offset = self.api.server_offset

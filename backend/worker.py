@@ -10,7 +10,7 @@ import threading
 import time
 from pathlib import Path
 from wanikani import VERSION
-from wanikani.api import Api, ApiError, RequestBudget, elapsed_clock, validate_user
+from wanikani.api import Api, ApiError, RequestBudget, elapsed_clock, user_id, validate_user
 from wanikani.common import UserError, private_dir, stamp, state_home
 from wanikani.credentials import Keyring
 from wanikani import diagnostics
@@ -169,10 +169,11 @@ class Worker:
         api = Api(token, limiter=self.request_budget)
         user, _ = api.request("user")
         validate_user(user)
+        identity = user_id(user)
         account = self.engine.store.get("account_id")
-        if account and account != user.get("id"):
+        if account and account != identity:
             raise UserError("Local study data belongs to another account. Remove that account's local data before switching.", "account_mismatch")
-        self.engine.store.set("account_id", user["id"])
+        self.engine.store.set("account_id", identity)
         self.engine.store.set("user", user)
         if self.engine.store.get("settings") is None:
             preferences = user["data"].get("preferences", {})
@@ -185,12 +186,12 @@ class Worker:
         saved = False
         if remember:
             self.engine.store.set("credential_may_exist", True)
-            saved = self.keyring.set(user["id"], token)
+            saved = self.keyring.set(identity, token)
             may_exist = may_exist or self.keyring.may_have_written
         # An older credential must not silently reconnect a session-only login.
         # The persisted storage mode remains authoritative if the keyring is
         # temporarily unavailable while clearing that previous credential.
-        cleared_previous = saved or not may_exist or self.keyring.delete(user["id"])
+        cleared_previous = saved or not may_exist or self.keyring.delete(identity)
         with self.engine.store.transaction():
             self.engine.store.set("credential_storage", "keyring" if saved else "session")
             self.engine.store.set("credential_may_exist", bool(saved or (may_exist and not cleared_previous)))

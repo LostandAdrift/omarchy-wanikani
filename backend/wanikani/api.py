@@ -27,10 +27,31 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def user_id(resource):
+    """Read WaniKani's user identity without confusing it with subject IDs.
+
+    The documented /user envelope stores its UUID at data.id, unlike other
+    resources: https://docs.api.wanikani.com/20170710/#user-data-structure
+    Earlier local fixtures/caches used a top-level identity. Preserve those only
+    when no nested identity exists; disagreeing or malformed IDs fail closed.
+    """
+    if not isinstance(resource, dict) or resource.get("object") != "user" or not isinstance(resource.get("data"), dict):
+        raise ApiError(0, "WaniKani returned an invalid account response.")
+    data = resource["data"]
+    nested = "id" in data
+    identity = data.get("id") if nested else resource.get("id")
+    valid_string = (isinstance(identity, str) and 0 < len(identity) <= 160
+        and identity == identity.strip() and not any(character.isspace() or ord(character) < 32 for character in identity))
+    if not valid_string and not (not nested and type(identity) is int and identity > 0):
+        raise ApiError(0, "WaniKani returned an invalid account identity.")
+    if nested and "id" in resource and (type(resource["id"]) is not type(identity) or resource["id"] != identity):
+        raise ApiError(0, "WaniKani returned conflicting account identities.")
+    return identity
+
+
 def validate_user(resource):
     """Validate account fields before replacing access-critical cached state."""
-    if not isinstance(resource, dict) or not resource.get("id") or resource.get("object") != "user":
-        raise ApiError(0, "WaniKani returned an invalid account response.")
+    user_id(resource)
     data = resource.get("data")
     if not isinstance(data, dict) or not isinstance(data.get("subscription"), dict):
         raise ApiError(0, "WaniKani returned incomplete account access information.")

@@ -6,7 +6,7 @@ pending display commit together; acknowledgements retain that history.
 """
 import uuid
 
-from .api import ApiError, validate_user
+from .api import ApiError, user_id, validate_user
 from .common import UserError, epoch, stamp
 
 
@@ -17,10 +17,8 @@ FIELDS = ("id", "level", "confirmed_at", "source")
 def _identity(user):
     try:
         validate_user(user)
+        account = user_id(user)
     except ApiError:
-        return None
-    account = user["id"]
-    if not ((isinstance(account, str) and account.strip()) or (type(account) is int and account > 0)):
         return None
     if not isinstance(user["data"].get("username"), str) or not user["data"]["username"].strip():
         return None
