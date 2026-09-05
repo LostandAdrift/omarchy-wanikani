@@ -39,11 +39,17 @@ Normal omarchy plugin add/update/remove; reversible user launcher/keybinding set
 
 Test graders, all types, kana inputs, correction timing, crash persistence boundaries, duplicate messages, lost responses, another-device changes/resets, token/subscription/vacation/rate-limit/offline. QML lint and runtime visual QA. Test bar orientations, themes, scales, monitor/focus, lock/DND/lifecycle where feasible. Targets warm open <=200ms, grade <=50ms, idle CPU <0.5% core. Two weeks personal daily use is an external release gate, not something the agent can falsely complete now.
 
-## Status
+## Status · 2026-09-04
 
-- Repository initialized; manifest and engineering invariants created.
-- WanaKana public metadata fetched successfully through an approved escalated curl. Version 5.3.1, git 77b46c2c688824904760e409853041dac2cf615d, package https://registry.npmjs.org/wanakana/-/wanakana-5.3.1.tgz, sha512 OSDqupzTlzl2LGyqTdhcXcl6ezMiFhcUwLBP8YKaBIbMYW1wAwDvupw2T9G9oVaKT9RmaSpyTXjxddFPUcFFIw==. Still need download/vendor pure conversion bundle + MIT notice.
-- No implementation yet, no installed WaniKani plugin, no real token accessed, no account writes.
+- Implemented QML service/widget/panel, native dashboard/study/lessons/lookup/settings/Zen/ambient/crab. One Python worker, SQLite, account keyring, deterministic grading, durable outbox, cache and recovery. WanaKana 5.3.1 bundled with MIT notice and provenance.
+- Installed through `omarchy plugin add` from this local Git repository. Installed origin points here; updates use the normal manager. No public Git remote or publication yet.
+- Shortcuts and Study/Lookup launchers installed with reversible helper. Existing bindings preserved; Hyprland config validation clean.
+- Authored demo only. No real token accessed, no live WaniKani writes.
+- 40 Python tests passed, including 12 actual subprocess crash boundaries. 11 Qt kana checks passed. Manifest validates. Native dashboard and review surfaces rendered in the running shell.
+- Full fixture catalogue: 9,016 subjects, dashboard snapshot median ~93 ms, search ~3 ms, answer-and-advance ~12 ms. Numeric JSON indexes are essential; without them SQLite chose quadratic joins.
+- Shell hot reload retained durable demo state but left nested QML components stale; a full shell restart picked up visual changes. Document this installed-host limitation. Do not edit packaged shell code.
+- Still finishing final desktop QA, screenshots, current changes, remaining edge tests, and documentation. Do not declare task complete until those are done. Two weeks personal use, live account/audio, suspend/lock/idle handoff remain explicit release qualification gates.
+- Current demo has a partially completed first five-review session; preserve it for resume checks. State is private, outside source.
 
 ## Sources
 

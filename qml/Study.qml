@@ -10,6 +10,7 @@ ColumnLayout {
   readonly property var session: controller.session
   readonly property var subject: session ? session.subject : null
   readonly property bool feedback: session && session.phase === "feedback"
+  readonly property color subjectColor: !subject ? Color.accent : subject.type === "radical" ? "#48a9de" : subject.type === "kanji" ? "#e56cb0" : "#a68be8"
   property bool converting: false
   property string questionKey: ""
   spacing: Style.space(16)
@@ -178,6 +179,13 @@ ColumnLayout {
     Card {
       Layout.fillWidth: true
       Layout.preferredHeight: Style.space(220)
+      Rectangle {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: Style.space(3)
+        color: root.subjectColor
+      }
       Column {
         anchors.centerIn: parent
         width: parent.width - Style.space(32)

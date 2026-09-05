@@ -14,6 +14,7 @@ DEFAULTS = {
     "idle_gallery": False, "companion_animation": True, "reduced_motion": False,
     "autoplay_audio": False, "voice_actor_id": 1, "cache_limit_mb": 256,
     "last_notification_at": 0,
+    "demo_offline": False,
 }
 SUBJECTS = "('radical','kanji','vocabulary','kana_vocabulary')"
 BUSY_STATES = "('pending','inflight','uncertain','blocked','conflicted')"
@@ -38,6 +39,7 @@ class Engine:
         if demo:
             from .demo import populate
             populate(store, clock())
+            self.status = "offline" if self.settings()["demo_offline"] else "demo"
 
     def now(self):
         return self.clock() + self.clock_offset
@@ -71,6 +73,10 @@ class Engine:
                 low, high = {"batch_size": (1, 20), "quiet_start": (0, 23), "quiet_end": (0, 23), "reminder_interval": (1800, 86400), "cache_limit_mb": (32, 1024), "voice_actor_id": (1, 10000), "snooze_until": (0, self.now() + 86400 * 30), "last_notification_at": (0, self.now() + 60)}.get(key, (0, 100000))
                 valid[key] = max(low, min(high, int(value)))
         self.store.set("settings", {**self.settings(), **valid})
+        if self.demo and "demo_offline" in valid:
+            self.status = "offline" if valid["demo_offline"] else "demo"
+            if not valid["demo_offline"]:
+                self.confirm_demo()
         return self.settings()
 
     def ensure_access(self, subject):
@@ -350,6 +356,8 @@ class Engine:
         return view
 
     def confirm_demo(self):
+        if self.settings()["demo_offline"]:
+            return
         for row in self.store.rows("SELECT * FROM outbox WHERE state='pending'"):
             body = json.loads(row["body"])
             if row["kind"] in ("review", "lesson"):
@@ -416,6 +424,7 @@ class Engine:
         rows = self.store.rows(f"""SELECT s.id FROM resources s JOIN resources a ON a.kind='assignment'
           AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
           WHERE s.kind IN {SUBJECTS} AND json_extract(s.body,'$.data.level')<=?
+          AND length(json_extract(s.body,'$.data.characters'))>0
           AND json_extract(s.body,'$.data.hidden_at') IS NULL AND json_extract(a.body,'$.data.srs_stage')>=5
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0
           AND (json_extract(a.body,'$.data.burned_at') IS NOT NULL OR julianday(json_extract(a.body,'$.data.available_at'))>julianday(?))
@@ -450,6 +459,7 @@ class Engine:
           FROM events WHERE kind IN ('subject_complete','practice_complete') GROUP BY day ORDER BY day DESC LIMIT 35""")]
         outbox = [{"id": r["id"], "kind": r["kind"], "subject_id": r["subject_id"], "state": r["state"], "detail": r["detail"]} for r in self.store.rows("SELECT * FROM outbox WHERE state NOT IN ('confirmed','discarded') ORDER BY created_at")]
         media = self.store.rows("SELECT COUNT(*),COALESCE(SUM(size),0) FROM media")[0]
+        cached_subjects = self.store.rows(f"SELECT COUNT(*) FROM resources WHERE kind IN {SUBJECTS} AND json_extract(body,'$.data.level')<=? AND json_extract(body,'$.data.hidden_at') IS NULL", (self.max_level(),))[0][0]
         session = self.session_view()
         return {"demo": self.demo, "status": self.status, "message": self.message, "connected": self.connected,
             "syncing": self.syncing, "username": self.user().get("username", ""), "level": level,
@@ -459,7 +469,7 @@ class Engine:
             "activity": activity, "session": session, "pending": len([x for x in outbox if x["state"] in ("pending", "inflight", "blocked")]),
             "attention": len([x for x in outbox if x["state"] in ("uncertain", "conflicted", "blocked")]),
             "outbox": outbox, "last_sync": self.store.get("last_sync"), "settings": self.settings(),
-            "cache": {"files": media[0], "bytes": media[1]}, "difficult": self.difficult(), "now": now,
+            "cache": {"files": media[0], "bytes": media[1], "subjects": cached_subjects}, "difficult": self.difficult(), "now": now,
             "credential_storage": self.store.get("credential_storage", "session")}
 
     def command(self, request_id, method, args):

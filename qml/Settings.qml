@@ -40,6 +40,19 @@ ColumnLayout {
       enabled: !root.snapshot.demo
     })
   }
+  Flow {
+    Layout.fillWidth: true
+    visible: root.snapshot.demo
+    spacing: Style.space(8)
+    Action {
+      text: root.snapshot.settings.demo_offline ? "Reconnect demo & sync" : "Simulate offline in demo"
+      onClicked: root.controller.service.saveSettings({demo_offline: !root.snapshot.settings.demo_offline})
+    }
+    Action {
+      text: "Reset demo progress"
+      onClicked: root.controller.call("delete_data", {confirmation: "DELETE", discard_pending: true})
+    }
+  }
   ColumnLayout {
     Layout.fillWidth: true
     visible: !root.snapshot.demo
@@ -224,7 +237,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: root.snapshot.cache ? root.snapshot.cache.files + " media files · " + (root.snapshot.cache.bytes / 1048576).toFixed(1) + " MB. Subject text and sessions are stored separately." : "No cached media"
+    text: root.snapshot.cache ? (root.snapshot.cache.subjects || 0) + " subjects available offline · " + root.snapshot.cache.files + " media files · " + (root.snapshot.cache.bytes / 1048576).toFixed(1) + " MB. Answers and sessions are saved separately." : "No cached media"
     color: Qt.alpha(Color.foreground, 0.76)
     font.pixelSize: Style.font.bodySmall
   }
