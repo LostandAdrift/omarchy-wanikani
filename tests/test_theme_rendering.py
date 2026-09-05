@@ -25,25 +25,31 @@ import "qml/Theme.mjs" as Theme
 
 Item {
   width: 600
-  height: 360
+  height: 500
   Label { id: label; text: "Essential text" }
   Label { id: muted; y: 30; text: "Secondary text"; secondary: true }
   Card {
     id: card; y: 60; width: 200; height: 60
     Label { id: cardLabel; text: "Card content"; surfaceColor: card.color }
   }
+  SubjectGlyph { id: glyph; x: 260; width: 180; height: 120; subject: ({id:1,characters:"火山",images:[]}); pixelSize: 72 }
   Action { id: action; y: 160; text: "Review 5"; onClicked: testCase.clicks += 1 }
   Rectangle {
-    id: alternateSurface; y: 240; width: 400; height: 60
+    id: alternateSurface; y: 240; width: 580; height: 230
     color: "#112233"
     readonly property color kaniSurface: color
-    readonly property color kaniText: "#eeccaa"
+    property color kaniText: "#eeccaa"
     Item {
       Label { id: inheritedLabel; text: "Surface text" }
       Card {
-        id: nestedCard; y: 20; width: 160; height: 30
+        id: nestedCard; y: 30; width: 180; height: 160
         Label { id: nestedLabel; text: "Nested surface"; secondary: true }
+        SubjectGlyph { id: nestedGlyph; y: 25; width: 180; height: 120; subject: ({id:2,characters:"山",images:[]}) }
+
       }
+      SubjectGlyph { id: inheritedGlyph; x: 200; width: 170; height: 160; subject: ({id:3,characters:"かな",images:[]}) }
+      SubjectGlyph { id: imageGlyph; x: 400; width: 120; height: 120;
+        subject: ({id:4,slug:"Authored radical",characters:null,images:[Qt.resolvedUrl("radical.svg")]}) }
     }
   }
   Item { id: focusSink; y: 300; width: 1; height: 1 }
@@ -57,6 +63,10 @@ Item {
       Color.background = "#faf4ed"
       Color.foreground = "#575279"
       Color.accent = "#56949f"
+      alternateSurface.color = "#112233"
+      alternateSurface.kaniText = "#eeccaa"
+      glyph.surfaceColor = Qt.binding(function () { return Theme.surface(glyph.parent, Color.background) })
+      glyph.glyphTextColor = Qt.binding(function () { return Theme.foreground(glyph.parent, Color.foreground) })
       label.textColor = Qt.binding(function () { return Color.foreground })
       label.surfaceColor = Qt.binding(function () { return Color.background })
       action.enabled = true
@@ -71,6 +81,7 @@ Item {
       Color.foreground = data.foreground
       Color.accent = data.accent
       verify(Theme.contrast(label.color, Color.background) >= 4.5, data.tag + " primary")
+      verify(Theme.contrast(findChild(glyph,"subject-japanese-text").color,Color.background)>=4.5,data.tag+" Japanese prompt")
       verify(Theme.contrast(muted.color, Color.background) >= 4.5, data.tag + " secondary")
       verify(Theme.contrast(action.foreground, Color.background) >= 4.5, data.tag + " action")
       verify(Theme.contrast(action.accent, Color.background) >= 4.5, data.tag + " accent")
@@ -90,6 +101,51 @@ Item {
       verify(Theme.contrast(inheritedLabel.color, alternateSurface.color) >= 4.5)
       verify(Theme.contrast(nestedLabel.color, nestedCard.kaniSurface) >= 4.5)
       alternateSurface.color="#112233"
+    }
+    function test_glyph_inherits_actual_popup_and_card_roles_live() {
+      var inheritedText=findChild(inheritedGlyph,"subject-japanese-text")
+      var nestedText=findChild(nestedGlyph,"subject-japanese-text")
+      compare(String(inheritedGlyph.surfaceColor),String(alternateSurface.kaniSurface))
+      compare(String(inheritedGlyph.glyphTextColor),String(alternateSurface.kaniText))
+      compare(String(nestedGlyph.surfaceColor),String(nestedCard.kaniSurface))
+      compare(String(nestedGlyph.glyphTextColor),String(nestedCard.kaniText))
+      for(var colors of [["#ffffff","#eeeeee"],["#111111","#181818"],["#123455","#eedddd"]]) {
+        alternateSurface.color=colors[0]
+        alternateSurface.kaniText=colors[1]
+        // Deliberately make the global palette wrong for this popup.
+        Color.foreground=colors[0]
+        verify(Theme.contrast(inheritedText.color,alternateSurface.kaniSurface)>=4.5)
+        verify(Theme.contrast(nestedText.color,nestedCard.kaniSurface)>=4.5)
+        compare(inheritedText.text,"かな")
+        compare(nestedText.text,"山")
+      }
+      verify(waitForRendering(inheritedGlyph))
+    }
+    function test_glyph_explicit_roles_follow_live_base_palette_without_losing_override() {
+      glyph.surfaceColor="#fff5ee"
+      glyph.glyphTextColor="#eedddd"
+      var text=findChild(glyph,"subject-japanese-text")
+      verify(Theme.contrast(text.color,glyph.surfaceColor)>=4.5)
+      Color.background="#080808"
+      Color.foreground="#ffffff"
+      verify(Theme.contrast(text.color,glyph.surfaceColor)>=4.5)
+      compare(String(glyph.glyphTextColor),"#eedddd")
+      glyph.glyphTextColor="#002244"
+      compare(String(text.color),"#002244")
+      compare(text.Accessible.name,"火山")
+    }
+    function test_radical_white_backing_and_neutral_alt_are_unchanged() {
+      tryVerify(function () { return imageGlyph.displayReady })
+      var image=findChild(imageGlyph,"radicalImage")
+      verify(image!==null)
+      compare(String(image.parent.color),"#ffffff")
+      alternateSurface.color="#000000"
+      alternateSurface.kaniText="#000000"
+      compare(String(image.parent.color),"#ffffff")
+      compare(image.Accessible.name,"Radical Authored radical")
+      imageGlyph.revealLabel=false
+      compare(image.Accessible.name,"Radical image, subject 4")
+      imageGlyph.revealLabel=true
     }
     function test_good_colors_are_preserved() {
       compare(Theme.readable("#002244", "#ffffff", "#000000"), "#002244")
@@ -153,6 +209,7 @@ STYLE = '''pragma Singleton
 import QtQuick
 QtObject {
   property int cornerRadius: 6
+  function space(value) { return value }
   property int normalBorderWidth: 1
   property var font: ({family:"Sans",body:14,icon:16,bodySmall:12})
   property var spacing: ({controlPaddingX:12,controlPaddingY:8,controlGap:6})
@@ -199,8 +256,9 @@ class ThemeRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("Label.qml", "Card.qml", "Action.qml", "ActivationGuard.qml", "Theme.mjs"):
+            for name in ("Label.qml", "Card.qml", "Action.qml", "ActivationGuard.qml", "Theme.mjs", "SubjectGlyph.qml", "JapaneseText.qml", "RadicalImage.qml"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
+            shutil.copyfile(ROOT / "tests/qml/fixtures/radical.svg", directory / "radical.svg")
             common = directory / "qs" / "Commons"
             common.mkdir(parents=True)
             (common / "qmldir").write_text("module qs.Commons\nsingleton Style 1.0 Style.qml\nsingleton Color 1.0 Color.qml\nsingleton Border 1.0 Border.qml\n")

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import "Theme.mjs" as Theme
 import qs.Ui as Ui
 import "UnicodeText.mjs" as UnicodeText
 
@@ -65,6 +66,15 @@ ColumnLayout {
     Layout.fillWidth: true
     Ui.TextField {
       id: searchField
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      readonly property color renderedSurface: Theme.composite(background && background.color !== undefined ? background.color : "transparent", surfaceColor)
+      foreground: Theme.readable(textColor, surfaceColor, Color.foreground)
+      accent: Theme.readable(Color.accent, surfaceColor, foreground)
+      color: Theme.readable(foreground, renderedSurface, foreground)
+      placeholderTextColor: Theme.secondary(foreground, renderedSurface)
+      selectedTextColor: Theme.readable(foreground, Theme.composite(selectionColor, renderedSurface), foreground)
+      objectName: "lookup-search"
       Layout.fillWidth: true
       text: root.controller.query
       placeholderText: "Japanese, romaji, or meaning…"
@@ -108,6 +118,8 @@ ColumnLayout {
         required property var modelData
         text: modelData.label
         selected: root.controller.searchType === modelData.value
+        Accessible.checkable: true
+        Accessible.checked: selected
         accessibleHint: "Filter catalogue by subject type"
         onClicked: root.controller.setSearchFilter(modelData.value, root.controller.searchState)
       }
@@ -140,6 +152,8 @@ ColumnLayout {
         required property var modelData
         text: modelData.label
         selected: root.controller.searchState === modelData.value
+        Accessible.checkable: true
+        Accessible.checked: selected
         accessibleHint: "Filter catalogue by your learning progress"
         onClicked: root.controller.setSearchFilter(root.controller.searchType, modelData.value)
       }

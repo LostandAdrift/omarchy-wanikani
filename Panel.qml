@@ -21,9 +21,17 @@ Item {
   property bool opened: false
   property string view: "dashboard"
   property bool expanded: false
+  property bool moreNavigation: false
   property bool busy: false
   property string error: ""
   property var session: null
+  property var listenSession: null
+  property var listenStatus: null
+  property bool listenBusy: false
+  property string listenError: ""
+  property int listenSequence: 0
+  readonly property string listenContext: JSON.stringify([contentAccess, snapshot.last_sync, snapshot.session_revision, snapshot.pending, snapshot.attention, snapshot.state_revision])
+  onListenContextChanged: invalidateListening()
   property var results: []
   property var detail: null
   property string query: ""
@@ -60,6 +68,10 @@ Item {
     // Presentation caches must not outlive the account or its content grant.
     // Durable answers remain owned by the worker and are revalidated there.
     detail = null
+    listenSequence++
+    listenSession = null
+    listenStatus = null
+    listenBusy = false
     helpReturnDetail = null
     results = []
     searchSequence++
@@ -116,6 +128,10 @@ Item {
   }
 
   function open(payloadJson) {
+    if (service && service.locked) {
+      close()
+      return
+    }
     var payload = ({})
     try {
       payload = JSON.parse(payloadJson || "{}")
@@ -134,13 +150,15 @@ Item {
     if (["reviews", "lessons", "practice", "resume"].indexOf(requested) >= 0)
       begin(requested, payload.limit, payload.subjects)
     else
-      navigate(["dashboard", "review-overview", "lesson-overview", "progress", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
+      navigate(["dashboard", "review-overview", "lesson-overview", "progress", "activity", "listen", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
     if (requested === "lookup" && payload.selection)
       readSelection()
     else if (requested === "lookup" && typeof payload.text === "string")
       search(payload.text)
   }
   function close() {
+    listenSequence++
+    listenBusy = false
     navigationSequence++
     opened = false
     stopAudio()
@@ -155,13 +173,18 @@ Item {
       shell.hide(pluginId)
   }
   function navigate(next) {
+    listenSequence++
+    listenBusy = false
     stopAudio()
     navigationSequence++
     view = next
+    moreNavigation = ["practice-library", "activity", "zen", "settings", "help", "recovery"].indexOf(next) >= 0
+    if (next === "listen")
+      Qt.callLater(loadListening)
     detail = null
     error = ""
     if (service)
-      service.studying = next === "study"
+      service.studying = next === "study" || next === "listen"
     if (service && service.ready && (next === "dashboard" || next === "settings")) {
       // Session-only events keep the question path small. Refresh richer local
       // account summaries when those views are actually requested.
@@ -276,9 +299,7 @@ Item {
     })
   }
   function audioContextCurrent(sequence, navigation, access, studyId, studyRevision) {
-    return sequence === audioSequence && navigation === navigationSequence && access === contentAccess
-      && opened && service && service.ready && !service.locked
-      && (!studyId || (view === "study" && session && session.id === studyId && session.revision === studyRevision))
+    return sequence === audioSequence && navigation === navigationSequence && access === contentAccess && opened && service && service.ready && !service.locked && (!studyId || (view === "study" && session && session.id === studyId && session.revision === studyRevision))
   }
   function requestAudio(args, method) {
     if (!opened || !service || !service.ready || service.locked)
@@ -331,7 +352,10 @@ Item {
   function play(subject) {
     if (!subject)
       return
-    var args = {subject_id: subject.id, context: view === "study" ? "study" : "details"}
+    var args = {
+      subject_id: subject.id,
+      context: view === "study" ? "study" : "details"
+    }
     if (view === "study") {
       if (!session || !session.subject || session.subject.id !== subject.id || (session.phase !== "lesson" && !(session.phase === "feedback" && session.feedback && !session.feedback.retry && (session.part === "reading" || subject.type === "kana_vocabulary"))))
         return
@@ -341,9 +365,16 @@ Item {
     requestAudio(args)
   }
   function testVoice(actor) {
-    requestAudio({context: "voice_test", voice_actor_id: actor}, "pronunciation_sample")
+    requestAudio({
+      context: "voice_test",
+      voice_actor_id: actor
+    }, "pronunciation_sample")
   }
   function stopAudio() {
+    if (audioContext === "listening" && audioState === "loading" && listenBusy) {
+      listenSequence++
+      listenBusy = false
+    }
     audioSequence++
     if (audio)
       audio.stop()
@@ -351,6 +382,101 @@ Item {
     audioContext = ""
     audioState = ""
     audioNotice = ""
+  }
+  function invalidateListening() {
+    listenSequence++
+    listenBusy = false
+    listenSession = null
+    listenStatus = null
+    if (audioContext === "listening")
+      stopAudio()
+    if (opened && view === "listen")
+      Qt.callLater(loadListening)
+  }
+  function listenCurrent(sequence, access) {
+    return sequence === listenSequence && access === listenContext && opened && view === "listen" && service && service.ready && !service.locked
+  }
+  function loadListening() {
+    if (!opened || view !== "listen" || !service || !service.ready || service.locked || listenBusy)
+      return
+    var sequence = ++listenSequence
+    var access = listenContext
+    listenBusy = true
+    listenError = ""
+    service.request("listen_state", {}, function (ok, data, message) {
+      if (!root.listenCurrent(sequence, access))
+        return
+      root.listenBusy = false
+      if (ok) {
+        root.listenStatus = data.status
+        root.listenSession = data.session
+      } else {
+        root.listenError = message || "Listening practice could not be loaded."
+      }
+      Qt.callLater(root.focusContent)
+    })
+  }
+  function listenAction(action, args) {
+    if (!opened || view !== "listen" || !service || !service.ready || service.locked || listenBusy)
+      return
+    if (action !== "reveal")
+      stopAudio()
+    var sequence = ++listenSequence
+    var access = listenContext
+    var values = Object.assign({}, args || {}, {
+      action: action
+    })
+    if (listenSession) {
+      values.session_id = listenSession.id
+      values.revision = listenSession.revision
+    }
+    listenBusy = true
+    listenError = ""
+    service.request("listen", values, function (ok, data, message) {
+      if (!root.listenCurrent(sequence, access))
+        return
+      root.listenBusy = false
+      if (ok) {
+        root.listenSession = data.session
+        if (action === "settings" || (data.session && data.session.phase === "complete"))
+          Qt.callLater(root.loadListening)
+      } else {
+        root.listenError = message || "The listening action could not be saved."
+      }
+      Qt.callLater(root.focusContent)
+    })
+  }
+  function playListening() {
+    if (!listenSession || !listenSession.media_handle || listenBusy || !opened || view !== "listen" || !service || !service.ready || service.locked)
+      return
+    stopAudio()
+    var sequence = ++listenSequence
+    var audioRequest = audioSequence
+    var access = listenContext
+    var handle = listenSession.media_handle
+    listenBusy = true
+    listenError = ""
+    audioContext = "listening"
+    audioState = "loading"
+    audioNotice = "Preparing the recording…"
+    service.request("listen_media", {
+      handle: handle
+    }, function (ok, data, message) {
+      if (!root.listenCurrent(sequence, access) || audioRequest !== root.audioSequence)
+        return
+      root.listenBusy = false
+      if (ok && data.handle === handle && data.session && data.session.media_handle === handle) {
+        // First hearing is durably recorded before the player receives a URI.
+        // Apply its revision before allowing the Reveal or rating controls.
+        root.listenSession = data.session
+        root.audioNotice = "Original recording · " + (data.voice || "WaniKani")
+        audio.source = data.uri
+        audio.play()
+      } else {
+        root.audioState = "failed"
+        root.audioNotice = message || "This recording is no longer available. Skip it or refresh your cache."
+      }
+    })
   }
   function readSelection() {
     if (opened && view === "lookup" && !clipboard.running) {
@@ -447,6 +573,11 @@ Item {
           root.refreshSearch()
       }
     }
+    function onReadyChanged() {
+      if (!root.service.ready)
+        root.stopAudio()
+      root.invalidateListening()
+    }
     function onLockedChanged() {
       if (root.service.locked)
         root.dismiss()
@@ -505,7 +636,7 @@ Item {
         onActivated: root.showHelp()
       }
       Repeater {
-        model: ["dashboard", "study", "lookup", "zen", "settings", "practice-library"]
+        model: ["dashboard", "study", "lookup", "zen", "settings", "practice-library", "listen", "progress", "activity"]
         Item {
           id: navigationShortcut
           required property string modelData
@@ -583,6 +714,11 @@ Item {
             onClicked: root.navigate("lesson-overview")
           }
           Kani.Action {
+            text: "Listen"
+            selected: root.view === "listen"
+            onClicked: root.navigate("listen")
+          }
+          Kani.Action {
             text: "Progress"
             selected: root.view === "progress"
             onClicked: root.navigate("progress")
@@ -593,9 +729,25 @@ Item {
             onClicked: root.navigate("lookup")
           }
           Kani.Action {
+            text: root.moreNavigation ? "More ▴" : "More ▾"
+            accessibleName: "More WaniKani views"
+            selected: root.moreNavigation
+            onClicked: root.moreNavigation = !root.moreNavigation
+          }
+        }
+        Flow {
+          Layout.fillWidth: true
+          visible: root.moreNavigation
+          spacing: Style.space(6)
+          Kani.Action {
             text: "Practice"
             selected: root.view === "practice-library"
             onClicked: root.navigate("practice-library")
+          }
+          Kani.Action {
+            text: "Activity"
+            selected: root.view === "activity"
+            onClicked: root.navigate("activity")
           }
           Kani.Action {
             text: "Zen"
@@ -615,6 +767,7 @@ Item {
             onClicked: root.showHelp()
           }
         }
+
         Kani.Label {
           Layout.fillWidth: true
           visible: text !== ""
@@ -636,7 +789,7 @@ Item {
           Loader {
             id: content
             width: scroll.availableWidth
-            sourceComponent: root.view === "study" ? studyPage : root.view === "review-overview" ? reviewOverviewPage : root.view === "lesson-overview" ? lessonOverviewPage : root.view === "progress" ? progressPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "recovery" ? recoveryPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
+            sourceComponent: root.view === "study" ? studyPage : root.view === "review-overview" ? reviewOverviewPage : root.view === "lesson-overview" ? lessonOverviewPage : root.view === "progress" ? progressPage : root.view === "activity" ? activityPage : root.view === "listen" ? listeningPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "recovery" ? recoveryPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
             onLoaded: {
               if (scroll.contentItem && scroll.contentItem.contentY !== undefined)
                 scroll.contentItem.contentY = 0
@@ -678,15 +831,35 @@ Item {
   }
   Component {
     id: reviewOverviewPage
-    Kani.StudyOverview { controller: root; mode: "reviews" }
+    Kani.StudyOverview {
+      controller: root
+      mode: "reviews"
+    }
   }
   Component {
     id: lessonOverviewPage
-    Kani.StudyOverview { controller: root; mode: "lessons" }
+    Kani.StudyOverview {
+      controller: root
+      mode: "lessons"
+    }
+  }
+  Component {
+    id: listeningPage
+    Kani.Listening {
+      controller: root
+    }
+  }
+  Component {
+    id: activityPage
+    Kani.LearningActivity {
+      controller: root
+    }
   }
   Component {
     id: progressPage
-    Kani.Progress { controller: root }
+    Kani.Progress {
+      controller: root
+    }
   }
   Component {
     id: studyPage

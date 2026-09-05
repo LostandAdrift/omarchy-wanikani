@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.Commons
+import "Theme.mjs" as Theme
 import qs.Ui as Ui
 import "../vendor/WanaKana.mjs" as Kana
 
@@ -221,7 +222,7 @@ ColumnLayout {
       Layout.fillWidth: true
       Layout.preferredHeight: Math.max(Style.space(220), subjectPrompt.implicitHeight + Style.space(32))
       activeFocusOnTab: root.session && root.session.phase === "lesson"
-      border.color: activeFocus ? Color.accent : Qt.alpha(Color.foreground, 0.14)
+      border.color: activeFocus ? Theme.indicator(Color.accent, kaniSurface, kaniText) : Theme.tint(kaniText, kaniSurface, 0.14)
       Accessible.role: Accessible.Grouping
       Accessible.name: "Study subject"
       Keys.onReturnPressed: function (event) {
@@ -276,6 +277,15 @@ ColumnLayout {
     }
     Ui.TextField {
       id: input
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      readonly property color renderedSurface: Theme.composite(background && background.color !== undefined ? background.color : "transparent", surfaceColor)
+      foreground: Theme.readable(textColor, surfaceColor, Color.foreground)
+      accent: Theme.readable(Color.accent, surfaceColor, foreground)
+      color: Theme.readable(foreground, renderedSurface, foreground)
+      placeholderTextColor: Theme.secondary(foreground, renderedSurface)
+      selectedTextColor: Theme.readable(foreground, Theme.composite(selectionColor, renderedSurface), foreground)
+      objectName: "study-answer"
       Layout.fillWidth: true
       visible: root.session && root.session.phase !== "lesson"
       readOnly: root.feedback || root.controller.busy

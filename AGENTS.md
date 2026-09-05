@@ -10,3 +10,5 @@ Native Omarchy 4.0.2 / Quickshell 0.3.1 plugin. Read docs/IMPLEMENTATION.md befo
 - Run `python3 -m unittest discover -s tests -v` and `omarchy plugin validate .`.
 - Use /usr/lib/qt6/bin/qmllint and qmltestrunner for QML with the installed shell import path.
 - Do not claim live-account testing or the two-week daily-use release gate has passed without evidence.
+
+For operating an installed client, follow docs/AGENT_SUPPORT.md. Prefer the bounded `tools/wanikani.py` status/doctor/open interface; never automate live answers or forced uncertain-write recovery. Record source verification and installed verification separately in docs/OVERNIGHT_WORK.md during the overnight goal.

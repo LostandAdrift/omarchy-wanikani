@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import Quickshell
 import qs.Commons
+import "Theme.mjs" as Theme
 import qs.Ui as Ui
 
 ColumnLayout {
@@ -67,6 +68,15 @@ ColumnLayout {
     }
     Ui.TextField {
       id: token
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      readonly property color renderedSurface: Theme.composite(background && background.color !== undefined ? background.color : "transparent", surfaceColor)
+      foreground: Theme.readable(textColor, surfaceColor, Color.foreground)
+      accent: Theme.readable(Color.accent, surfaceColor, foreground)
+      color: Theme.readable(foreground, renderedSurface, foreground)
+      placeholderTextColor: Theme.secondary(foreground, renderedSurface)
+      selectedTextColor: Theme.readable(foreground, Theme.composite(selectionColor, renderedSurface), foreground)
+      objectName: "settings-token"
       Layout.fillWidth: true
       password: true
       placeholderText: "Paste your personal API token"
@@ -76,7 +86,7 @@ ColumnLayout {
       text: "Remember securely in the desktop keyring"
       checked: root.remember
       onToggled: root.remember = checked
-      palette.windowText: Color.foreground
+      palette.windowText: Theme.readable(Theme.foreground(parent, Color.foreground), Theme.surface(parent, Color.background), Color.foreground)
     }
     Flow {
       Layout.fillWidth: true
@@ -154,8 +164,8 @@ ColumnLayout {
         label: "Autoplay pronunciation while learning lessons"
       },
       {
-        key: "notifications",
-        label: "Gentle review reminders"
+        key: "autoplay_listening",
+        label: "Autoplay new listening prompts"
       }
     ]
     RowLayout {
@@ -168,6 +178,9 @@ ColumnLayout {
       Action {
         text: root.snapshot.settings[modelData.key] ? "On" : "Off"
         selected: root.snapshot.settings[modelData.key] === true
+        accessibleName: modelData.label
+        Accessible.checkable: true
+        Accessible.checked: selected
         onClicked: {
           var value = {}
           value[modelData.key] = !root.snapshot.settings[modelData.key]
@@ -175,6 +188,12 @@ ColumnLayout {
         }
       }
     }
+  }
+  Label {
+    Layout.fillWidth: true
+    text: "Listening autoplay follows an explicit Start or rating action in local practice. Resuming a saved session, reopening the panel, and background updates stay silent."
+    secondary: true
+    font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
@@ -195,6 +214,14 @@ ColumnLayout {
       Layout.fillWidth: true
     }
     Ui.NumberField {
+      id: batchSizeField
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      foreground: Theme.readable(textColor, surfaceColor, Color.foreground)
+      accent: Theme.readable(Color.accent, surfaceColor, foreground)
+      objectName: "settings-batch-size"
+      Accessible.name: "Subjects in each study batch"
+      Component.onCompleted: field.Accessible.name = batchSizeField.Accessible.name
       from: 1
       to: 20
       value: root.snapshot.settings.batch_size || 5
@@ -205,52 +232,9 @@ ColumnLayout {
       }
     }
   }
-  RowLayout {
+  StudyRhythm {
     Layout.fillWidth: true
-    Label {
-      text: "Quiet hours · local time"
-      Layout.fillWidth: true
-    }
-    Ui.NumberField {
-      from: 0
-      to: 23
-      value: root.snapshot.settings.quiet_start === undefined ? 22 : root.snapshot.settings.quiet_start
-      onModified: function (value) {
-        root.controller.service.saveSettings({
-          quiet_start: value
-        })
-      }
-    }
-    Label {
-      text: "to"
-    }
-    Ui.NumberField {
-      from: 0
-      to: 23
-      value: root.snapshot.settings.quiet_end === undefined ? 8 : root.snapshot.settings.quiet_end
-      onModified: function (value) {
-        root.controller.service.saveSettings({
-          quiet_end: value
-        })
-      }
-    }
-  }
-  RowLayout {
-    Layout.fillWidth: true
-    Label {
-      text: "Minimum hours between reminders"
-      Layout.fillWidth: true
-    }
-    Ui.NumberField {
-      from: 1
-      to: 24
-      value: Math.round((root.snapshot.settings.reminder_interval || 7200) / 3600)
-      onModified: function (value) {
-        root.controller.service.saveSettings({
-          reminder_interval: value * 3600
-        })
-      }
-    }
+    controller: root.controller
   }
   VoiceChoices {
     Layout.fillWidth: true
@@ -277,6 +261,14 @@ ColumnLayout {
       Layout.fillWidth: true
     }
     Ui.NumberField {
+      id: cacheLimitField
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      foreground: Theme.readable(textColor, surfaceColor, Color.foreground)
+      accent: Theme.readable(Color.accent, surfaceColor, foreground)
+      objectName: "settings-cache-limit"
+      Accessible.name: "Media cache limit in megabytes"
+      Component.onCompleted: field.Accessible.name = cacheLimitField.Accessible.name
       from: 32
       to: 1024
       stepSize: 32
@@ -364,10 +356,19 @@ ColumnLayout {
       text: "Also discard unresolved local submissions"
       checked: root.discardPending
       onToggled: root.discardPending = checked
-      palette.windowText: Color.foreground
+      palette.windowText: Theme.readable(Theme.foreground(parent, Color.foreground), Theme.surface(parent, Color.background), Color.foreground)
     }
     Ui.TextField {
       id: confirmation
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      readonly property color renderedSurface: Theme.composite(background && background.color !== undefined ? background.color : "transparent", surfaceColor)
+      foreground: Theme.readable(textColor, surfaceColor, Color.foreground)
+      accent: Theme.readable(Color.accent, surfaceColor, foreground)
+      color: Theme.readable(foreground, renderedSurface, foreground)
+      placeholderTextColor: Theme.secondary(foreground, renderedSurface)
+      selectedTextColor: Theme.readable(foreground, Theme.composite(selectionColor, renderedSurface), foreground)
+      objectName: "settings-delete-confirmation"
       Layout.fillWidth: true
       placeholderText: "Type DELETE"
       Accessible.name: "Confirm local data deletion"
@@ -389,7 +390,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "WaniKani for Omarchy · 0.1.0\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
+    text: "WaniKani for Omarchy · 0.2.0\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
     secondary: true
     font.pixelSize: Style.font.bodySmall
   }

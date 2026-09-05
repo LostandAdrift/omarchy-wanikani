@@ -1,5 +1,13 @@
 # Verification and release qualification
 
+## September 5 overnight 0.2.0 source checkpoint
+
+The frozen release tree `a2152f8fa8866b2fbedfb2d1a8bc4e12686640e4` passed all **754 tests in 234.616 seconds** from `/tmp/wanikani-milestone-2-release-r2`. The first candidate found one outdated inert TextField fixture; it was repaired before the complete rerun. The same runtime files passed QML lint (exit 0/no errors), 113 core Qt checks, and manifest validation. This checkpoint includes separate lesson discovery, local listening, Study rhythm, local Activity, input palette/accessibility improvements and the documented JSON CLI.
+
+Native run `/tmp/wanikani-overnight-milestone-2b` completed 51 captures before the final Activity/input/cache refinements. It verified lesson selection and preview, reminder draft/Apply, and listening start/autoplay/replay/reveal/local ratings/close-resume/recap. Locally generated one-second MP3 tones decoded at QA output volume zero. Replay retained the exposure revision, close/resume stayed silent, and listening preserved the exact fixture graded sessions, references and outbox. Root inspected front/reveal/recap, lesson selection and reminder captures at the existing 1.5 scale. No audible Japanese or physical input qualification is implied.
+
+The later native run was interrupted by Omarchy's normal lock flow and removed its temporary plugin. Further hosted verification and installation/restart are deferred while locking or locked. The installed production revision remains `e5cb4e6`; this 0.2.0 checkpoint is source verification, not an installation claim. The fourteen-day daily-use and remaining live/device gates still apply. See [overnight tracking](OVERNIGHT_WORK.md) for subsequent work and installation evidence.
+
 Tested on 2026-09-04. Version 0.1.0 is a development release. Fixture tests and desktop inspection do not establish live-account safety or complete the two-week daily-use gate. The original four-hour implementation used no real WaniKani token or graded submission. A later user-authorized live authentication check is recorded below; no real study result has been submitted by these checks.
 
 ## Environment

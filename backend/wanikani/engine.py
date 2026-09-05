@@ -318,6 +318,10 @@ class Engine:
                     self.ensure_access(item)
                     candidates.append((self.store.related("assignment", sid), item))
                 random.SystemRandom().shuffle(candidates)
+            elif mode == "lessons" and subjects is not None:
+                from .lessons import validate_selection
+                candidates = validate_selection(self, subjects)
+                count = len(candidates)
             else:
                 candidates = self._study_candidates(mode)
             queue = []

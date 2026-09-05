@@ -41,6 +41,10 @@ class Store:
           CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE INDEX IF NOT EXISTS sessions_unfinished_graded ON sessions(id)
             WHERE json_extract(body,'$.phase')!='complete' AND json_extract(body,'$.mode')!='practice';
+          CREATE INDEX IF NOT EXISTS sessions_completed_at
+            ON sessions(julianday(json_extract(body,'$.ended_at')))
+            WHERE json_extract(body,'$.phase')='complete'
+              AND json_extract(body,'$.mode') IN ('reviews','lessons','practice');
           CREATE TABLE IF NOT EXISTS outbox (
             id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject_id INTEGER NOT NULL,
             state TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -57,6 +61,8 @@ class Store:
             WHERE kind IN ('answer','correction');
           CREATE INDEX IF NOT EXISTS events_completion_time ON events(julianday(created_at),created_at)
             WHERE kind IN ('subject_complete','practice_complete');
+          CREATE INDEX IF NOT EXISTS events_listening_window ON events(julianday(created_at),id)
+            WHERE kind IN ('listening_result','listening_undo');
           CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS media (url TEXT PRIMARY KEY, path TEXT NOT NULL, size INTEGER NOT NULL, used_at REAL NOT NULL);
           CREATE TABLE IF NOT EXISTS search_documents (

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import qs.Commons
+import "Theme.mjs" as Theme
 import qs.Ui as Ui
 import "UnicodeText.mjs" as UnicodeText
 
@@ -369,6 +370,15 @@ ColumnLayout {
     }
     Ui.TextField {
       id: synonyms
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      readonly property color renderedSurface: Theme.composite(background && background.color !== undefined ? background.color : "transparent", surfaceColor)
+      foreground: Theme.readable(textColor, surfaceColor, Color.foreground)
+      accent: Theme.readable(Color.accent, surfaceColor, foreground)
+      color: Theme.readable(foreground, renderedSurface, foreground)
+      placeholderTextColor: Theme.secondary(foreground, renderedSurface)
+      selectedTextColor: Theme.readable(foreground, Theme.composite(selectionColor, renderedSurface), foreground)
+      objectName: "subject-synonyms"
       Layout.fillWidth: true
       placeholderText: "Meaning synonyms, separated by commas"
       maximumLength: 2000
@@ -378,6 +388,10 @@ ColumnLayout {
     }
     Controls.TextArea {
       id: meaningNote
+      objectName: "editor-meaning-note"
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      readonly property color renderedSurface: Theme.composite(background.color, surfaceColor)
       Layout.fillWidth: true
       Layout.preferredHeight: Style.space(90)
       readOnly: !root.editorAvailable
@@ -386,20 +400,26 @@ ColumnLayout {
       onInputMethodComposingChanged: if (!inputMethodComposing)
         root.persistEditor(meaningNote)
       placeholderText: "Your meaning note"
-      color: Color.foreground
-      placeholderTextColor: Qt.alpha(Color.foreground, 0.76)
+      color: Theme.readable(textColor, renderedSurface, Color.foreground)
+      placeholderTextColor: Theme.secondary(textColor, renderedSurface)
+      selectionColor: Style.selectionFillFor(color, Color.accent)
+      selectedTextColor: Theme.readable(textColor, Theme.composite(selectionColor, renderedSurface), color)
       font.family: Style.font.family
       font.pixelSize: Style.font.body
       wrapMode: TextEdit.Wrap
       background: Rectangle {
-        color: Qt.alpha(Color.foreground, 0.04)
-        border.color: meaningNote.activeFocus ? Color.accent : Qt.alpha(Color.foreground, 0.76)
+        color: Theme.tint(meaningNote.textColor, meaningNote.surfaceColor, 0.04)
+        border.color: Theme.indicator(meaningNote.activeFocus ? Color.accent : Qt.alpha(meaningNote.textColor, 0.35), meaningNote.renderedSurface, meaningNote.textColor)
         radius: Style.cornerRadius
       }
       Accessible.name: "Meaning note"
     }
     Controls.TextArea {
       id: readingNote
+      objectName: "editor-reading-note"
+      readonly property color surfaceColor: Theme.surface(parent, Color.background)
+      readonly property color textColor: Theme.foreground(parent, Color.foreground)
+      readonly property color renderedSurface: Theme.composite(background.color, surfaceColor)
       Layout.fillWidth: true
       Layout.preferredHeight: Style.space(90)
       readOnly: !root.editorAvailable
@@ -408,14 +428,16 @@ ColumnLayout {
       onInputMethodComposingChanged: if (!inputMethodComposing)
         root.persistEditor(readingNote)
       placeholderText: "Your reading note"
-      color: Color.foreground
-      placeholderTextColor: Qt.alpha(Color.foreground, 0.76)
+      color: Theme.readable(textColor, renderedSurface, Color.foreground)
+      placeholderTextColor: Theme.secondary(textColor, renderedSurface)
+      selectionColor: Style.selectionFillFor(color, Color.accent)
+      selectedTextColor: Theme.readable(textColor, Theme.composite(selectionColor, renderedSurface), color)
       font.family: Style.font.family
       font.pixelSize: Style.font.body
       wrapMode: TextEdit.Wrap
       background: Rectangle {
-        color: Qt.alpha(Color.foreground, 0.04)
-        border.color: readingNote.activeFocus ? Color.accent : Qt.alpha(Color.foreground, 0.76)
+        color: Theme.tint(readingNote.textColor, readingNote.surfaceColor, 0.04)
+        border.color: Theme.indicator(readingNote.activeFocus ? Color.accent : Qt.alpha(readingNote.textColor, 0.35), readingNote.renderedSurface, readingNote.textColor)
         radius: Style.cornerRadius
       }
       Accessible.name: "Reading note"

@@ -71,7 +71,7 @@ Card {
     Label {
       Layout.fillWidth: true
       visible: root.ready && Number.isInteger(root.value.elapsed_days) && root.value.elapsed_days >= 0
-      text: visible ? root.value.elapsed_days + (root.value.elapsed_days === 1 ? " calendar day" : " calendar days") + " since this level unlocked" : ""
+      text: visible ? root.value.elapsed_days + (root.value.elapsed_days === 1 ? " day" : " days") + " since this level unlocked" : ""
       surfaceColor: root.color
       secondary: true
       font.pixelSize: Style.font.bodySmall

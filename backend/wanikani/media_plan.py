@@ -26,7 +26,7 @@ import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
-from .common import epoch
+from .common import UserError, epoch
 
 
 MAX_FILE_BYTES = 8 * 1024 * 1024
@@ -248,6 +248,46 @@ def _active_subjects(store):
     return active
 
 
+def _listening_urls(engine):
+    """Retain a bounded current listening queue's exact cached recordings.
+
+    A preference change must not demote the particular alternate already handed
+    to the listening player. Include the last undoable card even at the recap;
+    its interval can still be restored by a supported visible action. This is
+    ordinary active-audio priority, not an exemption from the byte budget or
+    from the higher priority of required study images.
+    """
+    from . import listening
+    with engine.store.lock:
+        try:
+            session = listening._session(engine)
+            if not session or session["context"] != listening._context(engine):
+                return {}
+            # _session validates at most five entries. Finished cards have no
+            # retention except the single still-undoable last rating.
+            indices = set(range(session["index"], len(session["queue"])))
+            undo = session.get("undo")
+            if isinstance(undo, dict) and type(undo.get("index")) is int and 0 <= undo["index"] < len(session["queue"]):
+                indices.add(undo["index"])
+            if not indices:
+                return {}
+            protection, settings = listening._protection(engine), listening._settings(engine)
+            urls = {}
+            for index in sorted(indices):
+                entry = session["queue"][index]
+                if valid_url(entry["url"]) and listening._eligible(engine, entry["subject_id"], protection,
+                        settings, entry["url"], entry["pronunciation"]):
+                    # If five unusually large clips cannot all fit, preserve
+                    # the current question before later cards or its undo.
+                    position = 0 if session["phase"] == "complete" else index - session["index"] if index >= session["index"] else 5
+                    urls[entry["url"]] = min(urls.get(entry["url"], 99), position)
+            return urls
+        except UserError:
+            # Corrupt/stale local listening state must not interrupt the media
+            # policy for durable lessons/reviews or retain restricted content.
+            return {}
+
+
 def _schedule(row, now):
     due, unlocked = epoch(row["available"]), epoch(row["unlocked"])
     if row["burned"] is None and due is not None and due <= now:
@@ -297,6 +337,7 @@ def build(engine, media_dir, deadline=None, cancelled=lambda: False, clock=time.
     except OSError:
         return plan
     active = _active_subjects(store)
+    listening_urls = _listening_urls(engine)
     rows = store.rows("""SELECT CAST(s.id AS INTEGER) AS id,json_extract(s.body,'$.data.level') AS level,
       json_extract(a.body,'$.data.started_at') AS started,json_extract(a.body,'$.data.unlocked_at') AS unlocked,
       json_extract(a.body,'$.data.available_at') AS available,json_extract(a.body,'$.data.burned_at') AS burned
@@ -348,5 +389,8 @@ def build(engine, media_dir, deadline=None, cancelled=lambda: False, clock=time.
                 if cached_sound and cached_sound is not selected:
                     plan._retain(cached_sound["url"], (*priority[:2], 1))
             plan.checked_subjects += 1
+    for url, position in listening_urls.items():
+        if url in plan.cached:
+            plan._retain(url, (2, 0, position))
     plan.complete = not stopped()
     return plan

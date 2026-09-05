@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Isolated hosted QML QA. 'prepare' is local-only; 'run' installs a temporary plugin."""
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import sqlite3
 import statistics
 import subprocess
 import sys
@@ -19,6 +21,10 @@ PRODUCTION_ID = "io.github.lostandadrift.wanikani"
 QA_ID = re.compile(re.escape(PRODUCTION_ID) + r"\.qa\.[0-9a-f]{12}$")
 RUNTIME_ROOTS = {"qml", "backend", "vendor", "assets"}
 RUNTIME_FILES = {"manifest.json", "Service.qml", "Panel.qml", "LICENSE"}
+REQUIRED_RUNTIME = ("manifest.json", "Service.qml", "Panel.qml", "backend/worker.py",
+    "backend/wanikani/listening.py", "backend/wanikani/lessons.py", "backend/wanikani/reminders.py",
+    "backend/wanikani/insights.py", "qml/LearningActivity.qml",
+    "qml/Listening.qml", "qml/StudyOverview.qml", "qml/StudyRhythm.qml")
 
 # This wrapper exists only in the generated plugin. API and Secret Service are
 # unavailable even if somebody opens Settings and leaves its fixture demo mode.
@@ -26,6 +32,14 @@ QA_WORKER = '''from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import worker
+import urllib.request
+
+def no_network(*args, **kwargs):
+    raise worker.UserError("Native QA cannot fetch account or media URLs.")
+
+# Cover the media downloader too, including a cache file removed mid-session.
+urllib.request.OpenerDirector.open = no_network
+urllib.request.urlopen = no_network
 
 class NoAccountApi:
     def __init__(self, *args, **kwargs):
@@ -78,6 +92,37 @@ with store.transaction():
 store.close()
 '''
 
+QA_LISTENING_FIXTURES = r'''
+import hashlib
+from pathlib import Path
+import sys
+import time
+sys.path.insert(0, str(Path(sys.argv[1]) / 'backend'))
+from wanikani.store import Store
+from wanikani.common import stamp
+store = Store(Path(sys.argv[2]) / 'demo.sqlite3')
+now = time.time()
+with store.transaction():
+    for sid, sound in ((14, 'はな'), (15, 'ほし'), (16, 'ほん')):
+        url = 'https://files.wanikani.com/qa/authored-tone-' + str(sid) + '.mp3'
+        path = Path(sys.argv[2]) / 'media' / (hashlib.sha256(url.encode()).hexdigest() + '.mp3')
+        if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
+            raise RuntimeError('Generate the owned QA tone before storing its media reference.')
+        item = store.subject(sid)
+        item['data']['pronunciation_audios'] = [{'url': url, 'content_type': 'audio/mpeg',
+            'metadata': {'pronunciation': sound, 'voice_actor_id': 9001,
+                'voice_actor_name': 'Authored QA tone',
+                'voice_description': 'Generated silent-output transport fixture; not Japanese speech.'}}]
+        store.put(item)
+        assignment = store.related('assignment', sid)
+        assignment['data'].update(srs_stage=5, started_at=stamp(now-86400*4),
+            available_at=stamp(now+86400*3), passed_at=stamp(now-86400), hidden=False)
+        store.put(assignment)
+        store.execute('INSERT OR REPLACE INTO media VALUES(?,?,?,?)',
+            (url, str(path), path.stat().st_size, now))
+store.close()
+'''
+
 QA_LEARNING_FIXTURES = r'''
 import copy
 from pathlib import Path
@@ -117,6 +162,18 @@ QA_DRIVER = r'''
   property real qaHeight: 0
   property var qaCapture: ({})
   property var qaTiming: ({})
+  property int qaAudioAccepted: 0
+  property int qaAudioPlays: 0
+  Connections {
+    target: audio
+    function onPlaybackStateChanged() {
+      if (audio.playbackState === MediaPlayer.PlayingState) root.qaAudioPlays++
+    }
+    function onMediaStatusChanged() {
+      if ([MediaPlayer.LoadedMedia, MediaPlayer.BufferedMedia, MediaPlayer.EndOfMedia].indexOf(audio.mediaStatus) >= 0)
+        root.qaAudioAccepted++
+    }
+  }
   Timer {
     interval: 8
     running: root.qaTiming.status === "waiting"
@@ -127,7 +184,7 @@ QA_DRIVER = r'''
         root.qaTiming = Object.assign({}, measurement, {status: "timeout"})
         return
       }
-      if (!root.opened || root.busy || root.searching || content.status !== Loader.Ready
+      if (!root.opened || root.busy || root.listenBusy || root.searching || content.status !== Loader.Ready
           || !content.item || !root.service || root.service.pendingCount !== 0)
         return
       root.qaTiming = Object.assign({}, measurement, {status: "rendering"})
@@ -159,6 +216,7 @@ QA_DRIVER = r'''
       return (selector.text === undefined || item.text === selector.text)
         && (selector.placeholder === undefined || item.placeholderText === selector.placeholder)
         && (selector.subjectId === undefined || item.subjectId === selector.subjectId)
+        && (selector.objectName === undefined || item.objectName === selector.objectName)
         && (selector.editor !== true || typeof item.inputMethodComposing === "boolean")
     })
     if (selector.index === undefined && matches.length !== 1)
@@ -169,10 +227,13 @@ QA_DRIVER = r'''
   }
   function qaSnapshot() {
     var labels = []
+    var accessibleNames = []
     function visibleText(item) {
       if (!item.visible) return
       if (typeof item.text === "string" && typeof item.inputMethodComposing !== "boolean" && item.text)
         labels.push(item.text)
+      if (item.Accessible && typeof item.Accessible.name === "string" && item.Accessible.name && !item.Accessible.ignored)
+        accessibleNames.push(item.Accessible.name)
       for (var i = 0; i < item.children.length; i++) visibleText(item.children[i])
     }
     visibleText(frame)
@@ -193,13 +254,32 @@ QA_DRIVER = r'''
       }
       return null
     }
+    function rhythm(item) {
+      if (item.objectName === "wanikani-study-rhythm")
+        return {config: item.config, draft: item.draft, dirty: item.dirty, saving: item.saving,
+          previewing: item.previewing, preview: item.draftPreview, notice: item.notice, validation: item.validationError}
+      for (var i = 0; i < item.children.length; i++) {
+        var value = rhythm(item.children[i])
+        if (value) return value
+      }
+      return null
+    }
+    function activity(item) {
+      if (item.objectName === "wanikani-learning-activity")
+        return {report: item.report, days: item.days, loading: item.loading, notice: item.notice}
+      for (var i = 0; i < item.children.length; i++) {
+        var value = activity(item.children[i])
+        if (value) return value
+      }
+      return null
+    }
     var controls = qaItems().map(function(item) {
       var point = item.mapToItem(frame, 0, 0)
       var ancestor = item
       while (ancestor && ancestor !== content.item) ancestor = ancestor.parent
       var viewportPoint = item.mapToItem(scroll, 0, 0)
       var inViewport = !ancestor || (viewportPoint.y >= -1 && viewportPoint.y + item.height <= scroll.height + 1)
-      return {text: typeof item.text === "string" ? item.text : "",
+      return {text: typeof item.text === "string" ? item.text : "", objectName: item.objectName || "",
         placeholder: item.placeholderText || "", subjectId: item.subjectId || null, enabled: item.enabled,
         focus: item.activeFocus, editor: typeof item.inputMethodComposing === "boolean",
         x: point.x, y: point.y, width: item.width, height: item.height,
@@ -207,10 +287,20 @@ QA_DRIVER = r'''
         inViewport: inViewport}
     })
     return JSON.stringify({ready: !!(service && service.ready), opened: opened,
-      view: view, busy: busy, error: error || (service ? service.error : ""),
+      view: view, busy: busy || listenBusy, error: error || listenError || (service ? service.error : ""),
       pageLoaded: content.status === Loader.Ready && content.item !== null,
       session: session, state: snapshot, detail: detail, recap: recap(frame),
       query: query, queryTruncated: queryTruncated, trail: trail(frame),
+      listening: {session: listenSession, status: listenStatus, busy: listenBusy, error: listenError},
+      audio: {state: audioState, context: audioContext, notice: audioNotice, source: String(audio.source),
+        mediaStatus: audio.mediaStatus, playbackState: audio.playbackState, duration: audio.duration,
+        position: audio.position, error: audio.error, accepted: qaAudioAccepted, plays: qaAudioPlays,
+        silentOutput: audio.audioOutput.volume === 0},
+      lessonChooser: view === "lesson-overview" && content.item ? {catalogue: content.item.catalogue,
+        selectedIds: content.item.selectedIds, previewReady: content.item.previewReady,
+        loading: content.item.loading, previewing: content.item.previewing, saved: content.item.saved} : null,
+      rhythm: rhythm(frame),
+      learningActivity: activity(frame),
       zen: view === "zen" && content.item ? {quietRecall: content.item.quietRecall,
         answerRevealed: content.item.answerRevealed, subject: content.item.subject} : null,
       cachedResultCount: results.length,
@@ -219,7 +309,7 @@ QA_DRIVER = r'''
       ambient: {count: service ? service.ambientItems.length : 0,
         wanted: service ? service.ambientWanted : false,
         fetching: service ? service.ambientFetching : false},
-      capture: qaCapture, timing: qaTiming, controls: controls, labels: labels,
+      capture: qaCapture, timing: qaTiming, controls: controls, labels: labels, accessibleNames: accessibleNames,
       frame: {width: frame.width, height: frame.height},
       screen: {name: window.screen ? window.screen.name : "", pixelRatio: frame.Screen.devicePixelRatio},
       scroll: {y: scroll.contentItem.contentY || 0, height: scroll.height,
@@ -230,7 +320,7 @@ QA_DRIVER = r'''
     try {
       var action = JSON.parse(encoded)
       if (action.kind === "open" || action.kind === "measure-open") {
-        var views = ["dashboard", "review-overview", "lesson-overview", "progress", "lessons", "reviews", "resume", "lookup", "practice-library", "settings", "zen", "help", "recovery"]
+        var views = ["dashboard", "review-overview", "lesson-overview", "progress", "listen", "lessons", "reviews", "resume", "lookup", "practice-library", "settings", "zen", "help", "recovery"]
         if (views.indexOf(action.view) < 0) throw new Error("Unknown QA view")
         if (action.kind === "measure-open") {
           if (root.opened) throw new Error("Close the QA panel before measuring its opening")
@@ -313,6 +403,23 @@ def replace_function(text, name, body):
     return result
 
 
+def listening_fixtures(repository, state):
+    """Generate three valid low-volume tones locally; never fetch or play them."""
+    encoder = shutil.which("ffmpeg")
+    if not encoder:
+        raise RuntimeError("Native listening QA requires ffmpeg to generate its own audio fixtures.")
+    media = state / "media"
+    media.mkdir(mode=0o700, exist_ok=True)
+    for sid, frequency in ((14, 330), (15, 440), (16, 550)):
+        url = "https://files.wanikani.com/qa/authored-tone-" + str(sid) + ".mp3"
+        target = media / (hashlib.sha256(url.encode()).hexdigest() + ".mp3")
+        command([encoder, "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+            f"sine=frequency={frequency}:duration=1.0:sample_rate=44100", "-af", "volume=0.015",
+            "-c:a", "libmp3lame", "-q:a", "9", "-map_metadata", "-1", "-n", str(target)], timeout=15)
+        target.chmod(0o600)
+    command([sys.executable, "-B", "-c", QA_LISTENING_FIXTURES, str(repository), str(state)])
+
+
 def prepare(source, destination=None, large_catalogue=False):
     source = source.resolve()
     root = Path(tempfile.mkdtemp(prefix="wanikani-native-qa-")) if destination is None else destination.resolve()
@@ -341,7 +448,7 @@ def prepare(source, destination=None, large_catalogue=False):
         shutil.copyfile(original, target)
         copied.append(name)
         source_hashes[name] = hashlib.sha256(original.read_bytes()).hexdigest()
-    if not all((repository / name).is_file() for name in ("manifest.json", "Service.qml", "Panel.qml", "backend/worker.py")):
+    if not all((repository / name).is_file() for name in REQUIRED_RUNTIME):
         raise RuntimeError("Commit or stage the runtime files before preparing native QA.")
     tag = uuid.uuid4().hex[:12]
     plugin_id = PRODUCTION_ID + ".qa." + tag
@@ -364,6 +471,9 @@ def prepare(source, destination=None, large_catalogue=False):
     panel = panel.replace('"omarchy-wanikani"', '"omarchy-wanikani-qa-' + tag + '"')
     panel = replace_once(panel, 'Style.space(root.expanded ? 1060 : 760)', '(root.qaWidth || Style.space(root.expanded ? 1060 : 760))')
     panel = replace_once(panel, 'Style.space(root.expanded ? 920 : 760)', '(root.qaHeight || Style.space(root.expanded ? 920 : 760))')
+    # Only the copied QA panel is muted. Valid generated audio still exercises
+    # decoding and player acceptance without making overnight desktop noise.
+    panel = replace_once(panel, 'audioOutput: AudioOutput {}', 'audioOutput: AudioOutput { volume: 0 }')
     panel = replace_function(panel, "readSelection", '  function readSelection() {\n    root.query = "山"\n    root.search(root.query)\n  }')
     panel = replace_function(panel, "desktopIntegration", '  function desktopIntegration(remove) {\n    integrationNotice = "Native QA never changes desktop shortcuts or launchers."\n  }')
     ending = panel.rfind("\n}")
@@ -389,10 +499,13 @@ def prepare(source, destination=None, large_catalogue=False):
         command([sys.executable, '-B', '-c', QA_LARGE_CATALOGUE, str(repository), str(state)])
     else:
         command([sys.executable, '-B', '-c', QA_LEARNING_FIXTURES, str(repository), str(state)])
+        listening_fixtures(repository, state)
     run = {"v": 1, "id": plugin_id, "root": str(root), "repository": str(repository), "state": str(state),
            "artifacts": str(artifacts), "source_commit": command(["git", "rev-parse", "HEAD"], cwd=source),
            "source_files": copied, "source_hashes": source_hashes, "status": "prepared",
            "catalogue_subjects": 9016 if large_catalogue else 17,
+           "listening_fixture": None if large_catalogue else {"subject_ids": [14, 15, 16],
+               "audio": "Locally generated one-second MP3 tones, not Japanese speech", "output_volume": 0},
            "evidence": "Synthetic component actions; no native-key or IME claim"}
     write_json(repository / ".native-qa.json", {"id": plugin_id, "root": str(root)})
     command(["git", "init", "--quiet", "--initial-branch=qa"], cwd=repository)
@@ -456,6 +569,156 @@ def capture(run, name):
         raise RuntimeError("Native panel capture failed: " + name)
     write_json(Path(run["artifacts"]) / (name + ".json"), snapshot)
     return snapshot
+
+
+def graded_fixture_state(run):
+    """Read only this owned, marked QA database to prove no graded changes."""
+    verified = load_run(Path(run["root"]) / "run.json")
+    database = Path(verified["state"]) / "demo.sqlite3"
+    if database.is_symlink() or not database.is_file():
+        raise RuntimeError("The authored QA database is missing or unsafe.")
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
+        return {"outbox": connection.execute("SELECT * FROM outbox ORDER BY id").fetchall(),
+            "sessions": connection.execute("SELECT * FROM sessions ORDER BY id").fetchall(),
+            "references": connection.execute("SELECT key,body FROM meta WHERE key IN "
+                "('active_session','graded_session','reviews_session','lessons_session','practice_session') ORDER BY key").fetchall()}
+
+
+def lesson_chooser_smoke(run):
+    action(run, {"kind": "open", "view": "lesson-overview"})
+    wait_snapshot(run, lambda s: s.get("lessonChooser") and not s["lessonChooser"]["loading"]
+        and s["lessonChooser"]["catalogue"]["total"] == 3 and s["pendingRequests"] == 0)
+    before = graded_fixture_state(run)
+    action(run, {"kind": "activate", "selector": {"text": "Kanji · 1"}})
+    wait_snapshot(run, lambda s: s["lessonChooser"]["catalogue"]["total"] == 1 and not s["lessonChooser"]["loading"])
+    action(run, {"kind": "activate", "selector": {"text": "Add to lessons"}})
+    selected = wait_snapshot(run, lambda s: s["lessonChooser"]["previewReady"]
+        and s["lessonChooser"]["selectedIds"] == [6] and s["pendingRequests"] == 0)
+    if not any(control["objectName"] == "start-selected-lessons" and control["enabled"] for control in selected["controls"]):
+        raise RuntimeError("The authored selected lesson did not become ready to start.")
+    capture(run, "lesson-chooser-selected")
+    action(run, {"kind": "activate", "selector": {"text": "Clear selection"}})
+    action(run, {"kind": "activate", "selector": {"text": "All · 3"}})
+    wait_snapshot(run, lambda s: s["lessonChooser"]["catalogue"]["total"] == 3 and not s["lessonChooser"]["loading"])
+    action(run, {"kind": "activate", "selector": {"text": "Preview recommended"}})
+    wait_snapshot(run, lambda s: s["lessonChooser"]["previewReady"]
+        and s["lessonChooser"]["selectedIds"] == [6, 7, 8] and s["pendingRequests"] == 0)
+    capture(run, "lesson-chooser-preview")
+    if before != graded_fixture_state(run):
+        raise RuntimeError("Browsing or previewing lessons changed durable graded work.")
+
+
+def rhythm_smoke(run):
+    action(run, {"kind": "open", "view": "settings"})
+    first = wait_snapshot(run, lambda s: s.get("rhythm") and s["rhythm"]["config"] and s["pendingRequests"] == 0)
+    before = graded_fixture_state(run)
+    original = first["rhythm"]["config"]
+    action(run, {"kind": "activate", "selector": {"text": "At times"}})
+    action(run, {"kind": "edit", "selector": {"objectName": "rhythm-times"}, "text": "10:15, 14:45"})
+    preview = wait_snapshot(run, lambda s: s["rhythm"]["dirty"] and s["rhythm"]["preview"]
+        and not s["rhythm"]["previewing"] and s["pendingRequests"] == 0)
+    if preview["rhythm"]["config"] != original:
+        raise RuntimeError("Editing reminder times saved them before Apply.")
+    action(run, {"kind": "focus", "selector": {"text": "Apply study rhythm"}})
+    wait_snapshot(run, lambda s: any(c["text"] == "Apply study rhythm" and c["focus"] and c["inViewport"] for c in s["controls"]))
+    capture(run, "rhythm-preview")
+    action(run, {"kind": "activate", "selector": {"text": "Apply study rhythm"}})
+    wait_snapshot(run, lambda s: not s["rhythm"]["dirty"] and not s["rhythm"]["saving"]
+        and s["rhythm"]["config"]["mode"] == "times" and s["rhythm"]["config"]["times"] == ["10:15", "14:45"]
+        and s["pendingRequests"] == 0)
+    capture(run, "rhythm-saved")
+    if before != graded_fixture_state(run):
+        raise RuntimeError("Local reminder settings changed graded work.")
+
+
+def listening_smoke(run):
+    """Exercise a valid cached tone silently; this is not Japanese audio QA."""
+    action(run, {"kind": "open", "view": "listen"})
+    ready = wait_snapshot(run, lambda s: s["view"] == "listen" and s.get("listening", {}).get("status")
+        and s["listening"]["status"]["available"] == 3 and s["pendingRequests"] == 0)
+    if not ready["audio"]["silentOutput"]:
+        raise RuntimeError("Native listening QA must keep its copied AudioOutput volume at zero.")
+    before = graded_fixture_state(run)
+    capture(run, "listening-home")
+    prior_plays = ready["audio"]["plays"]
+    action(run, {"kind": "activate", "selector": {"objectName": "listeningStart"}})
+    for index in range(3):
+        front = wait_snapshot(run, lambda s: s["listening"]["session"] and s["listening"]["session"]["phase"] == "question"
+            and s["listening"]["session"]["index"] == index and s["pendingRequests"] == 0)
+        session = front["listening"]["session"]
+        if session["total"] != 3 or session.get("subject") is not None or session.get("intervals") is not None:
+            raise RuntimeError("The unrevealed listening projection contains answer information.")
+        text = " ".join(front["labels"] + front["accessibleNames"])
+        if any(value in text for value in ("花", "星", "本", "はな", "ほし", "ほん")) or re.search(r"\b(flower|star|book)\b", text, re.I):
+            raise RuntimeError("The listening front exposes a written, meaning, or accessibility hint.")
+        if index == 0:
+            capture(run, "listening-front")
+        # Explicit Start/Rate arms the default autoplay. A replay must not
+        # increment the durable revision or count a second new exposure.
+        played = wait_snapshot(run, lambda s: s["audio"]["context"] == "listening"
+            and s["audio"]["accepted"] > 0 and s["audio"]["plays"] > prior_plays and s["audio"]["duration"] > 0
+            and s["audio"]["error"] == 0 and s["pendingRequests"] == 0)
+        if not played["audio"]["silentOutput"] or not played["audio"]["source"].startswith(Path(run["state"]).as_uri() + "/media/"):
+            raise RuntimeError("The player did not use this muted QA cache.")
+        if index == 0:
+            revision, plays = played["listening"]["session"]["revision"], played["audio"]["plays"]
+            action(run, {"kind": "activate", "selector": {"objectName": "listeningPlay"}})
+            played = wait_snapshot(run, lambda s: s["audio"]["plays"] > plays
+                and s["audio"]["duration"] > 0 and s["audio"]["error"] == 0 and s["pendingRequests"] == 0)
+            if played["listening"]["session"]["revision"] != revision:
+                raise RuntimeError("Replaying the same listening prompt counted another exposure.")
+        prior_plays = played["audio"]["plays"]
+        action(run, {"kind": "activate", "selector": {"objectName": "listeningReveal"}})
+        revealed = wait_snapshot(run, lambda s: s["listening"]["session"]["phase"] == "revealed" and s["pendingRequests"] == 0)
+        if revealed["listening"]["session"]["subject"]["voice"] != "Authored QA tone":
+            raise RuntimeError("The listening reveal did not label its authored tone fixture.")
+        if index == 0:
+            capture(run, "listening-reveal")
+            saved = revealed["listening"]["session"]
+            action(run, {"kind": "close"})
+            wait_snapshot(run, lambda s: not s["opened"])
+            action(run, {"kind": "open", "view": "listen"})
+            resumed = wait_snapshot(run, lambda s: s["opened"] and s["view"] == "listen" and s["pendingRequests"] == 0)
+            if resumed["listening"]["session"] != saved or resumed["audio"]["plays"] != revealed["audio"]["plays"]:
+                raise RuntimeError("Closing/resuming listening changed its durable reveal or restarted audio.")
+            capture(run, "listening-resumed")
+        control = "listeningAgain" if index == 1 else "listeningRemembered"
+        action(run, {"kind": "activate", "selector": {"objectName": control}})
+    final = wait_snapshot(run, lambda s: s["listening"]["session"]["phase"] == "complete" and s["pendingRequests"] == 0)
+    if final["listening"]["session"]["summary"] != {"remembered": 2, "again": 1, "skipped": 0}:
+        raise RuntimeError("Listening recap lost an authored local rating.")
+    if before != graded_fixture_state(run):
+        raise RuntimeError("Local listening changed graded sessions, references, or outbox work.")
+    capture(run, "listening-complete")
+
+
+def learning_activity_smoke(run):
+    before = graded_fixture_state(run)
+    action(run, {"kind": "open", "view": "activity"})
+    shown = wait_snapshot(run, lambda s: s.get("learningActivity") and s["learningActivity"]["report"]
+        and not s["learningActivity"]["loading"] and s["pendingRequests"] == 0)
+    report = shown["learningActivity"]["report"]
+    if report["scope"] != "recorded_on_this_device" or report["windows"]["7"]["listening_ratings"] != {
+            "remembered": 2, "again": 1, "skipped": 0}:
+        raise RuntimeError("Local activity did not show the fixture's final listening ratings.")
+    if report["windows"]["7"]["subject_completions"]["lessons"] != 3:
+        raise RuntimeError("Local activity lost the three acknowledged authored lesson completions.")
+    capture(run, "activity-seven-days")
+    requests = shown["requestCounts"].get("learning_insights", 0)
+    action(run, {"kind": "activate", "selector": {"text": "30 days"}})
+    thirty = wait_snapshot(run, lambda s: s["learningActivity"]["days"] == 30 and s["pendingRequests"] == 0)
+    if thirty["requestCounts"].get("learning_insights", 0) != requests:
+        raise RuntimeError("Changing a local activity period unnecessarily refetched the same data.")
+    capture(run, "activity-thirty-days")
+    action(run, {"kind": "bounds", "width": 460, "height": 650})
+    action(run, {"kind": "focus", "selector": {"text": "View saved submissions"}})
+    narrow = wait_snapshot(run, lambda s: any(c["text"] == "View saved submissions" and c["focus"] and c["inViewport"] for c in s["controls"]))
+    if any(c["x"] < -1 or c["x"] + c["width"] > narrow["frame"]["width"] + 1 for c in narrow["controls"] if c["inViewport"]):
+        raise RuntimeError("An activity control escaped the narrow panel.")
+    capture(run, "activity-narrow")
+    action(run, {"kind": "bounds", "width": 0, "height": 0})
+    if before != graded_fixture_state(run):
+        raise RuntimeError("Viewing local activity changed graded study or submissions.")
 
 
 def editor_smoke(run):
@@ -612,6 +875,7 @@ def smoke(run):
     capture(run, "milestone-preview")
     action(run, {"kind": "activate", "selector": {"text": "Dismiss"}})
     wait_snapshot(run, lambda s: not s["state"].get("milestone"))
+    lesson_chooser_smoke(run)
     for view in ("dashboard", "review-overview", "lesson-overview", "progress", "lessons", "help", "lookup", "practice-library", "settings", "zen", "recovery"):
         action(run, {"kind": "open", "view": view, "text": "山"})
         page = wait_snapshot(run, lambda s: s["opened"] and s["view"] == ("study" if view == "lessons" else view))
@@ -769,6 +1033,9 @@ def smoke(run):
     capture(run, "graded-resume-after-practice")
     editor_smoke(run)
     recap_smoke(run)
+    listening_smoke(run)
+    learning_activity_smoke(run)
+    rhythm_smoke(run)
     action(run, {"kind": "open", "view": "settings"})
     action(run, {"kind": "bounds", "width": 540, "height": 650})
     wait_snapshot(run)
@@ -859,8 +1126,18 @@ def latency(run, samples=10):
     print(json.dumps({'latency_report': str(destination), 'samples_per_view': samples}), flush=True)
 
 
+def require_unlocked_desktop():
+    state = json.loads(command(["omarchy-shell", "lock", "status"]))
+    keys = ("locked", "requested", "pending", "sessionLocked")
+    if not isinstance(state, dict) or any(type(state.get(key)) is not bool for key in keys):
+        raise RuntimeError("Native QA is deferred: the shell lock state is unavailable.")
+    if any(state[key] for key in keys):
+        raise RuntimeError("Native QA is deferred while Omarchy is locking or locked. Keep its normal lock ownership intact.")
+
+
 def hosted(run, scenario="smoke", hold=False, samples=10):
     run = load_run(Path(run["root"]) / "run.json")
+    require_unlocked_desktop()
     installed = Path.home() / ".config/omarchy/plugins" / run["id"]
     if installed.exists() or installed.is_symlink():
         raise RuntimeError("QA ID already exists; use cleanup before rerunning.")

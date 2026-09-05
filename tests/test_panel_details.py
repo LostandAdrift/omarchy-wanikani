@@ -229,6 +229,9 @@ Item {
   id: root
   required property var service
   property bool opened: true
+  property bool moreNavigation: false
+  property int listenSequence: 0
+  property bool listenBusy: false
   property string view: "dashboard"
   property string contentAccess: "authored-account"
   property int navigationSequence: 0
@@ -250,6 +253,7 @@ Item {
   property var results: []
   QtObject { id: audio; function stop() {} }
   function focusContent() {}
+  function loadListening() {}
   property alias clipboardState: clipboard
   QtObject {
     id: clipboard
@@ -278,6 +282,7 @@ Item {
             (directory / "LookupCore.qml").write_text(lookup)
             shutil.copyfile(ROOT / "vendor" / "WanaKana.mjs", directory / "WanaKana.mjs")
             shutil.copyfile(ROOT / "qml" / "UnicodeText.mjs", directory / "UnicodeText.mjs")
+            shutil.copyfile(ROOT / "qml" / "Theme.mjs", directory / "Theme.mjs")
             (directory / "tst_PanelDetails.qml").write_text(QML)
             process = subprocess.run([str(RUNNER), "-input", str(directory)],
                 capture_output=True, text=True, timeout=30,

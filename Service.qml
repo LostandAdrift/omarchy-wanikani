@@ -36,8 +36,16 @@ Item {
   property var requestContexts: ({})
   property var stateOrder: SessionState.initial()
   property int pendingCount: 0
-  property int previousReviews: -1
-  property double lastNotification: 0
+  property var rhythm: null
+  property bool rhythmFetching: false
+  property bool rhythmDirty: true
+  property string rhythmEvent: "startup"
+  readonly property bool notificationHydrated: !!notificationsService && notificationsService.settingsLoaded === true
+  onNotificationHydratedChanged: considerNotification()
+  onDndChanged: considerNotification()
+  onLockedChanged: considerNotification()
+  onFullscreenChanged: considerNotification()
+  onStudyingChanged: considerNotification()
   property int ambientIndex: 0
   property int restartAttempts: 0
   property int zenUsers: 0
@@ -48,14 +56,18 @@ Item {
   readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0, snapshot.session_epoch || ""])
   onContentAccessChanged: {
     ambientItems = []
+    rhythm = null
+    considerNotification("startup")
     refreshAmbient()
   }
   readonly property bool networkOnline: Networking.connectivity === NetworkConnectivity.Full || (Networking.connectivity === NetworkConnectivity.Unknown && Networking.devices && Networking.devices.values.some(function (device) {
       return device.connected
     }))
   onNetworkOnlineChanged: {
-    if (networkOnline && ready && snapshot.connected && !snapshot.demo)
+    if (networkOnline && ready && snapshot.connected && !snapshot.demo) {
+      considerNotification("reconnect")
       reconnectTimer.restart()
+    }
   }
   readonly property var lockService: shell ? shell.serviceFor("omarchy.lock") : null
   readonly property var notificationsService: shell ? shell.serviceFor("omarchy.notifications") : null
@@ -147,6 +159,7 @@ Item {
     if (message.event === "ready") {
       stateOrder = SessionState.workerRestart(ordering())
       ready = true
+      considerNotification("startup")
       restartAttempts = 0
       error = ""
       return
@@ -246,27 +259,71 @@ Item {
     if (shell)
       shell.summon(pluginId, JSON.stringify(payload))
   }
-  function considerNotification() {
-    var due = Number(snapshot.reviews || 0)
-    var now = Date.now() / 1000
-    var settings = Object.assign({}, snapshot.settings, {
-      last_notification_at: Math.max(lastNotification, Number(snapshot.settings.last_notification_at || 0))
-    })
-    var decision = Policy.notification(previousReviews, due, now, new Date().getHours(), settings, {
-      demo: snapshot.demo,
+  function rhythmContext(event) {
+    return {
+      event: event || "state",
+      hydrated: notificationHydrated,
       locked: locked,
       dnd: dnd,
-      studying: studying,
-      vacation: snapshot.vacation
-    })
-    previousReviews = decision.previousDue
-    if (!decision.notify)
+      fullscreen: fullscreen,
+      studying: studying
+    }
+  }
+  function considerNotification(event) {
+    rhythmDirty = true
+    if (event && ["startup", "wake", "clock_change", "reconnect"].indexOf(event) >= 0)
+      rhythmEvent = event
+    if (ready && rhythmDelay && !rhythmFetching)
+      rhythmDelay.restart()
+  }
+  function claimRhythm() {
+    if (!ready || rhythmFetching || !rhythmDirty)
       return
-    lastNotification = now
-    saveSettings({
-      last_notification_at: now
+    rhythmDirty = false
+    rhythmFetching = true
+    var access = contentAccess
+    var event = rhythmEvent
+    rhythmEvent = "state"
+    request("rhythm_claim", {
+      context: rhythmContext(event)
+    }, function (ok, data) {
+      root.rhythmFetching = false
+      if (ok && root.ready && root.contentAccess === access) {
+        root.rhythm = data
+        // Claim commits before delivery. If context changed while waiting,
+        // let this toast expire instead of carrying it into another activity.
+        if (data.notification && !root.rhythmDirty && root.notificationHydrated && !root.locked && !root.dnd && !root.fullscreen && !root.studying && !root.snapshot.demo && !root.snapshot.vacation) {
+          var actions = data.notification.actions || []
+          var payload = actions.length === 1 ? {
+            view: actions[0].view,
+            limit: actions[0].limit
+          } : {
+            view: "dashboard"
+          }
+          Quickshell.execDetached(["omarchy", "notification", "send", "--app-name", "WaniKani", "--urgency", "low", data.notification.title, data.notification.body, "--exec", "omarchy-shell", "shell", "summon", root.pluginId, JSON.stringify(payload)])
+        }
+      }
+      if (root.rhythmDirty && root.ready)
+        rhythmDelay.restart()
     })
-    Quickshell.execDetached(["omarchy", "notification", "send", "--app-name", "WaniKani", "--urgency", "low", "WaniKani · " + due + " reviews ready", "A few reviews, then back to work.", "--exec", "omarchy-shell", "shell", "summon", pluginId, '{"view":"reviews","limit":5}'])
+  }
+  function previewRhythm(patch, callback) {
+    request("rhythm_preview", {
+      context: rhythmContext(),
+      patch: patch
+    }, callback)
+  }
+  function configureRhythm(patch, callback) {
+    var access = contentAccess
+    request("rhythm_configure", {
+      context: rhythmContext(),
+      patch: patch
+    }, function (ok, data, message) {
+      if (ok && root.contentAccess === access)
+        root.rhythm = data
+      if (callback)
+        callback(ok, data, message)
+    })
   }
   function saveSettings(values) {
     request("settings", values)
@@ -315,12 +372,26 @@ Item {
     repeat: true
     running: root.ready
     onTriggered: {
-      root.request("tick", {})
+      root.request("tick", {}, function (ok, data) {
+        if (ok && (data.clock_change || data.woke))
+          root.considerNotification(data.clock_change ? "clock_change" : "wake")
+      })
       root.request("snapshot", {}, function (ok, data) {
         if (ok)
           root.applySnapshot(data)
       })
     }
+  }
+  Timer {
+    id: rhythmDelay
+    interval: 50
+    onTriggered: root.claimRhythm()
+  }
+  Timer {
+    id: rhythmDeadline
+    interval: root.rhythm && root.rhythm.next_at ? Math.max(1000, Math.min(2147483647, root.rhythm.next_at * 1000 - Date.now())) : 2147483647
+    running: root.ready && root.rhythm !== null && Number.isFinite(root.rhythm.next_at) && root.rhythm.next_at * 1000 > Date.now() && !root.rhythmFetching
+    onTriggered: root.considerNotification("timer")
   }
   Timer {
     id: ambientRefreshTimer
@@ -390,6 +461,15 @@ Item {
     function help(): void {
       root.summon("help")
     }
+    function listen(): void {
+      root.summon("listen")
+    }
+    function progress(): void {
+      root.summon("progress")
+    }
+    function activity(): void {
+      root.summon("activity")
+    }
     function zen(): void {
       root.summon("zen")
     }
@@ -405,12 +485,46 @@ Item {
       })
     }
     function status(): string {
+      var saved = root.snapshot.saved_sessions || {}
+      var level = root.snapshot.learning_progress || {}
       return JSON.stringify({
+        schemaVersion: 1,
+        ready: root.ready,
+        connected: root.snapshot.connected === true,
+        demo: root.snapshot.demo === true,
+        syncing: root.snapshot.syncing === true,
+        vacation: root.snapshot.vacation === true,
         status: root.snapshot.status,
         reviews: root.snapshot.reviews,
         lessons: root.snapshot.lessons,
         pending: root.snapshot.pending,
-        attention: root.snapshot.attention
+        attention: root.snapshot.attention,
+        level: root.snapshot.level,
+        panel_open: root.panelOpen,
+        studying: root.studying,
+        last_sync: root.snapshot.last_sync || null,
+        next_reviews_at: root.snapshot.next_reviews_at || null,
+        listening_due: null,
+        saved_sessions: {
+          reviews: !!saved.reviews,
+          lessons: !!saved.lessons,
+          practice: !!saved.practice
+        },
+        learning_progress: {
+          level: level.level || null,
+          complete: level.complete === true,
+          passed: level.passed === undefined ? null : level.passed,
+          required: level.required === undefined ? null : level.required,
+          remaining: level.remaining === undefined ? null : level.remaining,
+          pending: level.pending || 0,
+          attention: level.attention || 0,
+          threshold_met: level.threshold_met === undefined ? null : level.threshold_met
+        },
+        reminders: root.rhythm ? {
+          status: root.rhythm.status,
+          next_at: root.rhythm.next_at,
+          remaining_today: root.rhythm.remaining_today
+        } : null
       })
     }
   }

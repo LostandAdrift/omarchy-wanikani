@@ -2,9 +2,9 @@
 
 **Five reviews, then back to work.**
 
-A native WaniKani study companion for Omarchy 4: lessons, reviews, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
+A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.1.0 is a development release.** Live-account qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.0 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
@@ -37,23 +37,32 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Save and return to work | Escape |
 | Dashboard | `omarchy-shell wanikani dashboard` |
 | Reviews / lessons | `omarchy-shell wanikani reviews` / `omarchy-shell wanikani lessons` |
+| Listening / level progress | `omarchy-shell wanikani listen` / `omarchy-shell wanikani progress` |
 | Lookup / Zen | `omarchy-shell wanikani lookup` / `omarchy-shell wanikani zen` |
 | Refresh / status | `omarchy-shell wanikani refresh` / `omarchy-shell wanikani status` |
 | Settings / saved submissions | `omarchy-shell wanikani settings` / `omarchy-shell wanikani recovery` |
 | Practice library / help | `omarchy-shell wanikani practice` / `omarchy-shell wanikani help` |
 | Keyboard help | F1 |
-| Panel navigation outside text fields | Ctrl+1 Today, Ctrl+2 Study, Ctrl+3 Lookup, Ctrl+4 Zen, Ctrl+5 Settings, Ctrl+6 Practice |
+| Panel navigation outside text fields | Ctrl+1 Today, Ctrl+2 Study, Ctrl+3 Lookup, Ctrl+4 Zen, Ctrl+5 Settings, Ctrl+6 Practice, Ctrl+7 Listen, Ctrl+8 Progress, Ctrl+9 Activity |
 | Enter / leave demo | `omarchy-shell wanikani demo true` / `omarchy-shell wanikani demo false` |
 
-Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, review-overview, lesson-overview, progress, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
+Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, review-overview, lesson-overview, progress, activity, listen, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
+
+For scripts and agents, `python3 tools/wanikani.py status --json` returns a versioned aggregate status and `doctor --json` checks local dependencies and shell integration. The helper can open an overview or deliberately begin study; it never supplies answers. See [agent and command-line support](docs/AGENT_SUPPORT.md) for commands, privacy boundaries, exit codes, and recovery guidance.
 
 ## How study works
 
 **Reviews** and **Lessons** have separate overview screens and independently saved sessions. Today shows both actions and any saved position. Switching between them preserves the current question, draft and mistake counts for each. Direct commands still start or resume their requested mode.
 
+The lesson overview lets you browse confirmed unlocked subjects by type, preview the recommended batch, or choose 1–20 subjects yourself. Previewing does not start a lesson. A saved lesson session always resumes its existing selection and position.
+
+**Activity** shows the last seven or thirty local calendar days of completed subjects, finished batches, listening ratings, and guarded typo corrections. Current submission confirmations and items needing attention remain separate. Suggestions open the appropriate overview without starting study. Records retained across an account reset still describe work you did here; activity from other devices is not reconstructed.
+
 **Progress** shows confirmed first passing toward the current level’s 90% kanji requirement, pending submissions separately, current SRS distribution, and a paged level board with prerequisites and known review times. Incomplete account data is labeled explicitly. Unrevealed subjects in unfinished graded work stay protected on the board.
 
 Vocabulary pronunciation has visible replay/stop and download/error states. An explicitly requested recording can download without holding up answers. Settings includes separate lesson/review autoplay and **Test selected voice**, using a safe learned sample. A downloaded alternate voice remains usable when the preferred voice is missing offline. Recordings stop when the surface, subject, account or study question changes.
+
+**Listen** offers five familiar words using cached WaniKani pronunciation. The first side has only audio; reveal the word, meanings, and readings before choosing **Got it** or **Again**. Listening has its own local intervals and saved session, with five new listening words per day. It never submits a WaniKani review or changes your account schedule. Undo can revise the last local rating; playing or revealing a new word still counts toward that day's exposure limit. Words in unfinished graded work stay protected. By default, words due on WaniKani within 24 hours are also excluded. Autoplay follows explicit practice actions; returning to a saved session stays silent.
 
 Sessions contain five subjects by default. Lessons introduce the subjects before their quiz. Reviews test each required part; wrong answers retain their mistake counts until the subject is finished. Romaji converts to kana locally, and existing Japanese input methods are supported.
 
@@ -105,7 +114,7 @@ Demo Settings includes **Simulate offline in demo**, **Reconnect demo & sync**, 
 
 ## Desktop behavior
 
-The bar shows due items, pending work, or the next-review countdown. Notifications are coalesced, with a default two-hour minimum and quiet hours of 22:00–08:00. They respect Do Not Disturb, lock, vacation, and study. Suppressed reminders are not replayed later.
+The bar shows due items, pending work, or the next-review countdown. **Study rhythm** in Settings offers reminders when reviews become due, at chosen local times, or at intervals within a daytime window. Choose reviews, listening, or both, then preview and apply the schedule. Defaults use a two-hour minimum, three reminders per day, and quiet hours of 22:00–08:00. Snooze or skip today without changing your schedule. All invitations share one budget and respect Do Not Disturb, lock, fullscreen, vacation, and active study. Suppressed reminders are not replayed later.
 
 The dashboard offers a small, dismissible celebration when synchronization confirms a new account level. The first connection establishes a baseline; local offline results do not invent milestones. Companion animation respects reduced motion.
 

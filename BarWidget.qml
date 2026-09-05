@@ -3,10 +3,13 @@ import Quickshell
 import qs.Commons
 import qs.Ui as Ui
 import "qml" as Kani
+import "qml/Theme.mjs" as Theme
 
 Ui.BarWidget {
   id: root
   moduleName: "io.github.lostandadrift.wanikani"
+  readonly property color kaniSurface: Theme.composite(root.bar ? root.bar.background : Color.bar.background, Color.background)
+  readonly property color kaniText: root.bar ? root.bar.barForeground : Color.bar.text
   readonly property var service: bar && bar.shell ? bar.shell.serviceFor(moduleName) : null
   readonly property var info: service ? service.snapshot : ({})
   readonly property string label: {
@@ -56,7 +59,7 @@ Ui.BarWidget {
     Kani.Crab {
       width: Style.space(23)
       height: Style.space(20)
-      ink: root.bar ? root.bar.barForeground : Color.foreground
+      ink: root.bar && root.bar.transparent ? root.kaniText : Theme.readable(root.kaniText, root.kaniSurface, Color.foreground)
       shellColor: ink
       animate: root.service && root.service.animations && !root.service.locked && root.Window.window && root.Window.window.visible
       celebrating: !!root.info.milestone
@@ -66,7 +69,9 @@ Ui.BarWidget {
       anchors.verticalCenter: parent.verticalCenter
       text: root.label
       font.pixelSize: Style.font.bodySmall
-      color: root.bar ? root.bar.barForeground : Color.foreground
+      textColor: root.kaniText
+      surfaceColor: root.kaniSurface
+      color: root.bar && root.bar.transparent ? root.kaniText : Theme.readable(textColor, surfaceColor, Color.foreground)
     }
   }
   Kani.Label {
@@ -79,7 +84,9 @@ Ui.BarWidget {
     elide: Text.ElideRight
     horizontalAlignment: Text.AlignRight
     font.pixelSize: Style.space(9)
-    color: root.bar ? root.bar.barForeground : Color.foreground
+    textColor: root.kaniText
+    surfaceColor: root.kaniSurface
+    color: root.bar && root.bar.transparent ? root.kaniText : Theme.readable(textColor, surfaceColor, Color.foreground)
   }
   Accessible.role: Accessible.Button
   Accessible.name: "WaniKani, " + (info.reviews || 0) + " reviews, " + (info.pending || 0) + " pending"

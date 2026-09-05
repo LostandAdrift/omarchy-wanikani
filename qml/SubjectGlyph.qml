@@ -1,10 +1,13 @@
 import QtQuick
 import qs.Commons
+import "Theme.mjs" as Theme
 
 Item {
   id: root
   property var subject: null
   property bool revealLabel: true
+  property color surfaceColor: Theme.surface(parent, Color.background)
+  property color glyphTextColor: Theme.foreground(parent, Color.foreground)
   property real pixelSize: Style.space(94)
   property real minimumPixelSize: Style.space(22)
   readonly property bool hasCharacters: !!(subject && typeof subject.characters === "string" && subject.characters.trim().length)
@@ -15,12 +18,13 @@ Item {
   implicitHeight: Math.max(pixelSize * 1.2, glyph.visible ? glyph.contentHeight : 0)
   JapaneseText {
     id: glyph
+    objectName: "subject-japanese-text"
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
     visible: root.hasCharacters
     text: root.hasCharacters ? root.subject.characters : ""
-    color: Color.foreground
+    color: Theme.readable(root.glyphTextColor, root.surfaceColor, Color.foreground)
     font.pixelSize: root.pixelSize
     minimumPixelSize: Math.min(root.minimumPixelSize, root.pixelSize)
   }

@@ -207,7 +207,8 @@ class StudyNotesRenderingTests(unittest.TestCase):
             ui = directory / "qs" / "Ui"
             ui.mkdir()
             (ui / "qmldir").write_text("module qs.Ui\nTextField 1.0 TextField.qml\n")
-            (ui / "TextField.qml").write_text("import QtQuick.Controls\nTextField {}\n")
+            (ui / "TextField.qml").write_text("import QtQuick\nimport QtQuick.Controls\n"
+                "TextField { property color foreground: '#202020'; property color accent: '#006699' }\n")
             (directory / "tst_StudyNotes.qml").write_text(QML)
             process = subprocess.run([str(RUNNER), "-input", str(directory), "-import", str(directory)],
                 capture_output=True, text=True, timeout=30,

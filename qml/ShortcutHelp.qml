@@ -51,6 +51,18 @@ ColumnLayout {
     {
       key: "Ctrl+6",
       action: "Practice library"
+    },
+    {
+      key: "Ctrl+7",
+      action: "Listening practice"
+    },
+    {
+      key: "Ctrl+8",
+      action: "Level progress"
+    },
+    {
+      key: "Ctrl+9",
+      action: "Local learning activity"
     }
   ]
   spacing: Style.space(16)
@@ -88,6 +100,11 @@ ColumnLayout {
           zen: "Zen",
           settings: "Settings",
           recovery: "saved submissions",
+          "review-overview": "Reviews",
+          "lesson-overview": "Lessons",
+          progress: "Progress",
+          listen: "Listen",
+          activity: "Activity",
           "practice-library": "practice"
         }[root.returnView] || "Today")
       selected: true
@@ -173,6 +190,21 @@ ColumnLayout {
         }
       }
     }
+  }
+  Label {
+    Layout.fillWidth: true
+    text: "Choose your next session"
+    font.bold: true
+  }
+  Label {
+    Layout.fillWidth: true
+    text: "Use Reviews to recall learned subjects, Lessons to explore new subjects before a quiz, and Listen to train your ear with familiar recordings and local ratings. Each keeps its own saved position."
+    secondary: true
+  }
+  Label {
+    Layout.fillWidth: true
+    text: "In Listen, use the focused Play, Reveal, Got it, or Again buttons. Returning to a saved session stays silent. Configure autoplay and gentle reminders in Settings."
+    secondary: true
   }
   Label {
     Layout.fillWidth: true

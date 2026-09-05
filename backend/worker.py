@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from wanikani import VERSION
 from wanikani.api import Api, ApiError, RequestBudget, elapsed_clock, user_id, validate_user
-from wanikani.common import UserError, private_dir, stamp, state_home
+from wanikani.common import UserError, epoch, private_dir, stamp, state_home
 from wanikani.credentials import Keyring
 from wanikani import diagnostics
 from wanikani.engine import Engine
@@ -242,6 +242,47 @@ class Worker:
         self.sync.run()
         return {"connected": True, "remembered": saved, "credential_cleanup_needed": not cleared_previous}
 
+    def rhythm_context(self, args):
+        context = args.get("context", {})
+        if not isinstance(context, dict):
+            raise UserError("Study reminders need desktop context.")
+        value = self.engine.snapshot()
+        from wanikani import listening
+        try:
+            listen_count = listening.status(self.engine)["available"]
+        except Exception:
+            # An optional listening-cache aggregate cannot disable review
+            # reminders or prevent changing their schedule.
+            listen_count = 0
+        # Desktop flags come from the shared shell services. Account access,
+        # work counts and time remain owned by this worker.
+        return {**context, "now": self.engine.now(), "demo": self.engine.demo,
+            "account_ready": bool(self.engine.connected and value.get("username") and self.engine.max_level() > 0
+                and self.engine.status in ("online", "offline", "rate_limited", "demo")),
+            "vacation": value.get("vacation", False), "clock_untrusted": bool(self.engine.clock_untrusted or abs(self.engine.clock_offset) > 300),
+            "review_count": value.get("reviews", 0), "listen_count": listen_count,
+            "next_review_at": epoch(value.get("next_reviews_at")),
+            "last_study_at": self.engine.store.get("last_study_at", 0)}
+
+    def note_study_activity(self, method):
+        if method in ("start", "answer", "advance", "lesson_next", "listen", "listen_media"):
+            now = self.engine.now()
+            # A thirty-second observation is enough for gentle reminder
+            # suppression; avoid a second journal flush on every keystroke.
+            try:
+                previous = self.engine.store.get("last_study_at", 0)
+                if type(previous) not in (int, float) or now - previous >= 30:
+                    self.engine.store.set("last_study_at", now)
+            except Exception:
+                # Reminder housekeeping cannot turn a durably accepted answer
+                # into an apparent failure after its study transaction commits.
+                pass
+
+    def command(self, rid, method, args):
+        result = self.engine.command(rid, method, args)
+        self.note_study_activity(method)
+        return result
+
     def handle(self, request):
         if not isinstance(request, dict) or request.get("v") != 1:
             raise UserError("Unsupported protocol version.")
@@ -270,7 +311,7 @@ class Worker:
             def prepare():
                 self.last_attempt = time.time()
                 self.sync.run(for_study=True)
-                return self.engine.command(rid, method, args)
+                return self.command(rid, method, args)
             self.job(rid, prepare)
             return
         elif method == "tick":
@@ -288,7 +329,7 @@ class Worker:
             if self.sync and not self.job_lock.locked() and (clock_change or woke or now - self.last_attempt >= interval):
                 self.last_attempt = now
                 self.job(None, lambda: self.sync.run())
-            result = {"alive": True}
+            result = {"alive": True, "woke": woke, "clock_change": clock_change}
         elif method == "snapshot":
             result = self.snapshot()
         elif method == "readiness":
@@ -323,9 +364,56 @@ class Worker:
         elif method == "voices":
             from wanikani.voices import catalogue
             result = catalogue(self.engine)
+        elif method in ("rhythm_preview", "rhythm_claim", "rhythm_configure"):
+            from wanikani import reminders
+            context = self.rhythm_context(args)
+            if method == "rhythm_preview":
+                result = reminders.preview(self.engine, context, args.get("patch"))
+            elif method == "rhythm_claim":
+                result = reminders.claim(self.engine, context)
+            else:
+                result = reminders.configure(self.engine, args.get("patch", {}), context)
+        elif method == "lesson_catalogue":
+            from wanikani.lessons import catalogue
+            result = catalogue(self.engine, subject_type=args.get("subject_type", "all"),
+                offset=args.get("offset", 0), limit=args.get("limit", 30))
+        elif method == "lesson_preview":
+            from wanikani.lessons import preview
+            result = preview(self.engine, subject_ids=args.get("subject_ids"), limit=args.get("limit", 5))
+        elif method == "listen_state":
+            from wanikani import listening
+            with self.engine.store.lock:
+                try:
+                    status = listening.status(self.engine)
+                except UserError as error:
+                    status = {"available": 0, "due": 0, "new_remaining": None, "saved": None,
+                        "settings": {}, "complete": False, "local_only": True, "message": str(error)}
+                result = {"status": status, "session": listening.view(self.engine)}
+        elif method == "listen":
+            from wanikani import listening
+            result = listening.command(self.engine, rid, args.get("action"), args)
+            if args.get("action") in ("start", "reveal", "rate"):
+                self.note_study_activity(method)
+        elif method == "listen_media":
+            from wanikani import listening
+            with self.engine.store.lock:
+                result = listening.media(self.engine, args.get("handle"))
+                result["session"] = listening.view(self.engine)
+            self.note_study_activity(method)
         elif method == "progress":
             from wanikani.progress import overview
             result = overview(self.engine)
+        elif method == "learning_insights":
+            from wanikani import insights, listening
+            value = self.engine.snapshot()
+            availability = {"reviews": value.get("reviews", 0), "lessons": value.get("lessons", 0)}
+            try:
+                availability["listening"] = listening.status(self.engine)["available"]
+            except Exception:
+                # Clock/access restrictions on optional listening cannot hide
+                # the learner's already-recorded local activity.
+                pass
+            result = insights.overview(self.engine, availability=availability)
         elif method == "level_board":
             from wanikani.progress import level_board
             result = level_board(self.engine, level=args.get("level"), subject_type=args.get("subject_type"),
@@ -404,7 +492,7 @@ class Worker:
             result = diagnostics.export(self.directory, self.engine.demo, self.engine.snapshot(),
                 self.engine.store.rows("PRAGMA user_version")[0][0])
         else:
-            result = self.engine.command(rid, method, args)
+            result = self.command(rid, method, args)
         self.emit({"v": 1, "id": rid, "ok": True, "data": result})
         session_only = method in ("answer", "correct", "finish", "lesson_next", "start")
         if method == "advance" and previous_session:
@@ -413,7 +501,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "progress", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen", "listen_media", "progress", "learning_insights", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

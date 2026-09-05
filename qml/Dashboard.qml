@@ -151,6 +151,30 @@ ColumnLayout {
     progress: root.s.learning_progress || null
     onExplore: root.controller.navigate("progress")
   }
+  Card {
+    Layout.fillWidth: true
+    visible: !!root.s.username
+    implicitHeight: listenInvitation.implicitHeight + Style.space(28)
+    ColumnLayout {
+      id: listenInvitation
+      anchors.fill: parent
+      anchors.margins: Style.space(14)
+      spacing: Style.space(8)
+      Label {
+        text: "Give your eyes a break"
+        font.bold: true
+      }
+      Label {
+        Layout.fillWidth: true
+        text: "Hear familiar vocabulary, reveal the word, then choose Got it or Again. Listening has its own local practice schedule."
+        secondary: true
+      }
+      Action {
+        text: "Open Listen 5 →"
+        onClicked: root.controller.navigate("listen")
+      }
+    }
+  }
   Label {
     Layout.fillWidth: true
     visible: s.vacation === true
@@ -168,8 +192,9 @@ ColumnLayout {
     }
     Action {
       text: "Snooze reminders · 1h"
-      onClicked: root.controller.call("snooze", {
-        seconds: 3600
+      onClicked: root.controller.service.configureRhythm({
+        action: "snooze",
+        minutes: 60
       })
     }
   }
@@ -241,6 +266,11 @@ ColumnLayout {
       text: (s.activity || []).length ? "Completed subjects and practice recorded by this plugin. Other clients are not included." : "Your first session starts the story. Activity from other clients is not available as individual review history."
       font.pixelSize: Style.font.bodySmall
       secondary: true
+    }
+    Action {
+      text: "Explore local activity →"
+      accessibleHint: "See seven or thirty days of local study, listening, and saved-submission status"
+      onClicked: root.controller.navigate("activity")
     }
     Flow {
       Layout.fillWidth: true
