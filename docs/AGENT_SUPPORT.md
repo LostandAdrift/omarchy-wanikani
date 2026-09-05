@@ -22,6 +22,36 @@ The Progress view's **SRS explorer** drills into confirmed current Apprentice/Gu
 
 For account milestones, open Progress and choose **Level history**. It shows separate recorded visits and dated passing/burned milestones from the accessible account cache. Older history can be absent even after synchronization completes. **Activity** remains the separate record of work done in this client. The helper does not export individual history records or submit their private worker requests; see [history scope](LEVEL_HISTORY.md).
 
+## Cached learning reports
+
+Use `report` for an explicitly requested recap such as “How much did I practise this week?” It defaults to seven days and accepts only `--days 7` or `--days 30`:
+
+```bash
+python3 tools/wanikani.py report
+python3 tools/wanikani.py report --days 7 --json
+python3 tools/wanikani.py report --days 30 --json
+```
+
+Each invocation makes exactly one read-only `wanikani status` IPC call. It selects an already cached window from optional `status.learning_digest`; it does not request fresh history, query SQLite, contact WaniKani, scan media, open a view or begin study. The normal full-snapshot refreshes maintain this cache. Recent local work can be absent until one of those refreshes occurs, even when the shell responds immediately and the account is online.
+
+The report covers **local calendar days**, including today only through its own `generated_at` timestamp. Its system timezone and `start_day`/`end_day` remain attached to the cached calculation; there is no caller-supplied timezone or date range. A day can contain 23 or 25 hours across daylight saving changes. The seven-day counts are a subset of the thirty-day counts.
+
+- `subject_completions` counts acknowledged local review, lesson and ungraded practice cycles separately. Repeated cycles count again; answer parts do not. These counts do not establish server confirmation. Current `outbox_counts.confirmed` and current-level `learning_progress` remain separate status fields.
+- `sessions_completed` counts deliberately finished batches. Listening and dictation have their own completed-batch counts and final surviving ratings: remembered/again/skipped for meaning listening, matched/again/skipped for kana dictation. Undo removes the corresponding local result; Skip is not a correct answer. Neither audio skill changes WaniKani SRS.
+- `typo_corrections` counts local uses of the guarded correction action. It is not an inferred accuracy score. All metrics cover retained records on this device, including activity kept across account resets; another client's individual reviews are not reconstructed.
+
+Successful JSON reports use the existing `wanikani-cli` version-1 envelope. `data.available:true` supplies `data.digest` with the metadata and just the selected `window`. Status itself can include both cached windows. An unsupported, missing or unavailable digest returns a successful read with this data:
+
+```json
+{"available":false,"reason":"unavailable","digest":null}
+```
+
+Unavailable counts are never replaced with zero. A supported empty history can return known zeros. `complete:true` means the supported aggregate fields were calculated successfully from retained records; it does not mean lifetime or account-wide coverage. `complete:false` marks an incomplete calculation. `stale:true` means the cache is known to be stale; `stale:null` means freshness is unknown. Even an explicitly supplied `stale:false` remains a cached observation, not a fresh read. The human report leads with **Recorded on this device · cached through …** and labels known stale, unknown freshness, incomplete and authored demo data.
+
+The optional digest contains counts, dates, static scope labels and an opaque local `data_epoch` UUID. It exposes no account identity, subject IDs, meanings, readings, answers, notes, individual session/operation IDs or media locations. The helper validates required fields, dates, timezone, integer bounds and the two-window relationship, drops unknown extra fields and returns a generic `invalid_response` error for malformed or incompatible data. It never falls back to raw worker messages or private files.
+
+A recap does not authorize automatic study or synchronization. Do not use `refresh` to obtain a newer report unless the user requests that synchronization: it may submit already completed pending work. An invitation based on the report can remain conversational; opening or starting a session follows the learner's request.
+
 ## Optional agent playbook
 
 The repository includes [skills/omarchy-wanikani/SKILL.md](../skills/omarchy-wanikani/SKILL.md) and its agent display metadata. It is an optional operating guide, not a plugin-development skill. An agent can read it directly from the repository to locate the installed client, check its manifest identity, use the bounded helper, and interpret local progress and recovery states.
@@ -99,6 +129,7 @@ Status now includes optional cached operational sections. Reading them starts no
 | `sync` | Cached allowlisted `stage`, `active`, `completed`, and optional `total`. A stage count is not account-wide study history; unknown stages become `unknown`. No freeform error message is exposed. |
 | `outbox_counts` | Current local counts for pending, in-flight, confirmed, conflicted, uncertain, blocked, and discarded operations. Confirmed is not a count confirmed today. |
 | `cache` | Registered `files`, `bytes`, accessible catalogue `subjects`, and configured `limit_bytes`. These are cached metadata, not a new measurement of disk usage or audio playback. |
+| `learning_digest` | Optional dated 7/30-day local learning aggregates. Its own `generated_at`, retained-records scope, completeness and stale/unknown freshness survive projection. See [cached learning reports](#cached-learning-reports); reading it starts no calculation. |
 
 When `checking` is true, counts can describe the previous check. Incomplete totals are not proof that missing items do not exist. Even a complete check describes its `checked_at` timestamp; current access and study eligibility are rechecked when used. Missing optional pronunciation does not by itself block graded text reviews. These groups do not measure the separate familiar-word listening pool, and `listening_due` remains unknown.
 
@@ -114,7 +145,7 @@ When both product versions are known and differ, `runtime_version_mismatch` sugg
 | `4` | Invalid/incompatible reply or unsupported view | Update the helper and plugin together; inspect the installed revision. |
 | `5` | Bounded IPC timeout | An action may already have been accepted. Check status and the desktop before retrying. |
 
-Each IPC call has a five-second default timeout, adjustable to 1–15 seconds with `--timeout`. Doctor makes at most three sequential IPC reads. Errors have stable `code`, `message`, `action`, and `delivery` fields; raw shell output and supplied arguments are never included. No failed action is automatically retried.
+Each IPC call has a five-second default timeout, adjustable to 1–15 seconds with `--timeout`. Status and report each make one IPC read; doctor makes at most three sequential IPC reads. Errors have stable `code`, `message`, `action`, and `delivery` fields; raw shell output and supplied arguments are never included. No failed action is automatically retried.
 
 ## Local shell contract
 
@@ -122,9 +153,12 @@ Each IPC call has a five-second default timeout, adjustable to 1–15 seconds wi
 - Normal navigation uses `omarchy-shell shell summon io.github.lostandadrift.wanikani '<JSON>'`. The payload has a supported `view`, optional `limit`, or explicit lookup `text`/`selection`. The shell must answer `ok`; `unknown` is a failed dispatch.
 - `omarchy-shell wanikani refresh` requests ordinary background synchronization. Its current acknowledgement is empty output; `ok` is also accepted.
 - Doctor uses `omarchy-shell shell ping` and `omarchy-shell shell listPlugins`, then the status method above. No new privileged or generic IPC entry point is required.
+- Report uses only the existing status method; there is no separate report IPC method or fresh-history request.
 
 ## Morning and daily tracking
 
 Use `status --json` and `doctor --json` for the morning handoff alongside the tested source/installed revision in [overnight tracking](OVERNIGHT_WORK.md). Separate **implemented**, **automatically verified**, **installed**, and **personally confirmed**. Aggregate counts can guide an invitation to review, learn, or listen; they do not authorize an agent to complete study for the learner.
+
+For a requested weekly or thirty-day recap, add `report --days 7 --json` or `report --days 30 --json` and retain its own timestamp and freshness label in the handoff. A successful cached report is not evidence that today's latest session was included.
 
 The helper creates no cron job or Codex automation. Periodic user invitations belong to the native Study rhythm policy, with its shared budget and desktop suppression rules. Runtime progress remains in the private local store. The fourteen-day qualification log in [DAILY_USE.md](DAILY_USE.md), audible live vocabulary verification, and remaining native interaction gates require actual evidence; CLI success is not a substitute.

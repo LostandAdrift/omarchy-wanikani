@@ -187,6 +187,7 @@ Item {
  id: root
  property bool ready: false
  property bool notificationHydrated: false
+ property bool learningDigestHydrated: false
  property bool locked: false
  property bool dnd: false
  property bool fullscreen: false

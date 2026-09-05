@@ -125,6 +125,18 @@ Rectangle {
       compare(owner.saved,screen.selectionState());var count=backend.calls.length;owner.saved=Object.assign({},owner.saved);wait(20);compare(backend.calls.length,count)
       verify(labels().some(function(node){return node.text.indexOf("Uses confirmed cached review dates")===0}))
     }
+    function test_native_selected_filter_states_are_announced_and_update(){
+      function checked(name,selected){var button=item(name);verify(button.Accessible.checkable,name);compare(button.Accessible.checked,selected,name)}
+      make();settle();checked("srs-group-apprentice",true);checked("srs-group-guru",false);checked("srs-refine",false)
+      click("srs-group-guru");settle();checked("srs-group-guru",true);checked("srs-group-apprentice",false)
+      click("srs-refine");checked("srs-refine",true);checked("srs-type-all",true);checked("srs-stage-all",true)
+      click("srs-type-vocabulary");settle();checked("srs-type-vocabulary",true);checked("srs-type-all",false)
+      click("srs-stage-6");settle();checked("srs-stage-6",true);checked("srs-stage-5",false);checked("srs-stage-all",false)
+      click("srs-levels");checked("srs-level-all",true);click("srs-level-2");settle();checked("srs-level-2",true);checked("srs-level-all",false)
+      checked("srs-level-order",true);click("srs-review-order");settle();checked("srs-review-order",true);checked("srs-level-order",false)
+      click("srs-level-order");settle();checked("srs-level-order",true);checked("srs-review-order",false)
+      click("srs-refine");checked("srs-refine",false)
+    }
     function test_details_navigation_and_recreation_preserve_exact_page(){
       owner.saved={group:"guru",subject_type:"vocabulary",level:2,stage:5,order:"next_review",offset:24};make();settle()
       click("srs-open-25");compare(owner.openedIds,[25]);compare(owner.saved.offset,24)

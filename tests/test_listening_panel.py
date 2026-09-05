@@ -265,6 +265,10 @@ Item {
  property bool panelOpen: false
  property var snapshot: ({})
  property var stateOrder: SessionState.initial()
+ property bool learningDigestHydrated: false
+ property bool learningDigestDirty: false
+ property double learningDigestBarrier: -1
+ property int learningDigestGeneration: 0
  property var pending: []
  property var ambientItems: []
  function initialOrder(value) { return SessionState.full(SessionState.initial(),value) }

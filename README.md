@@ -4,7 +4,7 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.2.6 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.7 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
@@ -50,6 +50,15 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, review-overview, lesson-overview, progress, activity, listen, dictation, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
 
 For scripts and agents, `python3 tools/wanikani.py status --json` returns a versioned aggregate status and `doctor --json` checks local dependencies and shell integration, with cached offline-readiness, synchronization, cache and recovery guidance. It does not initiate a refresh or a media check. The helper can open an overview or deliberately begin study; it never supplies answers. See [agent and command-line support](docs/AGENT_SUPPORT.md) for commands, privacy boundaries, exit codes, and recovery guidance.
+
+For a learning recap, `report` reads cached totals for the last seven local calendar days; `--days 30` selects thirty days:
+
+```bash
+python3 tools/wanikani.py report
+python3 tools/wanikani.py report --days 30 --json
+```
+
+The report separates completed review, lesson and practice cycles, listening self-assessments, kana dictation results and typo corrections. It includes its own calculation timestamp and retained-local-records scope; these totals are not server confirmations or activity from other devices. Missing totals stay unavailable, and stale or incomplete data is labeled. Each report makes one read-only status call; it does not refresh the account, scan history, open a view or start study. See [cached learning reports](docs/AGENT_SUPPORT.md#cached-learning-reports) for freshness and count definitions.
 
 An optional [agent playbook](skills/omarchy-wanikani/SKILL.md) ships in the repository. Point your agent to it for status checks, learning views, requested study starts, and recovery guidance through the helper. Installing the Omarchy plugin does not register this skill globally. The playbook preserves your requested scope and keeps answers, credentials, and private database contents out of routine agent support.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bounded local CLI for the existing WaniKani shell service. No daemon."""
 import argparse
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 import json
 import math
 import os
@@ -9,6 +9,8 @@ import re
 import shutil
 import subprocess
 import sys
+from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 PLUGIN_ID = "io.github.lostandadrift.wanikani"
@@ -29,6 +31,13 @@ SYNC_STAGES = STATUSES | {"idle", "account", "resets", "subjects", "assignments"
 MAX_SAFE_INTEGER = 2**53 - 1
 MAX_RESPONSE = 65536
 PRODUCT_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
+DIGEST_COUNTERS = {
+    "subject_completions": ("reviews", "lessons", "practice"),
+    "sessions_completed": ("reviews", "lessons", "practice"),
+    "listening_ratings": ("remembered", "again", "skipped"),
+    "dictation_ratings": ("matched", "again", "skipped"),
+}
+DIGEST_SCALARS = ("listening_sessions_completed", "dictation_sessions_completed", "typo_corrections")
 
 
 class CliError(Exception):
@@ -49,6 +58,8 @@ def capabilities():
         "commands": {
             "capabilities": {"effect": "read_only", "shell_required": False, "description": "Describe this CLI's supported interface and effects."},
             "status": {"effect": "read_only", "description": "Read allowlisted aggregate cached status; no account request is initiated."},
+            "report": {"effect": "read_only", "days": {"allowed": [7, 30], "default": 7},
+                "description": "Project one cached local learning window through a single status call. No account refresh, network request, UI opening or fresh history calculation is initiated."},
             "doctor": {"effect": "read_only", "description": "Check dependency presence, shell/plugin accessibility and redacted cached status."},
             "open": {"effect": "show_ui", "views": list(VIEWS), "description": "Open a named surface; does not itself begin study or read clipboard text."},
             "reviews": {"effect": "begin_study", "user_intent_required": True, "batch": {"minimum": 1, "maximum": 20, "default": "plugin preference"}},
@@ -66,6 +77,7 @@ def capabilities():
             "attention": "Records requiring inspection; may overlap pending.",
             "outbox_counts.confirmed": "Locally recorded confirmed operations when available; not account-wide review history.",
             "learning_progress": "Confirmed current-level requirement; required/remaining may be unknown while the cache is incomplete.",
+            "learning_digest": "Retained local learning through its own generated_at timestamp, separate from confirmed remote operations and current account progress. Missing history stays unknown; status does not refresh it.",
             "saved_sessions": "Only presence flags; no questions, drafts, or subject IDs.",
             "reminders": "Current suppression status and next opportunity; never proof that a notification was delivered.",
             "readiness": "Cached last-check counts for due reviews, lessons and the next 24 hours. Partial or checking counts do not prove current offline availability; audio is optional for graded study.",
@@ -90,6 +102,9 @@ def parser():
     sub = root.add_subparsers(dest="command", parser_class=Parser)
     for command in ("capabilities", "status", "doctor", "refresh"):
         sub.add_parser(command, parents=[common])
+    report_parser = sub.add_parser("report", parents=[common])
+    report_parser.add_argument("--days", type=int, choices=(7, 30), default=7,
+        help="Choose a cached local calendar window (7 or 30 days; default 7).")
     opened = sub.add_parser("open", parents=[common])
     opened.add_argument("view", choices=VIEWS)
     for command in ("reviews", "lessons", "resume"):
@@ -175,6 +190,98 @@ def _product_version(value):
     return value
 
 
+def _learning_digest(value):
+    """Validate the complete optional aggregate, then copy only public fields.
+
+    Calendar validation uses the digest's zone, never the caller's timezone.
+    A system-local cache lacks a stable IANA name, so its end day can only be
+    checked against the possible local-date range of its recorded instant.
+    """
+    if value is None:
+        return None
+    try:
+        if not isinstance(value, dict):
+            raise ValueError
+        expected = {"schema_version": 1, "scope": "recorded_on_this_device", "freshness": "cached",
+            "coverage": "retained_local_records", "includes_retained_pre_reset_activity": True}
+        if any(type(value.get(key)) is not type(wanted) or value[key] != wanted for key, wanted in expected.items()):
+            raise ValueError
+        for key in ("demo", "complete"):
+            if type(value.get(key)) is not bool:
+                raise ValueError
+        if "stale" not in value or (value["stale"] is not None and type(value["stale"]) is not bool):
+            raise ValueError
+        epoch = value.get("data_epoch")
+        if not isinstance(epoch, str) or len(epoch) != 36 or str(UUID(epoch)) != epoch:
+            raise ValueError
+        generated = _timestamp(value.get("generated_at"))
+        if generated is None:
+            raise ValueError
+        if int(generated[11:13]) > 23 or int(generated[14:16]) > 59 or int(generated[17:19]) > 59:
+            raise ValueError
+        # datetime.fromisoformat normalizes offsets such as +01:99; a public
+        # diagnostic must not accept that malformed timestamp as another time.
+        if generated[-1] != "Z" and (int(generated[-5:-3]) > 23 or int(generated[-2:]) > 59):
+            raise ValueError
+        instant = datetime.fromisoformat(generated.replace("Z", "+00:00"))
+        zone_name = value.get("timezone")
+        if (not isinstance(zone_name, str) or not 1 <= len(zone_name) <= 128
+                or re.fullmatch(r"[A-Za-z0-9_+.-]+(?:/[A-Za-z0-9_+.-]+)*", zone_name) is None
+                or any(part in (".", "..") for part in zone_name.split("/"))):
+            raise ValueError
+        zone = None if zone_name == "system-local" else ZoneInfo(zone_name)
+        raw_windows = value.get("windows")
+        if not isinstance(raw_windows, dict):
+            raise ValueError
+        windows = {}
+        for days in (7, 30):
+            raw = raw_windows.get(str(days))
+            if not isinstance(raw, dict) or type(raw.get("days")) is not int or raw["days"] != days:
+                raise ValueError
+            dates = {}
+            for key in ("start_day", "end_day"):
+                label = raw.get(key)
+                if not isinstance(label, str) or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", label) is None:
+                    raise ValueError
+                dates[key] = date.fromisoformat(label)
+            if dates["end_day"] - dates["start_day"] != timedelta(days=days - 1):
+                raise ValueError
+            if zone is not None:
+                if instant.astimezone(zone).date() != dates["end_day"]:
+                    raise ValueError
+            elif abs((dates["end_day"] - instant.astimezone(timezone.utc).date()).days) > 1:
+                raise ValueError
+            window = {"days": days, **{key: dates[key].isoformat() for key in dates}}
+            for metric, names in DIGEST_COUNTERS.items():
+                counters = raw.get(metric)
+                if not isinstance(counters, dict):
+                    raise ValueError
+                window[metric] = {}
+                for name in names:
+                    count = counters.get(name)
+                    if type(count) is not int or not 0 <= count <= MAX_SAFE_INTEGER:
+                        raise ValueError
+                    window[metric][name] = count
+            for metric in DIGEST_SCALARS:
+                count = raw.get(metric)
+                if type(count) is not int or not 0 <= count <= MAX_SAFE_INTEGER:
+                    raise ValueError
+                window[metric] = count
+            windows[str(days)] = window
+        short, long = windows["7"], windows["30"]
+        if short["end_day"] != long["end_day"]:
+            raise ValueError
+        if any(short[metric][name] > long[metric][name]
+                for metric, names in DIGEST_COUNTERS.items() for name in names):
+            raise ValueError
+        if any(short[metric] > long[metric] for metric in DIGEST_SCALARS):
+            raise ValueError
+        return {**expected, "generated_at": generated, "data_epoch": epoch, "demo": value["demo"],
+            "timezone": zone_name, "complete": value["complete"], "stale": value["stale"], "windows": windows}
+    except (CliError, ValueError, TypeError, OverflowError, OSError, ZoneInfoNotFoundError):
+        raise CliError("invalid_response", "The cached learning summary is malformed or unsupported.") from None
+
+
 def status(timeout=5):
     value = _json(_call(["wanikani", "status"], timeout))
     if not isinstance(value, dict) or not isinstance(value.get("status"), str):
@@ -203,6 +310,7 @@ def status(timeout=5):
         result["learning_progress"] = {key: _count(progress.get(key))
             for key in ("level", "passed", "required", "remaining", "pending", "attention")}
         result["learning_progress"].update({key: _boolean(progress.get(key)) for key in ("complete", "threshold_met")})
+    result["learning_digest"] = _learning_digest(value.get("learning_digest"))
     result["saved_sessions"] = None
     if value.get("saved_sessions") is not None:
         sessions = _object(value["saved_sessions"])
@@ -245,6 +353,48 @@ def status(timeout=5):
     return result
 
 
+def report(timeout=5, days=7):
+    """Select a cached window using exactly the existing status transport."""
+    if type(days) is not int or days not in (7, 30):
+        raise CliError("invalid_arguments", "Choose a cached report window of 7 or 30 days.", 2,
+            "Run report --help or capabilities.")
+    digest = status(timeout)["learning_digest"]
+    if digest is None:
+        return {"available": False, "reason": "unavailable", "digest": None}
+    return {"available": True, "reason": None,
+        "digest": {**{key: value for key, value in digest.items() if key != "windows"},
+            "window": digest["windows"][str(days)]}}
+
+
+def _report_text(data):
+    if not data["available"]:
+        return "Cached local learning totals are unavailable. No refresh was requested."
+    digest = data["digest"]
+    window = digest["window"]
+    completions = window["subject_completions"]
+    sessions = window["sessions_completed"]
+    listening = window["listening_ratings"]
+    dictation = window["dictation_ratings"]
+    lines = ["Recorded on this device · cached through " + digest["generated_at"],
+        f"{window['start_day']}–{window['end_day']} · {digest['timezone']} · {window['days']} local days (final day partial)"]
+    if digest["demo"]:
+        lines.append("Authored demo activity.")
+    if digest["stale"] is True:
+        lines.append("This cached summary is known to be stale.")
+    elif digest["stale"] is None:
+        lines.append("Whether this cached summary is stale is unknown.")
+    if not digest["complete"]:
+        lines.append("The supported aggregate calculation is incomplete.")
+    lines.extend([
+        f"Completed cycles: {completions['reviews']} reviews · {completions['lessons']} lessons · {completions['practice']} practice",
+        f"Completed batches: {sessions['reviews']} reviews · {sessions['lessons']} lessons · {sessions['practice']} practice",
+        f"Listening: {listening['remembered']} remembered · {listening['again']} again · {listening['skipped']} skipped · {window['listening_sessions_completed']} batches",
+        f"Dictation: {dictation['matched']} matched · {dictation['again']} again · {dictation['skipped']} skipped · {window['dictation_sessions_completed']} batches",
+        f"Typo corrections: {window['typo_corrections']}",
+        "Retained local records, including earlier resets; review cycles are not server confirmations."])
+    return "\n".join(lines)
+
+
 def _text(value):
     if not isinstance(value, str) or not value.strip() or len(value) > 256:
         raise CliError("invalid_text", "Supply nonempty lookup text of at most 256 Unicode code points.", 2,
@@ -260,6 +410,8 @@ def dispatch(args):
         return capabilities(), 0
     if command == "status":
         return status(args.timeout), 0
+    if command == "report":
+        return report(args.timeout, args.days), 0
     if command == "doctor":
         data = doctor(args.timeout)
         return data, 0 if data["healthy"] else 3
@@ -416,6 +568,8 @@ def main(argv=None):
         print(result["error"]["message"] + " " + result["error"]["action"], file=sys.stderr)
         if result["data"]:
             print(json.dumps(result["data"], ensure_ascii=False, indent=2))
+    elif command == "report":
+        print(_report_text(result["data"]))
     else:
         print(json.dumps(result["data"], ensure_ascii=False, indent=2))
     return code

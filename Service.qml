@@ -7,6 +7,7 @@ import Quickshell.Networking
 import "qml" as Kani
 import "qml/DesktopPolicy.mjs" as Policy
 import "qml/SessionState.mjs" as SessionState
+import "qml/LearningDigest.mjs" as LearningDigest
 
 Item {
   id: root
@@ -28,6 +29,10 @@ Item {
   property var ambientItems: []
   property bool ready: false
   property var workerVersion: null
+  property bool learningDigestHydrated: false
+  property bool learningDigestDirty: false
+  property double learningDigestBarrier: -1
+  property int learningDigestGeneration: 0
   property bool panelOpen: false
   property bool studying: false
   property string error: ""
@@ -64,6 +69,7 @@ Item {
   property double ambientFetchedAt: 0
   readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0, snapshot.session_epoch || ""])
   onContentAccessChanged: {
+    learningDigestHydrated = false
     cancelListeningPreparation()
     listeningPreparationProgress = null
     ambientItems = []
@@ -116,6 +122,7 @@ Item {
     })
   }
   function applySnapshot(data) {
+    var previousDomain = JSON.stringify([stateOrder.context, stateOrder.sessionEpoch])
     var next = SessionState.full(ordering(), data)
     if (next.catalogueAccepted && next.sessionEpoch !== stateOrder.sessionEpoch)
       ambientItems = []
@@ -123,15 +130,25 @@ Item {
     if (next.catalogueAccepted || next.sessionAccepted)
       snapshot = next.snapshot
     if (next.catalogueAccepted) {
+      if (previousDomain !== JSON.stringify([next.context, next.sessionEpoch]))
+        learningDigestBarrier = -1
+      learningDigestHydrated = true
+      // A newer compact session can be retained over older account counts.
+      // Never let that merge make an older activity digest look current.
+      learningDigestDirty = next.stateRevision <= learningDigestBarrier || next.sessionRevision > Number(data.session_revision || 0)
       considerNotification()
       refreshAmbient()
     }
   }
   function applySession(data) {
+    var previousRevision = stateOrder.sessionRevision
     var next = SessionState.partial(ordering(), data)
     stateOrder = next
-    if (next.sessionAccepted)
+    if (next.sessionAccepted) {
       snapshot = next.snapshot
+      if (next.sessionRevision > previousRevision)
+        learningDigestDirty = true
+    }
   }
 
   function request(method, args, callback) {
@@ -143,7 +160,22 @@ Item {
     }
     var id = epochId + ":" + (++sequence)
     var next = Object.assign({}, callbacks)
-    next[id] = callback || function () {}
+    var action = args ? args.action : ""
+    var learningContext = JSON.stringify([stateOrder.context, stateOrder.sessionEpoch])
+    var learningWorker = learningDigestGeneration
+    var changesLearning = ["correct", "advance", "finish"].indexOf(method) >= 0 || (method === "listen" && ["rate", "skip", "undo"].indexOf(action) >= 0) || (method === "dictation" && ["continue", "skip", "undo"].indexOf(action) >= 0)
+    next[id] = function (ok, data, message, learningAfterRevision) {
+      if (ok && changesLearning && learningWorker === root.learningDigestGeneration && learningContext === JSON.stringify([root.stateOrder.context, root.stateOrder.sessionEpoch])) {
+        // Every full snapshot at or below this bound may have started before
+        // the durable result. Audio work has its own session revisions.
+        var bound = Number.isSafeInteger(learningAfterRevision) && learningAfterRevision >= 0 ? learningAfterRevision : Number.MAX_SAFE_INTEGER
+        root.learningDigestBarrier = Math.max(root.learningDigestBarrier, bound)
+        if (root.stateOrder.stateRevision <= root.learningDigestBarrier)
+          root.learningDigestDirty = true
+      }
+      if (callback)
+        callback(ok, data, message)
+    }
     callbacks = next
     var contexts = Object.assign({}, requestContexts)
     contexts[id] = stateOrder.context
@@ -174,6 +206,10 @@ Item {
     if (message.v !== 1)
       return
     if (message.event === "ready") {
+      learningDigestGeneration++
+      learningDigestHydrated = false
+      learningDigestDirty = false
+      learningDigestBarrier = -1
       workerVersion = productVersion(message.data ? message.data.version : null)
       stateOrder = SessionState.workerRestart(ordering())
       ready = true
@@ -232,7 +268,7 @@ Item {
         error = message.error ? message.error.message : "Something went wrong."
       else
         error = ""
-      callback(message.ok, message.data, message.error ? message.error.message : "")
+      callback(message.ok, message.data, message.error ? message.error.message : "", message.learning_after_revision)
     }
   }
   function refreshAmbient() {
@@ -630,6 +666,14 @@ Item {
         last_sync: root.snapshot.last_sync || null,
         next_reviews_at: root.snapshot.next_reviews_at || null,
         listening_due: null,
+        learning_digest: LearningDigest.project(root.snapshot.learning_digest, {
+          ready: root.ready && root.learningDigestHydrated,
+          demo: root.snapshot.demo === true,
+          epoch: root.snapshot.session_epoch || "",
+          dirty: root.learningDigestDirty,
+          now: Date.now(),
+          clockChanged: root.snapshot.status === "clock_changed"
+        }),
         outbox_counts: counters(root.snapshot.outbox_counts, ["pending", "inflight", "confirmed", "conflicted", "uncertain", "blocked", "discarded"]),
         readiness: readiness,
         sync: sync,

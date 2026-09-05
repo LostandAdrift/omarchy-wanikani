@@ -269,6 +269,7 @@ def build_adapter(directory):
         ("ordering", "applySnapshot", "applySession", "request", "productVersion", "receive", "prepareListening", "cancelListeningPreparation"))
     (directory / "ServiceCore.qml").write_text('''import QtQuick
 import "SessionState.mjs" as SessionState
+import "LearningDigest.mjs" as LearningDigest
 Item {
  id: root
  property bool ready: false
@@ -278,6 +279,10 @@ Item {
  property bool panelOpen: false
  property var snapshot: ({})
  property var stateOrder: SessionState.initial()
+ property bool learningDigestHydrated: false
+ property bool learningDigestDirty: false
+ property double learningDigestBarrier: -1
+ property int learningDigestGeneration: 0
  property var callbacks: ({})
  property var requestContexts: ({})
  property int pendingCount: 0
@@ -297,6 +302,7 @@ Item {
  QtObject { id: worker; function write(line) { root.writes=root.writes.concat([JSON.parse(line)]) } }
  QtObject { id: restartTimer; function restart() {} }
 ''' + access + "\n" + handlers + "\n" + methods + "\nfunction restartWorker() {" + exited + "\n}\n}\n")
+    shutil.copyfile(ROOT / "qml/LearningDigest.mjs", directory / "LearningDigest.mjs")
     (directory / "tst_Preparation.qml").write_text(ADAPTER)
 
 

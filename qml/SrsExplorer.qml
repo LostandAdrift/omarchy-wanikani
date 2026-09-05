@@ -373,6 +373,8 @@ ColumnLayout {
         text: modelData.label
         objectName: "srs-group-" + modelData.key
         selected: root.group === modelData.key
+        Accessible.checkable: true
+        Accessible.checked: selected
         enabled: root.active
         onClicked: root.chooseGroup(modelData.key)
       }
@@ -392,6 +394,8 @@ ColumnLayout {
       objectName: "srs-refine"
       text: root.filtersOpen ? "Hide filters" : "Refine subjects"
       selected: root.filtersOpen
+      Accessible.checkable: true
+      Accessible.checked: selected
       enabled: root.active
       onClicked: root.filtersOpen = !root.filtersOpen
     }
@@ -420,6 +424,8 @@ ColumnLayout {
           objectName: "srs-type-" + (modelData.key || "all")
           text: modelData.label
           selected: root.subjectType === modelData.key
+          Accessible.checkable: true
+          Accessible.checked: selected
           enabled: root.active
           onClicked: root.chooseType(modelData.key)
         }
@@ -435,8 +441,11 @@ ColumnLayout {
       spacing: Style.space(6)
       visible: root.stagesFor(root.group).length > 1
       Action {
+        objectName: "srs-stage-all"
         text: "All stages"
         selected: root.stage === null
+        Accessible.checkable: true
+        Accessible.checked: selected
         enabled: root.active
         onClicked: root.chooseStage(null)
       }
@@ -447,6 +456,8 @@ ColumnLayout {
           objectName: "srs-stage-" + modelData.stage
           text: modelData.label + " · " + modelData.count
           selected: root.stage === modelData.stage
+          Accessible.checkable: true
+          Accessible.checked: selected
           enabled: root.active
           onClicked: root.chooseStage(modelData.stage)
         }
@@ -463,8 +474,11 @@ ColumnLayout {
       Layout.fillWidth: true
       spacing: Style.space(6)
       Action {
+        objectName: "srs-level-all"
         text: "All levels"
         selected: root.level === null
+        Accessible.checkable: true
+        Accessible.checked: selected
         enabled: root.active
         onClicked: root.chooseLevel(null)
       }
@@ -475,6 +489,8 @@ ColumnLayout {
           objectName: "srs-level-" + modelData.level
           text: "Level " + modelData.level + " · " + modelData.count
           selected: root.level === modelData.level
+          Accessible.checkable: true
+          Accessible.checked: selected
           enabled: root.active
           onClicked: root.chooseLevel(modelData.level)
         }
@@ -488,8 +504,11 @@ ColumnLayout {
       Layout.fillWidth: true
       spacing: Style.space(6)
       Action {
+        objectName: "srs-level-order"
         text: "By level"
         selected: root.order === "level"
+        Accessible.checkable: true
+        Accessible.checked: selected
         enabled: root.active
         onClicked: root.chooseOrder("level")
       }
@@ -497,6 +516,8 @@ ColumnLayout {
         objectName: "srs-review-order"
         text: "By next review"
         selected: root.order === "next_review"
+        Accessible.checkable: true
+        Accessible.checked: selected
         enabled: root.active
         onClicked: root.chooseOrder("next_review")
       }

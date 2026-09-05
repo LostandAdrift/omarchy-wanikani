@@ -110,6 +110,7 @@ class ActualStatusContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="wanikani-operational-status-") as temporary:
             directory = Path(temporary)
             (directory / "StatusCore.qml").write_text('''import QtQuick
+import "LearningDigest.mjs" as LearningDigest
 QtObject {
  id: root
  property var snapshot: ({})
@@ -117,12 +118,17 @@ QtObject {
  property var manifest: null
  property var workerVersion: null
  property bool ready: true
+ property bool learningDigestHydrated: false
+ property bool learningDigestDirty: false
+ property double learningDigestBarrier: -1
+ property int learningDigestGeneration: 0
  property bool panelOpen: false
  property bool studying: false
  property int calls: 0
  function request() {calls++;throw new Error("Status must use its cached snapshot only")}
 ''' + re.search(r"(?ms)^  function productVersion\(.*?^  \}", source).group(0)
                 + "\n" + match.group(0) + "\n}\n")
+            (directory / "LearningDigest.mjs").write_text((ROOT / "qml/LearningDigest.mjs").read_text())
             (directory / "tst_Status.qml").write_text(QML.replace("KNOWN_STAGES", json.dumps(sorted(cli.SYNC_STAGES))))
             process = subprocess.run([str(RUNNER), "-input", str(directory)], capture_output=True,
                 text=True, errors="replace", timeout=30,

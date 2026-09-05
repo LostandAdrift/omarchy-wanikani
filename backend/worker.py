@@ -70,14 +70,36 @@ class Worker:
         with self.snapshot_lock:
             self.snapshot_sequence += 1
             revision = self.snapshot_sequence
-        value = self.engine.snapshot()
+        engine = self.engine
+        with engine.store.lock:
+            digest_context = (engine.demo, engine.store.get("account_id"), engine.store.get("session_epoch"))
+        value = engine.snapshot()
         from wanikani.progress import current_level
-        value["learning_progress"] = current_level(self.engine)
+        value["learning_progress"] = current_level(engine)
+        # Count local activity only at this existing full-refresh boundary.
+        # Session-only answers, drafts and audio ratings never call this path.
+        # Its dated local history is separate from the account counters above.
+        value["learning_digest"] = self.learning_digest(engine, digest_context, value)
         value["state_revision"] = revision
         value["readiness"] = self.readiness.get()
         value["sync_progress"] = dict(self.sync_progress)
         self.readiness.refresh()
         return value
+
+    def learning_digest(self, engine, expected, snapshot):
+        try:
+            from wanikani.learning_digest import project
+            with engine.store.lock:
+                current = (engine.demo, engine.store.get("account_id"), engine.store.get("session_epoch"))
+                if (engine is not self.engine or current != expected
+                        or snapshot.get("session_epoch") != current[2]
+                        or snapshot.get("demo") is not bool(current[0])):
+                    return None
+                return project(engine)
+        except Exception:
+            # Optional totals cannot break status or emit private exception
+            # text. An unavailable aggregate is never fabricated zero activity.
+            return None
 
     def readiness_changed(self, source, value):
         if not self.stopping and source is self.readiness:
@@ -657,7 +679,16 @@ class Worker:
                 self.engine.store.rows("PRAGMA user_version")[0][0])
         else:
             result = self.command(rid, method, args)
-        self.emit({"v": 1, "id": rid, "ok": True, "data": result})
+        reply = {"v": 1, "id": rid, "ok": True, "data": result}
+        if (method in ("correct", "advance", "finish")
+                or method == "listen" and args.get("action") in ("rate", "skip", "undo")
+                or method == "dictation" and args.get("action") in ("continue", "skip", "undo")):
+            # The successful local result is durable. A snapshot already
+            # started at or below this sequence may predate that mutation;
+            # only a later-started snapshot can clear the digest's stale marker.
+            with self.snapshot_lock:
+                reply["learning_after_revision"] = self.snapshot_sequence
+        self.emit(reply)
         session_only = method in ("answer", "correct", "finish", "lesson_next", "lesson_navigate", "start")
         if method == "advance" and previous_session:
             current = self.engine.store.session()

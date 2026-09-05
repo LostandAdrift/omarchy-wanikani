@@ -277,12 +277,39 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
+    visible: root.section === "subjects"
     text: "Follow your level, see what unlocks next, and recognize what you already know."
     secondary: true
   }
   LevelProgress {
+    id: fullLevel
+    objectName: "progress-full-level"
+    visible: root.section === "subjects"
     progress: root.overview ? root.overview.current : controller.snapshot.learning_progress || null
     showExplore: false
+  }
+  ColumnLayout {
+    objectName: "progress-compact-level"
+    Layout.fillWidth: true
+    visible: root.section !== "subjects"
+    spacing: Style.space(4)
+    Label {
+      objectName: "progress-compact-level-target"
+      Layout.fillWidth: true
+      text: (fullLevel.hasLevel ? "Level " + fullLevel.value.level + (fullLevel.value.final_level ? " · Final level" : "") : "Current level") + " · " + (fullLevel.ready && fullLevel.value.accessible !== false ? fullLevel.value.passed + " / " + fullLevel.value.required + " required kanji passed" : fullLevel.value.accessible === false ? "Progress unavailable" : "Waiting for a complete sync")
+      font.bold: true
+    }
+    Label {
+      objectName: "progress-compact-level-pending"
+      Layout.fillWidth: true
+      readonly property var parts: [Number.isSafeInteger(fullLevel.value.pending) && fullLevel.value.pending > 0 ? fullLevel.value.pending + " waiting to sync" : "", Number.isSafeInteger(fullLevel.value.attention) && fullLevel.value.attention > 0 ? fullLevel.value.attention + " need attention" : ""].filter(function (part) {
+        return part.length > 0
+      })
+      visible: parts.length > 0
+      text: parts.join(" · ") + "; outside confirmed progress."
+      secondary: true
+      font.pixelSize: Style.font.bodySmall
+    }
   }
   Flow {
     Layout.fillWidth: true
@@ -315,18 +342,24 @@ ColumnLayout {
       objectName: "progress-subjects-tab"
       text: "Subjects & unlocks"
       selected: root.section === "subjects"
+      Accessible.checkable: true
+      Accessible.checked: selected
       onClicked: root.chooseSection("subjects")
     }
     Action {
       objectName: "progress-explorer-tab"
       text: "SRS explorer"
       selected: root.explorerOpen
+      Accessible.checkable: true
+      Accessible.checked: selected
       onClicked: root.chooseSection("explorer")
     }
     Action {
       objectName: "progress-history-tab"
       text: "Level history"
       selected: root.historyOpen
+      Accessible.checkable: true
+      Accessible.checked: selected
       onClicked: root.chooseSection("history")
     }
   }
