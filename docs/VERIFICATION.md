@@ -1,6 +1,6 @@
 # Verification and release qualification
 
-Tested on 2026-09-04. Version 0.1.0 is a development release. Fixture tests and desktop inspection do not establish live-account safety or complete the two-week daily-use gate. No real WaniKani token was accessed and no real study result was submitted during this work.
+Tested on 2026-09-04. Version 0.1.0 is a development release. Fixture tests and desktop inspection do not establish live-account safety or complete the two-week daily-use gate. The original four-hour implementation used no real WaniKani token or graded submission. A later user-authorized live authentication check is recorded below; no real study result has been submitted by these checks.
 
 ## Environment
 
@@ -147,3 +147,13 @@ Qt 6.11's JavaScript `Array.from` split supplementary characters in this host. A
 The final release run `wanikani-native-qa-qrqd4f_o` passed **36 native captures**, including opening a passage word, visiting Help, returning to that same detail and then the original passage. It completed the existing offline lesson/recovery, practice/graded-resume, editor, recap, narrow layout, comparison and quiet-recall scenario. Its temporary plugin was removed and its inspected namespace had **zero errors or warnings**. The final runtime files match the captured source hashes. A preceding reset-only boolean warning was fixed and verified with both an offscreen reset fixture and this hosted run. The user’s existing DP-2 scale of 1.5 was preserved.
 
 The verified runtime checkpoint `38a902e` was installed through `omarchy plugin update`, followed by the documented shell restart. Source and installed commits matched; the pre-update saved production demo session remained byte-for-byte identical. Host process inspection confirmed exactly one WaniKani worker. The installed namespace had no warnings/errors, Hyprland reported no configuration errors, and no temporary QA plugins remained. Status was demo, nine due reviews, three lessons, zero pending and zero attention. These are authored demo counts, not live account progress.
+
+## First live authentication fix · September 5, 2026 UTC
+
+The user reported that a newly created token could not connect and explicitly authorized using it. A read-only GET to WaniKani accepted the copied token; the plugin then rejected the successful response. The original parser and fixtures incorrectly expected a top-level user ID. WaniKani's [documented user envelope](https://docs.api.wanikani.com/20170710/#user-data-structure) puts the UUID in `data.id`.
+
+Runtime fix `ddff7e1` centralizes account identity validation for authentication, keyring storage, synchronization and milestones. The original API envelope is stored unchanged. Malformed nested or contradictory identities reject before touching saved work or credentials; unambiguous legacy fixture/cache identities remain readable. **104 related tests passed**, including 12 new regressions using the documented response shape and account-mismatch preservation checks.
+
+After installation, an exclusive one-time connection probe used the authorized copied token in memory and the normal Secret Service pipe. That probe prohibited non-GET API requests. Authentication, account catalogue synchronization and secure keyring storage succeeded. The regular shell worker was re-enabled, restored the saved credential and reported online with no pending or attention state. Settings was opened for the user. The account database contained zero graded sessions and zero submission records after this check. No raw token, account response, private notes or credentials were added to this repository.
+
+This establishes live authentication, keyring restoration and initial read synchronization on the tested account. It does not establish real graded submission/media playback behavior or replace the two-week personal-use gate.
