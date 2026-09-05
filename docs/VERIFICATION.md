@@ -47,16 +47,16 @@ Qt policy checks cover quiet-hour boundaries, persisted reminder intervals, snoo
 
 ## Performance measurements
 
-All measurements are local development observations, not a guarantee across machines. The shell was already running.
+All measurements are local development observations, not a guarantee across machines. The shell was already running. Rows were collected at different development checkpoints and loads; they are not one controlled benchmark. Later dated evidence below records the methods and changes.
 
 | Measurement | Result | Scope |
 |---|---|---|
-| Warm study opening | 73.9 ms | One sample from IPC invocation to a visible compositor layer; does not instrument first-pixel rendering. |
-| Other warm views | Dashboard 82.3 ms; lookup 59.8 ms; Zen 64.2 ms; Settings 62.6 ms | Same method, one sample per view. All below the 200 ms target in this run. |
+| Warm saved-study opening | Median 43 ms; p95 65 ms | Ten samples with 9,016 authored subjects, from synthetic panel-open to native render readback. Not first-pixel or physical-key certification. |
+| Warm practice opening | Median 83.5 ms; p95 96 ms | Same final ten-sample native fixture run; one catalogue request per opening. Dashboard, lookup, Settings and Zen also remained below 200 ms in that run. |
 | Durable answer plus advance | Median 11.36 ms; p95 12.69 ms | Latest 100-operation authored fixture run; includes both local transactions and strict cache validation. |
 | Full-catalogue snapshot | Median 36.00 ms; p95 39.13 ms | Latest 9,016 authored fixture catalogue run with covered schedule/access queries; earlier 88.84 ms. |
 | Ranked local search | Median 15.63 ms | Full Unicode/romaji/synonym ranking across the same catalogue. |
-| Practice / offline readiness | Practice 93.79 ms; searched practice 99.54 ms; readiness 90.37 ms | Same catalogue; readiness checked 3,008 eligible items in a background pass. |
+| Offline readiness, earlier worker baseline | 90.37 ms | 9,016-subject catalogue; checked 3,008 eligible items in a background pass. Later readiness also covers scheduled reviews; this earlier timing does not measure that extension. |
 | Large local submission history | Snapshot summary 1.47 ms / 1,964 bytes; first page 2.40 ms | 50,000 authored outbox rows plus 10,000 completed sessions. Deep open page at offset 30,000 measured 11.71 ms. |
 | Online pre-study transport model | 0.18 s versus previous 8.42 s | Nine mocked reads at 20 ms each; burst-aware pacing and deferred media. Not live network timing. |
 | Idle worker CPU | 0.0222% of one core | Latest valid 45-second closed-panel sample. This does not measure incremental QML CPU in the existing shell. |
@@ -145,3 +145,5 @@ The local reading trail preserves up to 256 Unicode code points exactly, links c
 Qt 6.11's JavaScript `Array.from` split supplementary characters in this host. A small explicit code-point walker now preserves rare kanji at search and note limits. Actual note controls retain the complete 2,000th character. Panel details and selection reads also reject replies after close, navigation, changed queries or account access, and preserve the original selected whitespace.
 
 The final release run `wanikani-native-qa-qrqd4f_o` passed **36 native captures**, including opening a passage word, visiting Help, returning to that same detail and then the original passage. It completed the existing offline lesson/recovery, practice/graded-resume, editor, recap, narrow layout, comparison and quiet-recall scenario. Its temporary plugin was removed and its inspected namespace had **zero errors or warnings**. The final runtime files match the captured source hashes. A preceding reset-only boolean warning was fixed and verified with both an offscreen reset fixture and this hosted run. The user’s existing DP-2 scale of 1.5 was preserved.
+
+The verified runtime checkpoint `38a902e` was installed through `omarchy plugin update`, followed by the documented shell restart. Source and installed commits matched; the pre-update saved production demo session remained byte-for-byte identical. Host process inspection confirmed exactly one WaniKani worker. The installed namespace had no warnings/errors, Hyprland reported no configuration errors, and no temporary QA plugins remained. Status was demo, nine due reviews, three lessons, zero pending and zero attention. These are authored demo counts, not live account progress.

@@ -4,7 +4,7 @@ User explicitly requested persistent work for four hours, including new features
 
 - Start: 2026-09-05 01:43 UTC / September 4, 18:43 America/Los_Angeles.
 - End: 2026-09-05 05:43 UTC / September 4, 22:43 America/Los_Angeles.
-- Persistent goal created in Codex. Keep it active for this work window; finish useful work, verify and checkpoint as it progresses. A context reset does not cancel it.
+- Persistent goal created in Codex and carried through the full work window. Completed September 5 at 05:43 UTC / September 4 at 22:43 Pacific. The live-account and two-week release qualifications remain pending.
 - No token budget was requested or set.
 
 ## Working priorities
@@ -52,3 +52,5 @@ Later steering: do not spend too much time on performance while UI and useful fe
 - 05:32 UTC: Seventh batch adds a local selected-text reading trail with exact passage preservation, theme-aware word links, eight-button disclosure, overlapping matches and pending-work labels. Native 36-capture workflow passed. Verified 489 distinct Python tests and 112 core Qt checks, including rare-kanji limits and delayed detail/clipboard navigation guards. Final log review found one transient offline-status boolean warning during reset; fixing it before the final installed checkpoint. Daily-use qualification guidance and final packaging checks are in progress.
 
 - 05:36 UTC: Final seventh-batch native run passed all 36 captures, including Help→word detail→original passage, with zero namespace errors/warnings and exact runtime source hashes. Manifest, Markdown links and whitespace checks passed. Added a private-use fourteen-day qualification log and updated the contest demonstration and next-feature proposals. Preparing the final installed checkpoint; the original demo session digest was recorded before the update.
+
+- 05:43 UTC: Four-hour improvement window completed. Runtime checkpoint `38a902e` is locally installed; the final source/installation match, one-worker lifecycle, zero-warning shell log and exact saved-session preservation were verified. Seven improvement batches followed the initial release checkpoint. Final evidence: 489 distinct Python tests, 112 core Qt checks plus component/lifecycle wrappers, 36 native captures, and earlier 10,000- and 5,000-interaction mock soaks. No live WaniKani token or graded submission was used. README, screenshots, contest demo, daily-use log and next-feature proposals are ready. Final documentation is committed separately from the tested runtime.
