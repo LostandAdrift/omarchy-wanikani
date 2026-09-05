@@ -353,6 +353,9 @@ def build(engine, media_dir, deadline=None, cancelled=lambda: False, clock=time.
         return plan
     active = _active_subjects(store)
     listening_urls = _listening_urls(engine)
+    from .dictation import retained_urls
+    for url, position in retained_urls(engine).items():
+        listening_urls[url] = min(listening_urls.get(url, 99), position)
     rows = store.rows("""SELECT CAST(s.id AS INTEGER) AS id,json_extract(s.body,'$.data.level') AS level,
       json_extract(a.body,'$.data.started_at') AS started,json_extract(a.body,'$.data.unlocked_at') AS unlocked,
       json_extract(a.body,'$.data.available_at') AS available,json_extract(a.body,'$.data.burned_at') AS burned

@@ -69,7 +69,8 @@ def _day_expression(column, boundaries):
 def _empty():
     return {"subject_completions": dict.fromkeys(MODES, 0), "sessions_completed": dict.fromkeys(MODES, 0),
         "listening_ratings": {"remembered": 0, "again": 0, "skipped": 0},
-        "listening_sessions_completed": 0, "typo_corrections": 0}
+        "listening_sessions_completed": 0, "dictation_ratings": {"matched": 0, "again": 0, "skipped": 0},
+        "dictation_sessions_completed": 0, "typo_corrections": 0}
 
 
 def _completion_data(engine, boundaries, now, daily):
@@ -114,7 +115,10 @@ def _session_data(engine, boundaries, now, daily):
             daily[row["day"]]["sessions_completed"][row["mode"]] = row["count"]
 
 
-def _listening_data(engine, boundaries, now, daily, account):
+def _listening_data(engine, boundaries, now, daily, account, *, skill="listening"):
+    # Private fixed skill names select SQL literals, never user input.
+    if skill not in ("listening", "dictation"):
+        raise ValueError("Unknown local audio skill")
     # Project only small event metadata in SQL. Old large answer bodies are not
     # selected; the listening-only time index also avoids walking those rows.
     cte = """WITH recent_ids AS MATERIALIZED (
@@ -138,6 +142,8 @@ def _listening_data(engine, boundaries, now, daily, account):
         AND NOT EXISTS (SELECT 1 FROM projected u WHERE u.kind='listening_undo'
           AND u.session_id=r.session_id AND u.operation=r.operation AND u.id>r.id
           AND u.happened<=julianday(?))) """
+    if skill == "dictation":
+        cte = cte.replace("listening_", "dictation_").replace("'remembered'", "'matched'")
     # Include future result dates to avoid re-dating a clock-shifted completed
     # batch to its earlier cards. Undo is selected by durable event order, not
     # its wall date: a clock correction across midnight must still undo once.
@@ -148,9 +154,9 @@ def _listening_data(engine, boundaries, now, daily, account):
         (stamp(boundaries[0][1]), *context, stamp(now), *values, stamp(boundaries[0][1]), stamp(now)))
     for row in rows:
         if row["day"] in daily:
-            daily[row["day"]]["listening_ratings"][row["rating"]] = row["count"]
+            daily[row["day"]][skill + "_ratings"][row["rating"]] = row["count"]
     day, values = _day_expression("last_at", boundaries)
-    rows = engine.store.rows(cte + """, ended AS (
+    session_sql = cte + """, ended AS (
         SELECT session_id,MAX(happened) AS last_at FROM final GROUP BY session_id)
       SELECT """ + day + """ AS day,COUNT(*) AS count FROM ended e JOIN meta m
         ON m.key='listening_session_'||e.session_id
@@ -161,11 +167,14 @@ def _listening_data(engine, boundaries, now, daily, account):
         AND json_extract(m.body,'$.index')=json_array_length(m.body,'$.queue')
         AND CAST(json_extract(m.body,'$.context.account') AS TEXT)=?
         AND json_extract(m.body,'$.context.epoch')=?
-        AND json_extract(m.body,'$.context.demo')=? GROUP BY day""",
+        AND json_extract(m.body,'$.context.demo')=? GROUP BY day"""
+    if skill == "dictation":
+        session_sql = session_sql.replace("listening_session_", "dictation_session_")
+    rows = engine.store.rows(session_sql,
         (stamp(boundaries[0][1]), *context, stamp(now), *values, stamp(boundaries[0][1]), stamp(now), *context))
     for row in rows:
         if row["day"] in daily:
-            daily[row["day"]]["listening_sessions_completed"] = row["count"]
+            daily[row["day"]][skill + "_sessions_completed"] = row["count"]
 
 
 def _protection(engine):
@@ -312,6 +321,7 @@ def overview(engine, *, timezone=None, now=None, availability=None):
         _completion_data(engine, boundaries, now, daily)
         _session_data(engine, boundaries, now, daily)
         _listening_data(engine, boundaries, now, daily, str(account))
+        _listening_data(engine, boundaries, now, daily, str(account), skill="dictation")
         windows = {}
         for count in (7, 30):
             total = _empty()

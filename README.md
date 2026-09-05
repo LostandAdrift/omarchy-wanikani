@@ -4,7 +4,7 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.2.4 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.5 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
@@ -37,7 +37,8 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Save and return to work | Escape |
 | Dashboard | `omarchy-shell wanikani dashboard` |
 | Reviews / lessons | `omarchy-shell wanikani reviews` / `omarchy-shell wanikani lessons` |
-| Listening / level progress | `omarchy-shell wanikani listen` / `omarchy-shell wanikani progress` |
+| Meaning listening / level progress | `omarchy-shell wanikani listen` / `omarchy-shell wanikani progress` |
+| Kana dictation | `omarchy-shell wanikani dictation` |
 | Lookup / Zen | `omarchy-shell wanikani lookup` / `omarchy-shell wanikani zen` |
 | Refresh / status | `omarchy-shell wanikani refresh` / `omarchy-shell wanikani status` |
 | Settings / saved submissions | `omarchy-shell wanikani settings` / `omarchy-shell wanikani recovery` |
@@ -46,7 +47,7 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Panel navigation outside text fields | Ctrl+1 Today, Ctrl+2 Study, Ctrl+3 Lookup, Ctrl+4 Zen, Ctrl+5 Settings, Ctrl+6 Practice, Ctrl+7 Listen, Ctrl+8 Progress, Ctrl+9 Activity |
 | Enter / leave demo | `omarchy-shell wanikani demo true` / `omarchy-shell wanikani demo false` |
 
-Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, review-overview, lesson-overview, progress, activity, listen, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
+Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, review-overview, lesson-overview, progress, activity, listen, dictation, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
 
 For scripts and agents, `python3 tools/wanikani.py status --json` returns a versioned aggregate status and `doctor --json` checks local dependencies and shell integration, with cached offline-readiness, synchronization, cache and recovery guidance. It does not initiate a refresh or a media check. The helper can open an overview or deliberately begin study; it never supplies answers. See [agent and command-line support](docs/AGENT_SUPPORT.md) for commands, privacy boundaries, exit codes, and recovery guidance.
 
@@ -58,7 +59,7 @@ An optional [agent playbook](skills/omarchy-wanikani/SKILL.md) ships in the repo
 
 The lesson overview lets you browse confirmed unlocked subjects by type, preview the recommended batch, or choose 1–20 subjects yourself. Previewing does not start a lesson. A saved lesson session always resumes its existing selection and position. Discovery then follows **Meaning → Reading or Sound → Context**, with only applicable steps and a separate **Start lesson quiz** action. Closing keeps your exact step and reopening stays silent. See [guided lessons](docs/GUIDED_LESSONS.md) for navigation, audio and recovery behavior.
 
-**Activity** shows the last seven or thirty local calendar days of completed subjects, finished batches, listening ratings, and guarded typo corrections. Current submission confirmations and items needing attention remain separate. Suggestions open the appropriate overview without starting study. Records retained across an account reset still describe work you did here; activity from other devices is not reconstructed.
+**Activity** shows the last seven or thirty local calendar days of completed subjects, finished batches, separate meaning-listening and kana-dictation results, and guarded typo corrections. Current submission confirmations and items needing attention remain separate. Suggestions open the appropriate overview without starting study. Records retained across an account reset still describe work you did here; activity from other devices is not reconstructed.
 
 **Progress** shows confirmed first passing toward the current level’s 90% kanji requirement, pending submissions separately, current SRS distribution, and a paged level board with prerequisites and known review times. Incomplete account data is labeled explicitly. Unrevealed subjects in unfinished graded work stay protected on the board.
 
@@ -69,6 +70,8 @@ Vocabulary pronunciation has visible replay/stop and download/error states. An e
 Kanji reading and context pages offer **Hear this kanji in a word**: up to three original whole-vocabulary recordings, with the written word, actual pronunciation, meaning and offline availability. New vocabulary is labeled as a preview, and unfinished graded items stay protected. Open and play examples explicitly; they do not start lessons or change grades. See [kanji audio examples](docs/KANJI_AUDIO.md).
 
 **Listen** offers five familiar words using cached WaniKani pronunciation. The first side has only audio; reveal the word, meanings, and readings before choosing **Got it** or **Again**. Listening has its own local intervals and saved session, with five new listening words per day. It never submits a WaniKani review or changes your account schedule. Undo can revise the last local rating; playing or revealing a new word still counts toward that day's exposure limit. Words in unfinished graded work stay protected. By default, words due on WaniKani within 24 hours are also excluded. Autoplay follows explicit practice actions; returning to a saved session stays silent.
+
+**Type kana** is a second activity inside Listen. Play a familiar cached recording, type what you heard in romaji or kana, then check against that exact recording’s pronunciation. The word stays hidden until Check. Matched readings and words to revisit get local intervals only after Continue; Skip records no correctness result and changes no interval. Undo restores the last committed result. Dictation has its own saved draft, batch and five-new-words daily allowance, separate from meaning listening. Replay and resume keep the same recording; opening or returning stays silent. See [kana dictation](docs/DICTATION_PLAN.md) for input, hearing and recovery details.
 
 When eligible recordings are missing, Listen offers **Prepare recordings** for a batch of up to five. This explicit download shows aggregate progress while keeping the words hidden. It respects your content access and media budget, and does not start a session, play audio, or use the daily listening allowance. **Cancel preparation** stops further downloads; completed cache files remain usable. Choose **Start listening** when you are ready. Preparation is available in the native Listen view; the CLI can open that view but cannot start the download.
 
@@ -146,7 +149,7 @@ Zen’s optional **Quiet recall** hides the meaning and reading until you reveal
 
 Use `omarchy plugin update io.github.lostandadrift.wanikani` for Git-installed copies. This development installation pulls committed changes from its local workspace origin. A future public installation will pull from its published origin. Plugin source contains no generated account state.
 
-On the tested host, hot reload retained durable session state but sometimes kept nested QML components stale. If an update leaves old visuals visible, close the panel and run `omarchy restart shell`; the worker restores the saved session when the shell returns.
+On the tested host, hot reload retained durable session state but sometimes kept nested QML components stale. Perform plugin install, update and removal only while the desktop is fully unlocked. If an update leaves old visuals visible, close study and use `omarchy restart shell` only while unlocked; the worker restores the saved session. The tested shell can replace its lock service during plugin lifecycle reloads, stranding lock ownership. See the [observed lock-reload incident](docs/LOCK_RELOAD_INCIDENT.md); automatic hosted QA now refuses both installation and cleanup in a locked or unknown state.
 
 Before removing the plugin, remove the optional desktop integration:
 

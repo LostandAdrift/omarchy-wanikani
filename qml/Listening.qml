@@ -102,6 +102,21 @@ ColumnLayout {
     autoplayArmed = false
   Component.onDestruction: stop()
 
+  Flow {
+    Layout.fillWidth: true
+    spacing: Style.space(6)
+    Action {
+      text: "Recall meaning"
+      selected: true
+      enabled: root.interactive
+    }
+    Action {
+      objectName: "openDictation"
+      text: "Type kana"
+      enabled: root.interactive
+      onClicked: root.controller.navigate("dictation")
+    }
+  }
   Label {
     Layout.fillWidth: true
     text: "LISTENING PRACTICE · LOCAL PROGRESS"

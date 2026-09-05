@@ -13,7 +13,7 @@ import sys
 
 PLUGIN_ID = "io.github.lostandadrift.wanikani"
 VERSION = 1
-VIEWS = ("dashboard", "review-overview", "lesson-overview", "progress", "activity", "listen", "lookup",
+VIEWS = ("dashboard", "review-overview", "lesson-overview", "progress", "activity", "listen", "dictation", "lookup",
     "practice-library", "settings", "recovery", "help", "zen")
 STATUSES = {"starting", "online", "offline", "disconnected", "demo", "clock_changed", "unauthorized",
     "forbidden", "rate_limited", "api_error", "sync_error", "access_restricted", "vacation", "invalid_request"}

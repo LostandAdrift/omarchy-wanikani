@@ -205,7 +205,9 @@ def _eligible(engine, subject_id, protection, settings, clip_url=None, pronuncia
     return {"subject_id": subject_id, "characters": characters, "started_at": started, "clip": candidates[0]}
 
 
-def _pool(engine, context, settings, subject_ids=None, *, require_cached=True):
+def _pool(engine, context, settings, subject_ids=None, *, require_cached=True, card_key=None):
+    # Local audio skills share eligibility, but select their own due records.
+    card_key = _card_key if card_key is None else card_key
     protection = _protection(engine)
     if subject_ids is None:
         rows = engine.store.rows("""SELECT CAST(s.id AS INTEGER),json_extract(a.body,'$.data.started_at'),
@@ -236,7 +238,7 @@ def _pool(engine, context, settings, subject_ids=None, *, require_cached=True):
         records = dict.fromkeys(ids)
         for offset in range(0, len(ids), 128):
             batch = ids[offset:offset + 128]
-            keys = [_card_key(context, sid) for sid in batch]
+            keys = [card_key(context, sid) for sid in batch]
             for record in engine.store.rows("SELECT key,body FROM meta WHERE key IN (" + ",".join("?" for _ in keys) + ")", keys):
                 sid = int(record[0].rsplit("_", 1)[-1])
                 records[sid] = _record(json.loads(record[1]))
@@ -247,7 +249,7 @@ def _pool(engine, context, settings, subject_ids=None, *, require_cached=True):
     else:
         ids = subject_ids
         complete = True
-        records = {sid: _record(engine.store.get(_card_key(context, sid))) for sid in ids}
+        records = {sid: _record(engine.store.get(card_key(context, sid))) for sid in ids}
     result = []
     checked = 0
     for sid in ids:

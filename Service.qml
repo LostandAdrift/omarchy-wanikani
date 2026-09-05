@@ -525,6 +525,9 @@ Item {
     function listen(): void {
       root.summon("listen")
     }
+    function dictation(): void {
+      root.summon("dictation")
+    }
     function progress(): void {
       root.summon("progress")
     }

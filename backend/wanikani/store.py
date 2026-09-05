@@ -63,6 +63,8 @@ class Store:
             WHERE kind IN ('subject_complete','practice_complete');
           CREATE INDEX IF NOT EXISTS events_listening_window ON events(julianday(created_at),id)
             WHERE kind IN ('listening_result','listening_undo');
+          CREATE INDEX IF NOT EXISTS events_dictation_window ON events(julianday(created_at),id)
+            WHERE kind IN ('dictation_result','dictation_undo');
           CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS media (url TEXT PRIMARY KEY, path TEXT NOT NULL, size INTEGER NOT NULL, used_at REAL NOT NULL);
           CREATE TABLE IF NOT EXISTS search_documents (

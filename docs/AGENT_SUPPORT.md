@@ -37,6 +37,7 @@ python3 tools/wanikani.py open lesson-overview
 python3 tools/wanikani.py open progress
 python3 tools/wanikani.py open activity
 python3 tools/wanikani.py open listen
+python3 tools/wanikani.py open dictation
 python3 tools/wanikani.py open practice-library
 ```
 
@@ -64,6 +65,8 @@ The optional batch is a whole number from 1 to 20. Omitting it uses the plugin p
 `open listen` opens the native listening preflight. It does not play audio, prepare recordings, or begin a listening session. If familiar words need audio, the native **Prepare recordings** action downloads a bounded batch of up to five, using the account's accessible WaniKani recordings and the configured media budget. Progress shows counts without revealing the selected words. Preparation itself creates no listening session, records no exposure or rating, and submits no graded work.
 
 The learner can cancel preparation without cancelling ordinary account synchronization. Cancellation is cooperative; a file already in progress may finish, and completed files remain cached. A failed or partial preparation leaves a visible result and ready recordings can still be used. The learner explicitly chooses when to start listening afterward. Preparation does not establish that the speakers work or that the selected voice has been heard.
+
+`open dictation` shows the separate **Type kana** activity without starting practice or playing audio. Its typed input, pinned recording, playback-completion acknowledgement, checks, Continue, Skip and Undo are learner actions in the native UI. Local Activity reports dictation separately from meaning recall and WaniKani review history. There is no agent dictation-answer or hearing-acknowledgement action; do not imitate a learner or claim the player can prove that a person heard the output.
 
 There is currently no CLI preparation, preparation-cancellation, playback, or listening-rating command. Use `open listen` for a request to show these controls; do not invent helper arguments or bypass the helper through raw worker messages. Aggregate `listening_due` is cached availability when supplied, not the preparation job's progress or proof of audible playback. An unavailable value stays `null`.
 

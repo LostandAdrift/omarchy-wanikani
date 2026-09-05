@@ -104,6 +104,7 @@ ColumnLayout {
           "lesson-overview": "Lessons",
           progress: "Progress",
           listen: "Listen",
+          dictation: "Type kana",
           activity: "Activity",
           "practice-library": "practice"
         }[root.returnView] || "Today")

@@ -27,6 +27,7 @@ Item {
   property var session: null
   property var listenSession: null
   property var listenStatus: null
+  readonly property var dictation: dictationCore
   property bool listenBusy: false
   property string listenError: ""
   property string listenPreparationNotice: ""
@@ -154,7 +155,7 @@ Item {
     if (["reviews", "lessons", "practice", "resume"].indexOf(requested) >= 0)
       begin(requested, payload.limit, payload.subjects)
     else
-      navigate(["dashboard", "review-overview", "lesson-overview", "progress", "activity", "listen", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
+      navigate(["dashboard", "review-overview", "lesson-overview", "progress", "activity", "listen", "dictation", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
     if (requested === "lookup" && payload.selection)
       readSelection()
     else if (requested === "lookup" && typeof payload.text === "string")
@@ -193,7 +194,7 @@ Item {
     detail = null
     error = ""
     if (service)
-      service.studying = next === "study" || next === "listen"
+      service.studying = next === "study" || next === "listen" || next === "dictation"
     if (service && service.ready && (next === "dashboard" || next === "settings")) {
       // Session-only events keep the question path small. Refresh richer local
       // account summaries when those views are actually requested.
@@ -434,6 +435,8 @@ Item {
     requestAudio(args)
   }
   function stopAudio() {
+    if (typeof dictationCore !== "undefined" && dictationCore)
+      dictationCore.cancelAudio()
     if (audioContext === "listening" && audioState === "loading" && listenBusy) {
       listenSequence++
       listenBusy = false
@@ -641,6 +644,19 @@ Item {
       }
     }
   }
+  Kani.DictationState {
+    id: dictationCore
+    controller: root
+    player: audio
+  }
+  MediaDevices {
+    onDefaultAudioOutputChanged: {
+      var wasDictation = root.audioContext === "dictation"
+      root.stopAudio()
+      if (wasDictation)
+        dictationCore.mediaNotice = "Audio output changed. Replay when your device is ready."
+    }
+  }
   MediaPlayer {
     id: audio
     audioOutput: AudioOutput {}
@@ -813,7 +829,7 @@ Item {
           }
           Kani.Action {
             text: "Listen"
-            selected: root.view === "listen"
+            selected: root.view === "listen" || root.view === "dictation"
             onClicked: root.navigate("listen")
           }
           Kani.Action {
@@ -887,7 +903,7 @@ Item {
           Loader {
             id: content
             width: scroll.availableWidth
-            sourceComponent: root.view === "study" ? studyPage : root.view === "review-overview" ? reviewOverviewPage : root.view === "lesson-overview" ? lessonOverviewPage : root.view === "progress" ? progressPage : root.view === "activity" ? activityPage : root.view === "listen" ? listeningPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "recovery" ? recoveryPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
+            sourceComponent: root.view === "study" ? studyPage : root.view === "review-overview" ? reviewOverviewPage : root.view === "lesson-overview" ? lessonOverviewPage : root.view === "progress" ? progressPage : root.view === "activity" ? activityPage : root.view === "listen" ? listeningPage : root.view === "dictation" ? dictationPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "recovery" ? recoveryPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
             onLoaded: {
               if (scroll.contentItem && scroll.contentItem.contentY !== undefined)
                 scroll.contentItem.contentY = 0
@@ -944,6 +960,12 @@ Item {
   Component {
     id: listeningPage
     Kani.Listening {
+      controller: root
+    }
+  }
+  Component {
+    id: dictationPage
+    Kani.Dictation {
       controller: root
     }
   }

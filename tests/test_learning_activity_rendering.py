@@ -83,6 +83,38 @@ Item {
       backend.requests[0].callback(true,value||report())
       verify(page.report!==null)
     }
+    function test_dictation_counts_are_distinct_visible_and_included_in_daily_activity() {
+      var value=report()
+      var periods=[value.windows["7"],value.windows["30"]].concat(value.daily)
+      for(var row of periods) {
+        row.subject_completions={reviews:0,lessons:0,practice:0}
+        row.listening_ratings={remembered:0,again:0,skipped:0}
+        row.dictation_ratings={matched:3,again:1,skipped:1}
+        row.dictation_sessions_completed=1
+      }
+      load(value)
+      verify(!page.empty)
+      compare(page.dayTotal(page.rows[0]),5)
+      verify(page.dayText(page.rows[0]).indexOf("5 kana dictation results")>0)
+      var summary=findChild(page,"dictationActivitySummary")
+      verify(summary.visible)
+      verify(summary.text.indexOf("3 matched the recording")>0)
+      verify(summary.text.indexOf("1 to revisit")>0)
+      verify(summary.text.indexOf("Undone results are excluded")>0)
+    }
+    function test_legacy_history_does_not_invent_dictation_and_malformed_additions_reject() {
+      load()
+      verify(!findChild(page,"dictationActivitySummary").visible)
+      for(var invalid of [{matched:-1,again:0,skipped:0},{matched:"private",again:0,skipped:0},null]) {
+        var value=report()
+        value.windows["7"].dictation_ratings=invalid
+        value.windows["7"].dictation_sessions_completed=1
+        verify(!page.valid(value))
+      }
+      var missing=report()
+      missing.windows["7"].dictation_ratings={matched:0,again:0,skipped:0}
+      verify(!page.valid(missing))
+    }
     function test_initial_read_is_lazy_and_period_switch_is_local() {
       compare(backend.requests.length,0)
       load()

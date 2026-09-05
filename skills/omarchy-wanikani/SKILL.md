@@ -28,6 +28,7 @@ Append these arguments to the verified helper command:
 | Start five reviews or lessons | `reviews --batch 5 --json` / `lessons --batch 5 --json` | Deliberately create or resume native study. |
 | Resume saved study | `resume --json` | Use the client's saved-session rules. |
 | Listen, practise, or inspect recovery | `open listen --json` / `open practice-library --json` / `open recovery --json` | Open controls; the learner takes the next action. |
+| Show kana dictation | `open dictation --json` | Open Type kana; does not start practice, play audio or enter an answer. |
 | Look up supplied Japanese | `lookup --json -- TEXT` | Use only the explicit text; at most 256 Unicode code points. |
 | Look up the current selection | `lookup --selection --json` | Explicitly request selection, with clipboard fallback. |
 | Synchronize completed work | `refresh --json` | May submit already completed pending work through normal reconciliation. |
@@ -37,6 +38,8 @@ Preserve existing user authorization. “Start five reviews” already authorize
 Starting or resuming may refresh online and replay previously completed pending work. This playbook does not supply answers, acknowledge feedback, correct answers, or force a recovery replay. If the user asks about pending work, inspect aggregates or open Recovery; uncertain writes must not be blindly retried.
 
 For missing listening audio, open `listen` and explain the native **Prepare recordings** action. It downloads up to five eligible recordings without starting study, playing audio, or revealing words. The learner can cancel and then choose when to start listening. The helper has no preparation, cancellation, playback, or listening-rating command; do not invent one or call the worker directly. See the bundled agent guide for partial-download and cache behavior.
+
+Meaning recall and kana dictation are separate local skills with independently saved sessions and daily introductions. Dictation compares typed kana with the selected recording after playback; the learner owns Check, Continue, Skip and Undo. Do not send hearing acknowledgements, type answers or treat a player completion as proof that the learner heard the sound. Activity labels the two skills separately from account progress.
 
 ## Interpret results accurately
 

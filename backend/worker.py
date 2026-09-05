@@ -361,7 +361,7 @@ class Worker:
             "last_study_at": self.engine.store.get("last_study_at", 0)}
 
     def note_study_activity(self, method):
-        if method in ("start", "answer", "advance", "lesson_next", "lesson_navigate", "listen", "listen_media"):
+        if method in ("start", "answer", "advance", "lesson_next", "lesson_navigate", "listen", "listen_media", "dictation", "dictation_media"):
             now = self.engine.now()
             # A thirty-second observation is enough for gentle reminder
             # suppression; avoid a second journal flush on every keystroke.
@@ -521,6 +521,37 @@ class Worker:
                 result = listening.media(self.engine, args.get("handle"))
                 result["session"] = listening.view(self.engine)
             self.note_study_activity(method)
+        elif method == "dictation_state":
+            from wanikani import dictation
+            if args:
+                raise UserError("Dictation status takes no arguments.", "invalid_request")
+            with self.engine.store.lock:
+                try:
+                    status = dictation.status(self.engine)
+                except UserError as error:
+                    status = {"available": 0, "due": 0, "new_remaining": None, "new_limit": 5,
+                        "saved": None, "settings": {}, "complete": False, "local_only": True, "message": str(error)}
+                result = {"status": status, "session": dictation.view(self.engine)}
+        elif method == "dictation":
+            from wanikani import dictation
+            arguments = dict(args)
+            action = arguments.pop("action", None)
+            result = dictation.command(self.engine, rid, action, arguments)
+            if action in ("start", "heard", "check", "continue"):
+                self.note_study_activity(method)
+        elif method == "dictation_media":
+            from wanikani import dictation
+            if set(args) != {"handle"}:
+                raise UserError("Choose only the current dictation recording handle.", "invalid_request")
+            with self.engine.store.lock:
+                result = dictation.media(self.engine, args["handle"])
+                result["session"] = dictation.view(self.engine)
+            self.note_study_activity(method)
+        elif method == "dictation_draft":
+            from wanikani import dictation
+            if not {"session_id", "handle", "text", "cursor"} <= set(args) or set(args) - {"session_id", "handle", "text", "cursor", "preedit"}:
+                raise UserError("Use only the current dictation draft fields.", "invalid_request")
+            result = dictation.draft(self.engine, args["session_id"], args["handle"], args["text"], args["cursor"], args.get("preedit", ""))
         elif method == "progress":
             from wanikani.progress import overview
             result = overview(self.engine)
@@ -622,7 +653,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "progress", "learning_insights", "level_history", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "dictation_state", "dictation", "dictation_media", "dictation_draft", "progress", "learning_insights", "level_history", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

@@ -21,7 +21,7 @@ ColumnLayout {
   readonly property var totals: report ? report.windows[String(days)] : null
   readonly property var rows: report ? report.daily.slice(-days) : []
   readonly property int maximum: Math.max(1, ...rows.map(dayTotal))
-  readonly property bool empty: totals && sum(totals.subject_completions) + sum(totals.listening_ratings) === 0
+  readonly property bool empty: totals && dayTotal(totals) === 0
   spacing: Style.space(16)
 
   function sum(value) {
@@ -30,11 +30,11 @@ ColumnLayout {
     }, 0)
   }
   function dayTotal(value) {
-    return sum(value.subject_completions) + sum(value.listening_ratings)
+    return sum(value.subject_completions) + sum(value.listening_ratings) + sum(value.dictation_ratings)
   }
   function dayText(value) {
     var counts = value.subject_completions
-    return value.day + ": " + counts.reviews + " reviews, " + counts.lessons + " lessons, " + counts.practice + " practice; " + sum(value.listening_ratings) + " listening ratings."
+    return value.day + ": " + counts.reviews + " reviews, " + counts.lessons + " lessons, " + counts.practice + " practice; " + sum(value.listening_ratings) + " meaning-listening ratings" + (value.dictation_ratings ? "; " + sum(value.dictation_ratings) + " kana dictation results." : ".")
   }
   function counts(value, keys) {
     return value && keys.every(function (key) {
@@ -47,7 +47,7 @@ ColumnLayout {
     var modes = ["reviews", "lessons", "practice"]
     var periods = [value.windows["7"], value.windows["30"]].concat(value.daily)
     if (!periods.every(function (row) {
-      return row && counts(row.subject_completions, modes) && counts(row.sessions_completed, modes) && counts(row.listening_ratings, ["remembered", "again", "skipped"]) && counts(row, ["listening_sessions_completed", "typo_corrections"])
+      return row && counts(row.subject_completions, modes) && counts(row.sessions_completed, modes) && counts(row.listening_ratings, ["remembered", "again", "skipped"]) && counts(row, ["listening_sessions_completed", "typo_corrections"]) && ((row.dictation_ratings === undefined && row.dictation_sessions_completed === undefined) || (counts(row.dictation_ratings, ["matched", "again", "skipped"]) && counts(row, ["dictation_sessions_completed"])))
     }))
       return false
     return value.daily.every(function (row) {
@@ -187,13 +187,13 @@ ColumnLayout {
     objectName: "activityEmpty"
     Layout.fillWidth: true
     visible: !!root.empty
-    text: "No completed study is recorded here in this period. Your next finished subject or listening rating will appear here."
+    text: "No completed study is recorded here in this period. Your next finished subject, listening rating or dictation result will appear here."
     secondary: true
   }
   GridLayout {
     Layout.fillWidth: true
     visible: !!root.totals
-    columns: root.width < Style.space(600) ? 2 : 4
+    columns: root.width < Style.space(600) ? 2 : root.totals && root.totals.dictation_ratings ? 3 : 4
     columnSpacing: Style.space(10)
     rowSpacing: Style.space(10)
     Repeater {
@@ -214,11 +214,22 @@ ColumnLayout {
           description: root.totals.sessions_completed.practice + " batches completed"
         },
         {
-          label: "Listening ratings",
+          label: "Meaning listening",
           count: root.sum(root.totals.listening_ratings),
           description: root.totals.listening_sessions_completed + " listening batches completed"
         }
-      ] : []
+      ].concat(root.totals.dictation_ratings ? [
+        {
+          label: "Kana dictation",
+          count: root.sum(root.totals.dictation_ratings),
+          description: root.totals.dictation_sessions_completed + " dictation batches completed"
+        },
+        {
+          label: "Local corrections",
+          count: root.totals.typo_corrections,
+          description: "Uses of I made a typo"
+        }
+      ] : []) : []
       Card {
         required property var modelData
         Layout.fillWidth: true
@@ -255,6 +266,13 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: !!root.totals
     text: root.totals ? "Listening: " + root.totals.listening_ratings.remembered + " remembered · " + root.totals.listening_ratings.again + " again · " + root.totals.listening_ratings.skipped + " skipped. Undone ratings are excluded." : ""
+    secondary: true
+  }
+  Label {
+    objectName: "dictationActivitySummary"
+    Layout.fillWidth: true
+    visible: !!root.totals && !!root.totals.dictation_ratings
+    text: visible ? "Kana dictation: " + root.totals.dictation_ratings.matched + " matched the recording · " + root.totals.dictation_ratings.again + " to revisit · " + root.totals.dictation_ratings.skipped + " skipped. Undone results are excluded." : ""
     secondary: true
   }
   Label {
