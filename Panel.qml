@@ -9,6 +9,7 @@ import Quickshell.Hyprland
 import qs.Commons
 import "qml" as Kani
 import "vendor/WanaKana.mjs" as Kana
+import "qml/UnicodeText.mjs" as UnicodeText
 
 Item {
   id: root
@@ -24,9 +25,12 @@ Item {
   property var results: []
   property var detail: null
   property string query: ""
+  property bool queryTruncated: false
   property string searchType: "all"
   property string searchState: "all"
   property int searchSequence: 0
+  property int navigationSequence: 0
+  property int detailSequence: 0
   property bool searching: false
   property string observedSync: ""
   property string helpReturnView: "dashboard"
@@ -128,9 +132,10 @@ Item {
     if (requested === "lookup" && payload.selection)
       readSelection()
     else if (requested === "lookup" && typeof payload.text === "string")
-      search(payload.text.slice(0, 256))
+      search(payload.text)
   }
   function close() {
+    navigationSequence++
     opened = false
     audio.stop()
     if (service) {
@@ -144,6 +149,7 @@ Item {
       shell.hide(pluginId)
   }
   function navigate(next) {
+    navigationSequence++
     view = next
     detail = null
     error = ""
@@ -206,7 +212,9 @@ Item {
     })
   }
   function search(text) {
-    query = String(text || "").slice(0, 256)
+    var characters = UnicodeText.characters(String(text || ""))
+    queryTruncated = characters.length > 256
+    query = characters.slice(0, 256).join("")
     detail = null
     refreshSearch()
   }
@@ -238,10 +246,19 @@ Item {
     search(query)
   }
   function showSubject(id) {
+    if (!opened || !service || !service.ready || service.locked)
+      return
+    // An explicit subject supersedes a new lookup view's queued initial query.
+    searchSequence++
+    searching = false
+    var expectedDetail = ++detailSequence
+    var expectedNavigation = navigationSequence
+    var expectedSearch = searchSequence
+    var expectedAccess = contentAccess
     call("details", {
       subject_id: id
     }, function (ok, data) {
-      if (ok) {
+      if (ok && root.opened && root.service && root.service.ready && !root.service.locked && root.detailSequence === expectedDetail && root.navigationSequence === expectedNavigation && root.searchSequence === expectedSearch && root.contentAccess === expectedAccess) {
         root.detail = data
         root.view = "lookup"
         if (root.service)
@@ -256,9 +273,15 @@ Item {
     }
   }
   function readSelection() {
-    if (!clipboard.running) {
+    if (opened && view === "lookup" && !clipboard.running) {
+      // An explicit selection request supersedes the view's queued initial search.
+      searchSequence++
+      searching = false
       clipboard.captured = ""
       clipboard.primary = true
+      clipboard.requestNavigation = navigationSequence
+      clipboard.requestSearch = searchSequence
+      clipboard.requestAccess = contentAccess
       clipboard.running = true
     }
   }
@@ -284,6 +307,12 @@ Item {
   Process {
     id: clipboard
     property bool primary: true
+    property int requestNavigation: -1
+    property int requestSearch: -1
+    property string requestAccess: ""
+    function contextCurrent() {
+      return root.opened && root.view === "lookup" && root.navigationSequence === requestNavigation && root.searchSequence === requestSearch && root.contentAccess === requestAccess
+    }
     command: primary ? ["wl-paste", "--primary", "--no-newline", "--type", "text"] : ["wl-paste", "--no-newline", "--type", "text"]
     property string captured: ""
     stdout: StdioCollector {
@@ -291,18 +320,18 @@ Item {
       onStreamFinished: clipboard.captured = text.slice(0, 4096)
     }
     onExited: {
-      if (!root.opened || root.view !== "lookup") {
+      if (!contextCurrent()) {
         captured = ""
         return
       }
       if (!captured.trim() && primary) {
         primary = false
         Qt.callLater(function () {
-          clipboard.running = true
+          if (clipboard.contextCurrent())
+            clipboard.running = true
         })
       } else {
-        root.query = captured.trim().slice(0, 256)
-        root.search(root.query)
+        root.search(captured)
         captured = ""
         Qt.callLater(root.focusContent)
       }

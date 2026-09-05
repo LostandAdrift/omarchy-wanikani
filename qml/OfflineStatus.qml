@@ -6,7 +6,7 @@ ColumnLayout {
   id: root
   required property var controller
   property bool compact: false
-  readonly property var snapshot: controller.snapshot
+  readonly property var snapshot: controller.snapshot || ({})
   readonly property var readiness: snapshot.readiness || null
   readonly property var upcoming: readiness ? readiness.upcoming_reviews || null : null
   readonly property var progress: snapshot.sync_progress || null
@@ -41,7 +41,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    visible: !root.compact || (root.readiness && (!root.readiness.complete || root.readiness.reviews.ready < root.readiness.reviews.total || root.readiness.lessons.ready < root.readiness.lessons.total || (root.upcoming && root.upcoming.ready < root.upcoming.total)))
+    visible: !root.compact || !!(root.readiness && (!root.readiness.complete || root.readiness.reviews.ready < root.readiness.reviews.total || root.readiness.lessons.ready < root.readiness.lessons.total || (root.upcoming && root.upcoming.ready < root.upcoming.total)))
     text: root.readiness ? root.readiness.message : "Text and required radical images are checked separately from optional pronunciation audio."
     font.pixelSize: Style.font.bodySmall
     color: Qt.alpha(Color.foreground, 0.76)
@@ -55,7 +55,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    visible: !root.compact || (root.progress && root.progress.active)
+    visible: !root.compact || !!(root.progress && root.progress.active)
     text: root.progress && root.progress.active ? root.progress.message + (root.progress.total !== null ? " · " + root.progress.completed + " / " + root.progress.total : "") : root.snapshot.demo ? "Demo content stays local." : root.snapshot.last_sync ? "Account last refreshed " + Qt.formatDateTime(new Date(root.snapshot.last_sync), "ddd d MMM, HH:mm") + ". New scheduling requires server confirmation." : "Refresh your account while online to cache its current schedule."
     font.pixelSize: Style.font.bodySmall
     color: Qt.alpha(Color.foreground, 0.76)
@@ -73,7 +73,7 @@ ColumnLayout {
     }
     Action {
       text: "Refresh while online"
-      enabled: !root.snapshot.syncing && (root.snapshot.connected || root.snapshot.demo)
+      enabled: !root.snapshot.syncing && !!(root.snapshot.connected || root.snapshot.demo)
       onClicked: root.controller.call("sync", {})
     }
   }

@@ -50,12 +50,14 @@ def build_surfaces(directory):
         return match.group(0)
     (directory / 'PanelCore.qml').write_text('''import QtQuick
 import "WanaKana.mjs" as Kana
+import "UnicodeText.mjs" as UnicodeText
 Item {
  id: root
  required property var service
  property bool opened: true
  property string view: "lookup"
  property string query: ""
+ property bool queryTruncated: false
  property var detail: null
  property var results: []
  property string searchType: "all"
@@ -66,6 +68,7 @@ Item {
  QtObject { id: audio; property var source; property int count: 0; function play() { count++ } }
 ''' + function('play') + function('search') + function('refreshSearch') + '}\n')
     shutil.copyfile(ROOT / 'vendor/WanaKana.mjs', directory / 'WanaKana.mjs')
+    shutil.copyfile(ROOT / 'qml/UnicodeText.mjs', directory / 'UnicodeText.mjs')
     shutil.copyfile(ROOT / 'tests/fixtures/SurfaceLifecycle.qml', directory / 'tst_SurfaceLifecycle.qml')
 
 

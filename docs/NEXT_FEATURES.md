@@ -1,17 +1,17 @@
 # What comes next
 
-The current implementation covers the original native study workflow and adds a practice library, batch recaps, kanji comparisons, personal notes in lessons and feedback, a selectable review forecast, and quiet recall. The next iteration should deepen the learning experience while preserving the short-session habit.
+The current implementation covers the original native study workflow and adds a practice library, batch recaps, kanji comparisons, personal notes in lessons and feedback, a selectable review forecast, quiet recall, and a local reading trail. The next iteration should deepen the learning experience while preserving the short-session habit.
 
-These are proposed features, not shipped capabilities. Live-account qualification and the two-week daily-use log remain the immediate release work.
+The first reading-trail edition below is implemented; the extensions and other directions remain proposals. Live-account qualification and the two-week daily-use log remain the immediate release work.
 
 ## 1. A reading trail from your desktop
 
-Turn an explicitly selected Japanese passage into a small local reading trail. Show the original passage with matching WaniKani words highlighted; selecting a word opens its cached subject and learning status. Let the learner save unfamiliar matches to a practice selection without leaving the passage.
+The first edition turns an explicitly selected Japanese passage into a small local reading trail. It shows the original passage with matching WaniKani words highlighted; selecting a word opens its cached subject and learning status. It preserves exact text, supports overlapping alternatives, follows the theme, and returns to the same passage. A useful next step is letting the learner save unfamiliar matches to a practice selection without leaving the passage.
 
 - Match Unicode text locally against the accessible catalogue, retaining source offsets and overlapping candidates. Do not imply that the catalogue is a complete Japanese dictionary or report a misleading whole-language comprehension percentage.
 - Show why a word matched, distinguish kanji recognition from vocabulary recognition, and preserve the original text exactly. No OCR, translation request, or continuous clipboard monitoring.
 - Reuse the existing guarded practice-selection contract. Hide answers belonging to unfinished graded work. Clear passage and detail caches on account/access changes.
-- Acceptance: long selections remain usable, overlapping vocabulary can be chosen deliberately, one-click lookup returns to the same passage, and the entire feature works offline with no external text transmission.
+- Implemented acceptance: selections up to 256 code points remain exact, overlapping vocabulary can be chosen deliberately, one-click lookup returns to the same passage, and the feature works offline with no external text transmission. The next acceptance gate is an explicit up-to-20-word practice selection with exact paused-session preservation.
 
 ## 2. Contrast practice for confusing kanji
 
@@ -33,4 +33,4 @@ Make subject relationships easier to understand through a small visual path: com
 
 ## Release order
 
-First use the installed client for deliberate real lessons and reviews and record any recovery or desktop interference. Fix those observed issues before starting a larger feature. Then build the reading trail as the strongest new desktop demonstration, followed by contrast practice and the lesson path. Keep performance checks focused on any new user-visible delay; avoid spending the iteration on measurements when the learning UI needs attention.
+First use the installed client for deliberate real lessons and reviews and record any recovery or desktop interference. Fix those observed issues before starting a larger feature. Then extend the reading trail into explicit practice selection, followed by contrast practice and the lesson path. Keep performance checks focused on any new user-visible delay; avoid spending the iteration on measurements when the learning UI needs attention.

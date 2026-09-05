@@ -253,6 +253,9 @@ class Worker:
             result = self.readiness.get()
         elif method == "search":
             result = self.engine.search(args.get("text", ""), args.get("limit", 30), args.get("filters"), args.get("reading_query"))
+        elif method == "reading_trail":
+            from wanikani.trail import reading_trail
+            result = reading_trail(self.engine, args.get("text", ""))
         elif method == "practice_catalogue":
             from wanikani.practice import catalogue
             result = catalogue(self.engine, group=args.get("group", "suggested"), query=args.get("query", ""),
@@ -344,7 +347,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "practice_catalogue", "recovery", "voices", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

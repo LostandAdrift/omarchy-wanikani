@@ -68,6 +68,10 @@ Leave simulated offline mode off and restore any ambient or motion preferences c
 
 This demonstration does not certify live-account reliability, cached audio, or the two-week daily-use release gate. Report those separately in the release notes once completed.
 
+## Optional learning-feature cut
+
+For a longer walkthrough, select `山が見えます。火山と山。` and invoke Lookup. Show **Words in your selection**, follow the mountain link, and return to the unchanged passage. The linked text follows the current theme; the trail uses the local WaniKani catalogue. After the five-review demo batch is complete, a freshly reset demo also provides a mountain/river comparison under **Tell them apart**. In Zen, choose **Quiet recall**, pause on the concealed word, then choose **Reveal** and **Next word**. These are learning aids; no extra graded work is submitted. Keep the authored-demo label visible.
+
 ## Rules recheck — September 4, 2026 Pacific
 
 The [official news index](https://omarchy.org/news/) and [August 28 competition announcement](https://omarchy.org/news/2026/08/the-first-plugin-competition-winners/) were rechecked during implementation. They still announce future competitions without a next deadline. The [publishing guide](https://plugins.omarchy.org/publish.html) currently requires a public GitHub repository, valid root manifest, README/license, and safe install/removal before listing submission. This repository remains local and unsubmitted.

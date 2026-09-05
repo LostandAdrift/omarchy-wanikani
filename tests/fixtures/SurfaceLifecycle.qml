@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import "UnicodeText.mjs" as UnicodeText
 TestCase {
   id: test
   name: "SurfaceLifecycle"
@@ -37,6 +38,7 @@ TestCase {
     property string view: "lookup"
     property string contentAccess: "fixture"
     property string query: ""
+    property bool queryTruncated: false
     property var detail: null
     property var session: null
     property bool searching: false
@@ -145,6 +147,20 @@ TestCase {
   }
   function test_lookup_route_payload_prevents_duplicate_initial_read() {
     make("Lookup");controller.search("山");wait(30);compare(service.requests.length,1)
+  }
+  function test_lookup_selection_capture_invalidates_deferred_initial_query() {
+    make("Lookup");controller.searchSequence++;wait(30);compare(service.requests.length,0)
+  }
+  function test_lookup_codepoint_bound_keeps_surrogate_pair_and_whitespace() {
+    var item=make("Lookup");wait(20)
+    item.searchText=" "+"山".repeat(254)+"𠮷"+" ";item.editSearch()
+    compare(UnicodeText.characters(controller.query).length,256);verify(controller.query.endsWith("𠮷"));verify(controller.query.startsWith(" "))
+    verify(controller.queryTruncated)
+    item.searchText=" 山\n ";item.editSearch();compare(controller.query," 山\n ");verify(!controller.queryTruncated)
+  }
+  function test_panel_search_codepoint_bound_keeps_surrogate_pair() {
+    var item=make("Panel");item.search("山".repeat(255)+"𠮷"+"水")
+    compare(UnicodeText.characters(item.query).length,256);verify(item.query.endsWith("𠮷"));verify(item.queryTruncated)
   }
   function test_panel_search_and_audio_require_visible_ready_unlocked_surface() {
     var item=make("Panel")

@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import qs.Commons
 import qs.Ui as Ui
+import "UnicodeText.mjs" as UnicodeText
 
 ColumnLayout {
   id: root
@@ -74,7 +75,7 @@ ColumnLayout {
     // TextArea has no maximumLength. Limit committed text without disturbing
     // an IME preedit or splitting a Unicode character at the boundary.
     if (field && !field.inputMethodComposing) {
-      var characters = Array.from(field.text)
+      var characters = UnicodeText.characters(field.text)
       if (characters.length > 2000) {
         var cursor = field.cursorPosition
         restoringEditor = true
@@ -84,7 +85,7 @@ ColumnLayout {
       }
     }
     var values = rawEditor()
-    if (Array.from(values.meaning_note).length > 2000 || Array.from(values.reading_note).length > 2000)
+    if (UnicodeText.characters(values.meaning_note).length > 2000 || UnicodeText.characters(values.reading_note).length > 2000)
       // The composition-ended handler will limit and persist it.
       return
     var id = editorSubjectId

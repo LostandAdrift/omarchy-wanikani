@@ -28,8 +28,15 @@ Rectangle {
   QtObject {
     id: service
     property bool ready: true
+    property bool allowEditorWrites: false
+    property var savedDraft: null
     signal snapshotChanged()
-    function request() { throw new Error("Read-only lesson notes must not issue requests") }
+    function request(method, args, callback) {
+      if (!allowEditorWrites || method !== "editor_draft")
+        throw new Error("Read-only lesson notes must not issue requests")
+      savedDraft = args.values
+      callback(true, {dirty: true}, "")
+    }
   }
   QtObject {
     id: controller
@@ -75,6 +82,8 @@ Rectangle {
     function init() {
       failOnWarning(/.*/)
       controller.service = service
+      service.allowEditorWrites = false
+      service.savedDraft = null
       details.editable = false
       details.showMeaning = true
       details.showReading = true
@@ -150,6 +159,18 @@ Rectangle {
       compare(child("meaning-note-text").text, "")
       compare(child("reading-note-text").text, "")
     }
+    function test_editable_note_limits_preserve_a_supplementary_kanji() {
+      service.allowEditorWrites = true
+      details.editable = true
+      var expected = "a".repeat(1999) + "𠮷"
+      details.authoredMeaningEditor.text = expected + " extra"
+      compare(details.authoredMeaningEditor.text.codePointAt(1999), 0x20bb7)
+      compare(details.authoredMeaningEditor.text, expected)
+      compare(service.savedDraft.meaning_note, expected)
+      details.authoredReadingEditor.text = expected + " extra"
+      compare(details.authoredReadingEditor.text, expected)
+      compare(service.savedDraft.reading_note, expected)
+    }
   }
 }
 '''
@@ -162,8 +183,14 @@ class StudyNotesRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("SubjectDetails.qml", "Label.qml"):
+            for name in ("SubjectDetails.qml", "Label.qml", "UnicodeText.mjs"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
+            # Expose the existing private inputs for interaction; their actual
+            # text handlers/limit behavior remain unchanged from production.
+            details = qml / "SubjectDetails.qml"
+            details.write_text(details.read_text().replace("  id: root\n", "  id: root\n"
+                "  property alias authoredMeaningEditor: meaningNote\n"
+                "  property alias authoredReadingEditor: readingNote\n", 1))
             (qml / "Action.qml").write_text("import QtQuick.Controls\nButton {}\n")
             (qml / "Lookalikes.qml").write_text("import QtQuick\nItem { property var subject; property bool showMeaning; property bool showReading }\n")
             common = directory / "qs" / "Commons"
@@ -187,7 +214,7 @@ class StudyNotesRenderingTests(unittest.TestCase):
                 env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_QPA_PLATFORMTHEME": "",
                     "QT_QUICK_CONTROLS_STYLE": "Basic"})
             self.assertEqual(0, process.returncode, process.stdout + process.stderr)
-            self.assertIn("8 passed", process.stdout)
+            self.assertIn("9 passed", process.stdout)
 
 
 if __name__ == "__main__":

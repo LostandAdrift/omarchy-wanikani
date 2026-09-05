@@ -8,8 +8,8 @@ Omarchy 4.0.2-1, Quickshell 0.3.1, Python 3.14.7, Qt 6.11.2, Hyprland 0.56.2. In
 
 ## Automated results
 
-- Python: **357 tests passed**, including the original **12 real subprocess crash boundaries** and four additional milestone transaction crash checks.
-- Qt: **93 checks passed**, covering kana conversion, activation-repeat protection, desktop notification/ambient policy, full Japanese prompt fitting, image-radical accessibility labels, ambient demand, and ordered state/session/epoch handling (Qt totals include initialization and cleanup).
+- Python: **489 distinct tests verified**: the final combined run passed 486, followed by three new pending-status cases in the complete 18-test reading-trail module. The suite includes real subprocess interruption checks at persistence and submission boundaries.
+- Qt: **112 core checks passed**, covering kana conversion, activation-repeat protection, desktop notification/ambient policy, Japanese prompt fitting and Unicode limits, image-radical accessibility, ambient demand, and ordered state/session/epoch handling. Python wrappers also exercise real comparison, notes, forecast and reading-trail components plus source-derived async lifecycle behavior. Qt totals include initialization and cleanup.
 - Omarchy manifest validation passed.
 - Both installed desktop launcher files passed `desktop-file-validate`; Hyprland reported no configuration errors.
 - QML formatting and syntax checks completed. `qmllint` retains host-specific warnings for dynamically injected shell objects and registered Quickshell types; it is not a warning-free static build.
@@ -120,7 +120,7 @@ The five-subject worker benchmark ran 30 sessions / 150 authored reviews. Median
 
 The final soak passed 20 seeds × 500 steps: 10,000 interactions, 2,135 answers, 399 drafts, 417 restarts, 261 durable resumes, 304 duplicate commands, 109 resets, and lost responses before/after mock acceptance. Its independent oracle found no lost durable state, duplicate accepted cycle/operation or automatic uncertain replay. Access-redacted duplicate replies kept their original outcomes.
 
-Final native opening run `wanikani-native-qa-mikbrsk8` measured ten samples per view with9,016 authored subjects and removed its temporary plugin. Practice used exactly one catalogue request and rendered in83.5ms median /96ms p95; saved study measured43/65ms. Dashboard, lookup, Settings and Zen also stayed below200ms in all collected render-readback observations. There were no errors in its inspected namespace. These are synthetic open-to-render-capture measurements, not first-pixel or physical-key certification.
+Final native opening run `wanikani-native-qa-mikbrsk8` measured ten samples per view with 9,016 authored subjects and removed its temporary plugin. Practice used exactly one catalogue request and rendered in 83.5 ms median / 96 ms p95; saved study measured 43 / 65 ms. Dashboard, lookup, Settings and Zen also stayed below 200 ms in all collected render-readback observations. There were no errors in its inspected namespace. These are synthetic open-to-render-capture measurements, not first-pixel or physical-key certification.
 
 ### Sixth improvement checkpoint · September 5, 05:06 UTC
 
@@ -135,3 +135,13 @@ New command replies can use lossless versioned compression while keeping every r
 Upcoming offline readiness checks exact rolling 24-hour boundaries and account access at the scheduled review time. Changed grant, expiry or clock context invalidates an obsolete ready result. Shared media availability rejects empty/missing files and paths outside the owned cache; native image decoding tries cached alternatives and blocks forward study if none can render. Previous lesson and close remain available. Hidden Recovery, Practice and voice pages do not refresh, lookup cancels delayed searches on Enter/close, and late feedback cannot start hidden audio.
 
 The new learning surfaces remain read-only: personal notes show only for the relevant answer part; similar-kanji cards omit inaccessible and unfinished graded subjects; quiet recall never records a grade or changes the review schedule. Live token/media verification, physical IME and desktop qualification, and the two-week daily-use gate remain outstanding.
+
+### Seventh improvement checkpoint · September 5, 05:32 UTC
+
+The final combined Python suite passed **486 tests** in 131.05 seconds. Three additional pending-work status cases then passed in the full **18-test reading-trail module**, for **489 distinct verified Python tests**. The reading-trail rendering wrapper passed again after final theme/disclosure polish (15 Qt checks); notes exercise nine Qt results and the Panel async wrapper 18. Core Qt passed **112 checks**. Manifest validation and whitespace checks passed.
+
+The local reading trail preserves up to 256 Unicode code points exactly, links catalogue words without fetching translation, and shows overlapping alternatives in occurrence order. It uses bounded indexed reads, handles combining sequences, validates access and paused graded subjects, and labels pending or uncertain work explicitly. The first eight word buttons stay compact; the rest are available on demand. Tests cover exact rich-text round trips, links that follow a changed theme, closed/locked pages, late responses, and direct-word navigation. Ordinary deliberate catalogue lookup remains available.
+
+Qt 6.11's JavaScript `Array.from` split supplementary characters in this host. A small explicit code-point walker now preserves rare kanji at search and note limits. Actual note controls retain the complete 2,000th character. Panel details and selection reads also reject replies after close, navigation, changed queries or account access, and preserve the original selected whitespace.
+
+The final release run `wanikani-native-qa-qrqd4f_o` passed **36 native captures**, including opening a passage word, visiting Help, returning to that same detail and then the original passage. It completed the existing offline lesson/recovery, practice/graded-resume, editor, recap, narrow layout, comparison and quiet-recall scenario. Its temporary plugin was removed and its inspected namespace had **zero errors or warnings**. The final runtime files match the captured source hashes. A preceding reset-only boolean warning was fixed and verified with both an offscreen reset fixture and this hosted run. The user’s existing DP-2 scale of 1.5 was preserved.

@@ -73,6 +73,8 @@ The **Practice** library groups saved difficult items, recent mistakes, and lear
 
 Lookup accepts romaji readings as well as Japanese, meanings, and personal synonyms. Type and progress filters narrow the accessible catalogue. Exact matches rank first; longer selections surface known words contained in the text. Lookup never sends selections to a translation service.
 
+**Words in your selection** turns a short Japanese passage into a local reading trail. Select a highlighted word or a word button to inspect it, then return to the same passage. Overlapping vocabulary remains available as separate matches. The trail preserves spaces, newlines, and rare kanji; selections longer than 256 characters show a clear limit notice. Eight word buttons appear initially, with a control to show the rest. Pending and uncertain work have explicit status labels. Trail links keep unfinished graded subjects closed; ordinary deliberate catalogue lookup remains available. See the [native reading trail](docs/screenshots/reading-trail-dark.png), captured with an authored passage.
+
 Notes and synonym drafts survive closing, navigation, and restart, including unfinished commas. **Save notes & synonyms** applies them to study and queues synchronization; **Discard draft** restores the saved version. Unsaved synonyms never count as answers. You can keep drafting while an earlier save waits to sync, and a delayed Save or Discard cannot erase newer input.
 
 **F1** opens keyboard help. Navigation shortcuts leave text fields and IME composition alone, focused controls scroll into view, and holding Enter cannot check an answer and immediately skip its feedback.
@@ -143,4 +145,6 @@ See [isolated native QA](docs/NATIVE_QA.md), [verification](docs/VERIFICATION.md
 
 The release gate includes two weeks of personal daily use, checks across desktop configurations, and deliberately answered live lessons/reviews. Those are not replaced by passing automated tests.
 
-Planned extensions include a local reading trail from selected text, contrast practice, and a visual lesson path. Their scope and acceptance criteria are in [next feature proposals](docs/NEXT_FEATURES.md).
+Use the [first-session checklist and fourteen-day log](docs/DAILY_USE.md) to record that qualification.
+
+Planned extensions include practice selections directly from the reading trail, contrast practice, and a visual lesson path. Their scope and acceptance criteria are in [next feature proposals](docs/NEXT_FEATURES.md).

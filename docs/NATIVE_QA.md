@@ -24,6 +24,8 @@ The editor scenario selects the authored mountain subject through lookup, types 
 
 The current smoke fixture also adds one authored comparison kanji and personal notes to the sun lesson (17 subjects total). It checks that both notes appear during discovery, opens the sun/eye comparison, validates visible answer text and control bounds at a 460-pixel logical panel width, and captures the result. Zen exercises hidden quiet recall, explicit reveal, the next word, and closing/reopening without an old revealed answer. These fixtures remain separate from the installed production demo. The performance scenario retains its existing 9,016-subject fixture.
 
+The reading-trail scenario supplies `山が見えます。火山と山。`, verifies that joining the returned segments reproduces that exact text, checks openable mountain and protected unfinished volcano links, opens the mountain through its native word button, and returns to the same passage. Captures include the trail and the resulting subject detail. This remains synthetic fixture text; actual selection ownership is a separate native check.
+
 The temporary plugin is removed in `finally`, including on ordinary failure, Ctrl+C, or SIGTERM. Native PNG captures and JSON focus/layout/session/detail snapshots remain in its private artifact directory.
 
 Captures use the actual panel item's `grabToImage`; they do not capture unrelated desktop windows. A unique installation path bypasses the observed nested-QML cache issue without restarting the shell.
@@ -71,3 +73,5 @@ python3 tools/native_qa.py cleanup /tmp/wanikani-native-qa-EXAMPLE/run.json
 Cleanup validates the private run directory, unique plugin ID, and installed QA marker before using the normal plugin manager. It refuses to remove a different plugin. It preserves the fixture source, state, screenshots, and snapshots for debugging. Remove that temporary directory separately when its evidence is no longer needed. No full shell configuration is restored, so unrelated desktop edits made during QA are preserved.
 
 The expanded smoke also checks pending/confirmed batch recaps across a hidden synchronization, practices the missed fixture item, verifies no ambient requests before explicitly opening Zen, and invokes Reset demo progress in its isolated database. Reset must change the data epoch and clear retained session/search state. These actions never reset the installed production demo.
+
+The reading-trail scenario also opens Help from a word detail and returns to the same word before returning to the passage. This guards against a newly mounted lookup page superseding the deliberate detail request with its deferred search.

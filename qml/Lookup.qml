@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui as Ui
+import "UnicodeText.mjs" as UnicodeText
 
 ColumnLayout {
   id: root
@@ -31,7 +32,9 @@ ColumnLayout {
   }
   function editSearch() {
     controller.detail = null
-    controller.query = String(searchField.text || "").slice(0, 256)
+    var points = UnicodeText.characters(searchField.text)
+    controller.queryTruncated = points.length > 256
+    controller.query = points.slice(0, 256).join("")
     controller.searchSequence++
     controller.searching = false
     if (active)
@@ -146,6 +149,17 @@ ColumnLayout {
     id: searchDelay
     interval: 140
     onTriggered: root.searchNow(searchField.text)
+  }
+  Label {
+    Layout.fillWidth: true
+    visible: root.controller.queryTruncated === true
+    text: "Showing the first 256 characters of your selection."
+    font.pixelSize: Style.font.bodySmall
+    color: Qt.alpha(Color.foreground, 0.76)
+  }
+  ReadingTrail {
+    Layout.fillWidth: true
+    controller: root.controller
   }
   Label {
     Layout.fillWidth: true

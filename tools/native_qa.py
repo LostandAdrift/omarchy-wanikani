@@ -151,6 +151,7 @@ QA_DRIVER = r'''
     var matches = qaItems().filter(function(item) {
       return (selector.text === undefined || item.text === selector.text)
         && (selector.placeholder === undefined || item.placeholderText === selector.placeholder)
+        && (selector.subjectId === undefined || item.subjectId === selector.subjectId)
         && (selector.editor !== true || typeof item.inputMethodComposing === "boolean")
     })
     if (selector.index === undefined && matches.length !== 1)
@@ -168,6 +169,15 @@ QA_DRIVER = r'''
       for (var i = 0; i < item.children.length; i++) visibleText(item.children[i])
     }
     visibleText(frame)
+    function trail(item) {
+      if (item.objectName === "wanikani-reading-trail")
+        return {report: item.report, loading: item.loading}
+      for (var i = 0; i < item.children.length; i++) {
+        var value = trail(item.children[i])
+        if (value) return value
+      }
+      return null
+    }
     function recap(item) {
       if (item.objectName === "wanikani-session-recap") return item.report
       for (var i = 0; i < item.children.length; i++) {
@@ -183,7 +193,7 @@ QA_DRIVER = r'''
       var viewportPoint = item.mapToItem(scroll, 0, 0)
       var inViewport = !ancestor || (viewportPoint.y >= -1 && viewportPoint.y + item.height <= scroll.height + 1)
       return {text: typeof item.text === "string" ? item.text : "",
-        placeholder: item.placeholderText || "", enabled: item.enabled,
+        placeholder: item.placeholderText || "", subjectId: item.subjectId || null, enabled: item.enabled,
         focus: item.activeFocus, editor: typeof item.inputMethodComposing === "boolean",
         x: point.x, y: point.y, width: item.width, height: item.height,
         inFrame: point.y >= 0 && point.y + item.height <= frame.height,
@@ -193,6 +203,7 @@ QA_DRIVER = r'''
       view: view, busy: busy, error: error || (service ? service.error : ""),
       pageLoaded: content.status === Loader.Ready && content.item !== null,
       session: session, state: snapshot, detail: detail, recap: recap(frame),
+      query: query, queryTruncated: queryTruncated, trail: trail(frame),
       zen: view === "zen" && content.item ? {quietRecall: content.item.quietRecall,
         answerRevealed: content.item.answerRevealed, subject: content.item.subject} : null,
       cachedResultCount: results.length,
@@ -639,6 +650,30 @@ def smoke(run):
             action(run, {"kind": "open", "view": "zen"})
             wait_snapshot(run, lambda s: s.get("zen") and s["zen"]["quietRecall"] and not s["zen"]["answerRevealed"])
             action(run, {"kind": "activate", "selector": {"text": "Return to gallery"}})
+        if view == "lookup":
+            passage = "山が見えます。火山と山。"
+            action(run, {"kind": "open", "view": "lookup", "text": passage})
+            page = wait_snapshot(run, lambda s: s.get("trail") and s["trail"].get("report")
+                and s["trail"]["report"]["text"] == passage and not s["trail"]["loading"])
+            report = page["trail"]["report"]
+            if "".join(segment["text"] for segment in report["segments"]) != passage:
+                raise RuntimeError("The native reading trail changed the selected passage.")
+            matches = {item["id"]: item for item in report["matches"]}
+            if not matches[2]["can_open"] or matches[8]["can_open"]:
+                raise RuntimeError("The reading trail did not preserve unfinished-lesson protection.")
+            capture(run, "reading-trail")
+            action(run, {"kind": "activate", "selector": {"subjectId": 2}})
+            wait_snapshot(run, lambda s: s.get("detail") and s["detail"]["id"] == 2)
+            capture(run, "reading-trail-detail")
+            action(run, {"kind": "help"})
+            wait_snapshot(run, lambda s: s["view"] == "help")
+            action(run, {"kind": "activate", "selector": {"text": "Back to lookup"}})
+            wait_snapshot(run, lambda s: s["view"] == "lookup" and s.get("detail") and s["detail"]["id"] == 2)
+            action(run, {"kind": "activate", "selector": {"text": "← Back to results"}})
+            wait_snapshot(run, lambda s: not s["detail"] and s.get("trail") and s["trail"].get("report")
+                and s["trail"]["report"]["text"] == passage)
+            if ipc(run, "qaSnapshot")["query"] != passage:
+                raise RuntimeError("Returning from a reading-trail word lost the passage.")
     action(run, {"kind": "open", "view": "resume"})
     snapshot = wait_snapshot(run, lambda s: s.get("session") is not None)
     while snapshot["session"]["phase"] == "lesson":
