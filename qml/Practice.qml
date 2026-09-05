@@ -11,6 +11,22 @@ ColumnLayout {
   property bool loading: false
   property string notice: ""
   property int requestSerial: 0
+  readonly property string contentAccess: controller.contentAccess || ""
+  onContentAccessChanged: {
+    requestSerial++
+    selectedIds = []
+    library = Object.assign({}, library, {
+      items: [],
+      counts: {},
+      ready_counts: {},
+      total: 0,
+      ready_total: 0
+    })
+    Qt.callLater(function () {
+      if (searchField)
+        root.loadPage(0)
+    })
+  }
   property var library: ({
       items: [],
       counts: {},

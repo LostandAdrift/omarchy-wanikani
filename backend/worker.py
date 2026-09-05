@@ -10,9 +10,10 @@ import threading
 import time
 from pathlib import Path
 from wanikani import VERSION
-from wanikani.api import Api, ApiError, validate_user
+from wanikani.api import Api, ApiError, RequestBudget, elapsed_clock, validate_user
 from wanikani.common import UserError, private_dir, stamp, state_home
 from wanikani.credentials import Keyring
+from wanikani import diagnostics
 from wanikani.engine import Engine
 from wanikani.readiness import OfflineReadiness
 from wanikani.store import Store
@@ -24,10 +25,12 @@ class Worker:
         self.directory = private_dir(directory)
         self.emit = emit
         self.keyring = Keyring()
+        self.request_budget = RequestBudget()
         self.job_lock = threading.Lock()
         self.last_attempt = 0
         self.last_clock = time.time()
         self.last_monotonic = time.monotonic()
+        self.last_elapsed = elapsed_clock()
         self.sync = None
         self.token = None
         self.stopping = False
@@ -80,7 +83,7 @@ class Worker:
     def configure_sync(self, token):
         self.token = token
         self.engine.connected = True
-        self.sync = Synchronizer(self.engine, Api(token), self.directory / "media",
+        self.sync = Synchronizer(self.engine, Api(token, limiter=self.request_budget), self.directory / "media",
             lambda: self.changed(refresh_readiness=True), self.report_progress)
 
     def startup(self):
@@ -148,7 +151,7 @@ class Worker:
         token = str(args.get("token", "")).strip()
         if not token or len(token) > 512 or any(c.isspace() for c in token):
             raise UserError("Enter a valid personal API token.")
-        api = Api(token)
+        api = Api(token, limiter=self.request_budget)
         user, _ = api.request("user")
         validate_user(user)
         account = self.engine.store.get("account_id")
@@ -207,20 +210,23 @@ class Worker:
         elif method == "start" and self.sync and not self.resumable_start(args) and not self.job_lock.locked() and time.time() - self.last_attempt > 60:
             def prepare():
                 self.last_attempt = time.time()
-                self.sync.run()
+                self.sync.run(for_study=True)
                 return self.engine.command(rid, method, args)
             self.job(rid, prepare)
             return
         elif method == "tick":
-            now, monotonic = time.time(), time.monotonic()
-            clock_change = abs((now - self.last_clock) - (monotonic - self.last_monotonic)) > 30
+            now, monotonic, elapsed = time.time(), time.monotonic(), elapsed_clock()
+            # Linux monotonic time excludes suspend; boottime includes it. A
+            # wake asks for refresh but does not invalidate offline study time.
+            clock_change = abs((now - self.last_clock) - (elapsed - self.last_elapsed)) > 30
+            woke = (elapsed - self.last_elapsed) - (monotonic - self.last_monotonic) > 30
             if clock_change and not self.engine.demo:
                 self.engine.clock_untrusted = True
                 self.engine.status = "clock_changed"
-                self.engine.message = "The clock changed or the computer woke. Refresh to verify the time before graded study."
-            self.last_clock, self.last_monotonic = now, monotonic
-            interval = 60 if self.engine.status == "offline" else 300
-            if self.sync and not self.job_lock.locked() and (clock_change or now - self.last_attempt >= interval):
+                self.engine.message = "The system clock changed. Refresh to verify the time before graded study."
+            self.last_clock, self.last_monotonic, self.last_elapsed = now, monotonic, elapsed
+            interval = 60 if self.engine.status in ("offline", "rate_limited") else 300
+            if self.sync and not self.job_lock.locked() and (clock_change or woke or now - self.last_attempt >= interval):
                 self.last_attempt = now
                 self.job(None, lambda: self.sync.run())
             result = {"alive": True}
@@ -234,6 +240,10 @@ class Worker:
         elif method == "practice_catalogue":
             from wanikani.practice import catalogue
             result = catalogue(self.engine, group=args.get("group", "suggested"), query=args.get("query", ""),
+                offset=args.get("offset", 0), limit=args.get("limit", 30))
+        elif method == "recovery":
+            from wanikani.recovery import catalogue
+            result = catalogue(self.engine, state=args.get("state", "open"), kind=args.get("kind", "all"),
                 offset=args.get("offset", 0), limit=args.get("limit", 30))
         elif method == "details":
             result = self.engine.details(int(args["subject_id"]))
@@ -287,6 +297,7 @@ class Worker:
                 self.engine.store.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self.engine.store.execute("VACUUM")
                 self.engine.store.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                diagnostics.clear(self.directory, self.engine.demo)
                 self.select_mode(self.engine.demo)
                 if not self.engine.demo:
                     self.engine.store.set("credential_storage", "disconnected")
@@ -299,20 +310,15 @@ class Worker:
                 resolver = self.sync or Synchronizer(self.engine, None, self.directory / "media")
                 result = resolver.resolve(args["id"], args.get("action", "keep_remote"))
         elif method == "diagnostics":
-            snapshot = self.engine.snapshot()
-            result = {"version": VERSION, "python": sys.version.split()[0], "protocol": 1,
-                "demo": self.engine.demo, "status": snapshot["status"], "pending": snapshot["pending"],
-                "attention": snapshot["attention"], "schema": self.engine.store.rows("PRAGMA user_version")[0][0], "cache": snapshot["cache"]}
-            destination = self.directory / "diagnostics.json"
-            destination.write_text(json.dumps(result, indent=2) + "\n")
-            destination.chmod(0o600)
-            result["path"] = str(destination)
+            result = diagnostics.export(self.directory, self.engine.demo, self.engine.snapshot(),
+                self.engine.store.rows("PRAGMA user_version")[0][0])
         else:
             result = self.engine.command(rid, method, args)
         self.emit({"v": 1, "id": rid, "ok": True, "data": result})
-        if method not in ("snapshot", "readiness", "draft", "search", "practice_catalogue", "details", "ambient", "session", "tick", "diagnostics"):
+        if method not in ("snapshot", "readiness", "draft", "search", "practice_catalogue", "recovery", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
-        if method in ("advance", "set_material") and self.sync and not self.job_lock.locked():
+        if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
+                and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):
             self.last_attempt = time.time()
             self.job(None, lambda: self.sync.run())
 

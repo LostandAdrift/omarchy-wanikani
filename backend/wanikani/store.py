@@ -37,6 +37,10 @@ class Store:
             state TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL,
             detail TEXT NOT NULL DEFAULT '');
           CREATE INDEX IF NOT EXISTS outbox_state ON outbox(state,subject_id);
+          CREATE INDEX IF NOT EXISTS outbox_created ON outbox(created_at,id);
+          CREATE INDEX IF NOT EXISTS outbox_state_created ON outbox(state,created_at,id);
+          CREATE INDEX IF NOT EXISTS outbox_kind_created ON outbox(kind,created_at,id);
+          CREATE INDEX IF NOT EXISTS outbox_state_kind_created ON outbox(state,kind,created_at,id);
           CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY, session_id TEXT, subject_id INTEGER,
             kind TEXT NOT NULL, created_at TEXT NOT NULL, body TEXT NOT NULL);
@@ -113,10 +117,19 @@ class Store:
 
     def _put_search_document(self, resource):
         data = resource["data"]
-        meanings = [fold(item.get("meaning")) for item in data.get("meanings", [])]
-        readings = [fold(item.get("reading")) for item in data.get("readings", [])]
+        def text_values(name, key):
+            entries = data.get(name)
+            if not isinstance(entries, list):
+                return []
+            return [fold(item[key]) for item in entries
+                if isinstance(item, dict) and isinstance(item.get(key), str)]
+        # This derived index is for lookup, not answer acceptance. Preserve the
+        # authoritative resource for an explicit content error during study,
+        # while indexing only text values that can safely be shown/searched.
+        meanings = text_values("meanings", "meaning")
+        readings = text_values("readings", "reading")
         self.execute("INSERT OR REPLACE INTO search_documents VALUES (?,?,?,?,?)", (
-            resource["object"], str(resource["id"]), fold(data.get("characters")),
+            resource["object"], str(resource["id"]), fold(data.get("characters") if isinstance(data.get("characters"), str) else ""),
             json.dumps(meanings, ensure_ascii=False), json.dumps(readings, ensure_ascii=False)))
 
     def resource(self, kind, rid):

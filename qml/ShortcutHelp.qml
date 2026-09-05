@@ -87,6 +87,7 @@ ColumnLayout {
           lookup: "lookup",
           zen: "Zen",
           settings: "Settings",
+          recovery: "saved submissions",
           "practice-library": "practice"
         }[root.returnView] || "Today")
       selected: true

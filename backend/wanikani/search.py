@@ -46,8 +46,11 @@ def lookup(engine, text, limit=30, filters=None, reading_query=None):
               json_extract(a.body,'$.data.burned_at') AS burned_at,
               json_extract(a.body,'$.data.available_at') AS available_at,
               COALESCE(json_extract(a.body,'$.data.hidden'),0) AS assignment_hidden,
-              COALESCE(json_extract(d.body,'$.meaning_synonyms'),
-                json_extract(m.body,'$.data.meaning_synonyms'),'[]') AS synonyms
+              CASE WHEN d.body IS NOT NULL AND json_type(d.body)!='null' THEN
+                CASE WHEN json_type(d.body,'$.meaning_synonyms')='array'
+                  THEN json_extract(d.body,'$.meaning_synonyms') ELSE '[]' END
+                ELSE CASE WHEN json_type(m.body,'$.data.meaning_synonyms')='array'
+                  THEN json_extract(m.body,'$.data.meaning_synonyms') ELSE '[]' END END AS synonyms
             FROM resources s INDEXED BY resource_search_identity
             JOIN search_documents document ON document.kind=s.kind AND document.id=s.id
             LEFT JOIN resources a ON :state IN ('learned','due') AND a.kind='assignment'
@@ -63,12 +66,12 @@ def lookup(engine, text, limit=30, filters=None, reading_query=None):
             SELECT *,
               COALESCE((SELECT MIN(CASE WHEN value=:query THEN 1 ELSE 5 END)
                 FROM json_each(entries.meanings)
-                WHERE instr(value,:query)>0),99) AS meaning_rank,
+                WHERE type='text' AND instr(value,:query)>0),99) AS meaning_rank,
               COALESCE((SELECT MIN(CASE WHEN value IN (:query,:kana) THEN 2 ELSE 6 END)
                 FROM json_each(entries.readings)
-                WHERE instr(value,:query)>0 OR instr(value,:kana)>0),99) AS reading_rank,
+                WHERE type='text' AND (instr(value,:query)>0 OR instr(value,:kana)>0)),99) AS reading_rank,
               COALESCE((SELECT MIN(CASE WHEN wk_fold(value)=:query THEN 1 ELSE 5 END)
-                FROM json_each(entries.synonyms) WHERE instr(wk_fold(value),:query)>0),99) AS synonym_rank,
+                FROM json_each(entries.synonyms) WHERE type='text' AND instr(wk_fold(value),:query)>0),99) AS synonym_rank,
               CASE WHEN :state='saved' THEN EXISTS(
                 SELECT 1 FROM json_each(COALESCE((SELECT body FROM meta WHERE key='pinned_subjects'),'[]'))
                 WHERE CAST(value AS INTEGER)=CAST(entries.id AS INTEGER)) ELSE 0 END AS pinned,

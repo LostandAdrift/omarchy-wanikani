@@ -14,6 +14,12 @@ ColumnLayout {
   spacing: Style.space(12)
   Label {
     Layout.fillWidth: true
+    visible: !!(root.subject && root.subject.content_error)
+    text: root.subject ? root.subject.content_error || "" : ""
+    color: Color.urgent
+  }
+  Label {
+    Layout.fillWidth: true
     visible: root.showMeaning
     text: root.subject ? root.subject.meanings.join(" · ") : ""
     font.pixelSize: Style.font.title

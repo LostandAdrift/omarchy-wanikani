@@ -40,7 +40,7 @@ class Synchronizer:
         if self.cancelled.is_set():
             raise UserError("Synchronization stopped.", "cancelled")
 
-    def run(self, full=False):
+    def run(self, full=False, for_study=False):
         if not self.lock.acquire(blocking=False):
             return False
         engine = self.engine
@@ -117,7 +117,11 @@ class Synchronizer:
                 engine.message = "The system clock differs from WaniKani. Correct it before graded study or submission."
             self.store.set("last_sync", stamp(engine.now()))
             self.changed()
-            self.cache_media()
+            # Account/reset/catalogue/material checks and outbox reconciliation
+            # still precede online study. Media prefetch can wait for the next
+            # background refresh; missing required images stay unavailable.
+            if not for_study:
+                self.cache_media()
             succeeded = True
             return True
         except ApiError as error:

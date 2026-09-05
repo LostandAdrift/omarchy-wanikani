@@ -4,11 +4,11 @@ Tested on 2026-09-04. Version 0.1.0 is a development release. Fixture tests and 
 
 ## Environment
 
-Omarchy 4.0.2-1, Quickshell 0.3.1, Python 3.14.7, Qt 6.11.2, Hyprland 0.56.2. Three monitors: 1440×2560 portrait, 3440×1440, and 2560×1440, all at scale 1. Native captures use Noto Sans CJK JP, Tokyo Night and Flexoki Light. The original Tokyo Night theme, wallpaper, top bar, and unrelated bindings were preserved.
+Omarchy 4.0.2-1, Quickshell 0.3.1, Python 3.14.7, Qt 6.11.2, Hyprland 0.56.2. Initial checks used three monitors at scale 1. During the improvement window the existing DP-2 configuration was observed at 3840×2160, rotated portrait, scale 1.5; DP-3 remained 3440×1440 and HDMI-A-1 2560×1440 at scale 1. The isolated hosted scenario also ran on DP-2 at its observed 1.5 scale, producing 1140-pixel captures for a 760-logical-pixel panel. No monitor setting was changed by this QA run. Native captures use Noto Sans CJK JP, Tokyo Night and Flexoki Light. The original Tokyo Night theme, wallpaper, top bar, and unrelated bindings were preserved.
 
 ## Automated results
 
-- Python: **140 tests passed**, including **12 real subprocess crash boundaries**.
+- Python: **234 tests passed**, including **12 real subprocess crash boundaries**.
 - Qt: **49 checks passed**, covering kana conversion, activation-repeat protection, and desktop notification/ambient policy (Qt totals include initialization and cleanup).
 - Omarchy manifest validation passed.
 - Both installed desktop launcher files passed `desktop-file-validate`; Hyprland reported no configuration errors.
@@ -36,7 +36,8 @@ Qt policy checks cover quiet-hour boundaries, persisted reminder intervals, snoo
 | Installation and updates | Installed and updated through ordinary `omarchy plugin` commands from the local Git repository. No public remote or contest entry exists. |
 | Worker lifecycle | Disabling stopped the worker; enabling started exactly one. Durable demo counts and session state were retained. |
 | Hot reload | Durable state survived. On this host, nested QML occasionally stayed stale until `omarchy restart shell`; documented in the README. |
-| Views | Dashboard, quick study, lookup, Settings, and Zen rendered in the running shell. Native dark/light captures are in docs/screenshots/. |
+| Views | Dashboard, quick study, lessons/quiz, practice library, recovery, lookup, Settings, help, and Zen rendered in the running shell. Native dark/light captures are in docs/screenshots/. |
+| Isolated lesson/recovery scenario | Temporary authored fixture plugin in the same shell: lesson introduction, quiz, wrong-answer feedback, exact draft close/resume, three offline lesson completions, pending recovery and demo confirmation passed. Narrow 540×650 layout and focused-control scrolling passed. Actions were synthetic component calls, not native key events; cleanup removed each temporary plugin. |
 | Study keyboard | Romaji entry, Enter feedback, Escape closing, and resuming the saved question/draft were exercised. Full IME/cursor variants also have pure conversion fixtures; comprehensive installed-IME qualification remains pending. |
 | Bar | All four positions were exercised on all three monitors; horizontal and vertical crab/count presentations inspected. Original top position restored. |
 | Themes | Tokyo Night and Flexoki Light applied to live surfaces, then original theme and wallpaper restored. |
@@ -52,9 +53,12 @@ All measurements are local development observations, not a guarantee across mach
 |---|---|---|
 | Warm study opening | 73.9 ms | One sample from IPC invocation to a visible compositor layer; does not instrument first-pixel rendering. |
 | Other warm views | Dashboard 82.3 ms; lookup 59.8 ms; Zen 64.2 ms; Settings 62.6 ms | Same method, one sample per view. All below the 200 ms target in this run. |
-| Durable answer plus advance | Median 11.3 ms; p95 13.4 ms | 100 operations on a fixture database; includes both local transactions. Below the 50 ms feedback target in this run. |
-| Full-catalogue snapshot | Median 91.4 ms; p95 93.3 ms | 9,016 authored fixture subjects, eight samples. An earlier run measured a 120.6 ms median. |
-| Local search | Median 2.3 ms; p95 2.3 ms | Same catalogue, eight samples. |
+| Durable answer plus advance | Median 21.37 ms; maximum 28.47 ms | Latest 100-operation authored fixture run; includes both local transactions and strict cache validation. Earlier build measured 11–13 ms. |
+| Full-catalogue snapshot | Median 80.13 ms | Latest 9,016 authored fixture catalogue run. |
+| Ranked local search | Median 15.17 ms | Full Unicode/romaji/synonym ranking across the same catalogue. |
+| Practice / offline readiness | Practice 93.79 ms; searched practice 99.54 ms; readiness 90.37 ms | Same catalogue; readiness checked 3,008 eligible items in a background pass. |
+| Large local submission history | Snapshot summary 1.47 ms / 1,964 bytes; first page 2.40 ms | 50,000 authored outbox rows plus 10,000 completed sessions. Deep open page at offset 30,000 measured 11.71 ms. |
+| Online pre-study transport model | 0.18 s versus previous 8.42 s | Nine mocked reads at 20 ms each; burst-aware pacing and deferred media. Not live network timing. |
 | Idle worker CPU | 0.0% of one core at process-tick resolution | 45 seconds with the panel closed. This does not measure incremental QML CPU in the existing shell. |
 | Worker memory | RSS 30.2 MiB; PSS 17.7 MiB | Isolated worker process, measured separately from the existing shell. |
 
@@ -63,10 +67,16 @@ Hidden companion animations are disabled. Incremental QML memory and CPU inside 
 ## Remaining release gates
 
 - Connect a token through native Settings. Deliberately complete real lessons and reviews, verify notes/synonyms, cached image radicals, audio, offline submissions, and reconciliation with a second client. Test read-only and session-only authentication on the actual keyring.
-- Exercise native lesson presentation end to end, the installed Japanese IME, full keyboard-only navigation, accessibility tooling, fractional scaling, focus changes across monitors, actual DND delivery, suspend/reconnect, lock/unlock, and automatic ambient/screensaver handoff. Preserve the user's existing idle and lock settings.
+- Qualify real lesson/media presentation, the installed Japanese IME, full keyboard-only navigation, accessibility tooling, additional fractional scales and focus changes across monitors, actual DND delivery, suspend/reconnect, lock/unlock, and automatic ambient/screensaver handoff. Preserve the user's existing idle and lock settings.
 - Complete an end-to-end uninstall/reinstall check on a disposable account/desktop; isolated helper removal tests already pass.
 - Measure incremental shared-shell memory and average CPU with an isolated baseline and longer opening-latency samples.
 - Use the client daily for **two weeks**, with no lost answers, unexplained progress changes, or desktop interference. Record dates, versions, and any recovery events.
 - Recheck the next competition's published rules and deadline, record the [three-minute demonstration](CONTEST_DEMO.md), then publish and submit a reviewed repository.
 
 The implementation and demonstration script are available now. These outstanding gates must be completed before calling the release a qualified daily client or contest-ready 1.0.
+
+## Improvement-window evidence
+
+The native fixture harness retains private PNGs and rendered-control snapshots under its printed temporary run directory. The successful 02:34 UTC run used `wanikani-native-qa-pic0tb6s`; it completed three authored lessons offline and showed their local demo confirmation. Its own plugin namespace produced no TypeError, ReferenceError or binding-loop messages. A prior QA-only font-size binding error was fixed before this run.
+
+New regressions cover exact-meaning preference, numeric/negation grading, malformed cache data across all study surfaces, suspension-aware clock handling, rate-limit headers, paginated recovery, diagnostic symlink replacement and per-mode deletion, and desktop journal ownership. Diagnostics now use explicit aggregate fields in private `diagnostics-account.json` or `diagnostics-demo.json` files.

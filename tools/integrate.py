@@ -70,8 +70,14 @@ def apply_bindings(bindings, updated, original, runtime):
 def integrate(home, source, remove=False, runtime=True):
     state = home / ".local/state/omarchy/wanikani"
     state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state.chmod(0o700)
     journal = state / "integration.json"
     previous = json.loads(journal.read_text()) if journal.exists() else {"files": {}}
+    applications = home / ".local/share/applications"
+    launcher_paths = {applications / f"{ID}.{action}.desktop" for action in ("resume", "lookup")}
+    # A journal records ownership; it must never grant access to other paths.
+    previous["files"] = {path: value for path, value in previous.get("files", {}).items()
+                         if Path(path) in launcher_paths}
     bindings = home / ".config/hypr/bindings.lua"
     text = bindings.read_text() if bindings.exists() else ""
     cleaned = BLOCK.sub("\n", text)
@@ -79,8 +85,14 @@ def integrate(home, source, remove=False, runtime=True):
     # Older installs saved the backup path without the original bytes. Migrate
     # even when every key is occupied, or removal is the first operation.
     backup_path = Path(previous.get("bindings_backup", ""))
-    if "bindings_original" not in previous and backup_path.is_file():
-        previous["bindings_original"] = backup_path.read_text()
+    if (backup_path.parent == state
+            and re.fullmatch(r"bindings-before-\d+\.lua", backup_path.name)
+            and not backup_path.is_symlink() and backup_path.is_file()):
+        backup_path.chmod(0o600)
+        if "bindings_original" not in previous:
+            previous["bindings_original"] = BLOCK.sub("\n", backup_path.read_text())
+    if "bindings_original" in previous:
+        previous["bindings_original"] = BLOCK.sub("\n", previous["bindings_original"])
     if remove:
         if cleaned != text:
             original = previous.get("bindings_original")
@@ -88,7 +100,9 @@ def integrate(home, source, remove=False, runtime=True):
             apply_bindings(bindings, updated, text, runtime)
         for path, expected in previous.get("files", {}).items():
             item = Path(path)
-            if item.exists() and digest(item.read_text()) == expected:
+            if item.is_symlink():
+                messages.append("Preserved replacement launcher " + str(item))
+            elif item.is_file() and digest(item.read_text()) == expected:
                 item.unlink()
                 messages.append("Removed " + str(item))
             elif item.exists():
@@ -119,17 +133,22 @@ def integrate(home, source, remove=False, runtime=True):
             if text and not previous.get("bindings_backup"):
                 backup = state / ("bindings-before-" + str(int(time.time())) + ".lua")
                 backup.write_text(text)
+                backup.chmod(0o600)
                 previous["bindings_backup"] = str(backup)
-            previous.setdefault("bindings_original", text)
+            # Recover an orphaned block after an interrupted old installation.
+            # Its own generated lines must not become the removal baseline.
+            previous.setdefault("bindings_original", cleaned)
             updated = cleaned.rstrip() + "\n\n" + START + "\n" + "\n".join(lines) + "\n" + END + "\n"
             apply_bindings(bindings, updated, text, runtime)
             previous["bindings_installed"] = digest(updated)
-        applications = home / ".local/share/applications"
         applications.mkdir(parents=True, exist_ok=True)
         owned = previous.get("files", {})
         for action, name in [("resume", "WaniKani Study"), ("lookup", "WaniKani Lookup")]:
             destination = applications / f"{ID}.{action}.desktop"
             entry = f"[Desktop Entry]\nType=Application\nName={name}\nComment=Five reviews, then back to work\nExec=omarchy-shell wanikani {action}\nIcon={source / 'assets/wanikani.svg'}\nTerminal=false\nCategories=Education;Languages;\nKeywords=Japanese;Kanji;Lessons;Reviews;WaniKani;\n"
+            if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+                messages.append("Preserved replacement launcher " + str(destination))
+                continue
             if destination.exists() and str(destination) not in owned and destination.read_text() != entry:
                 messages.append("Preserved existing launcher " + str(destination))
                 continue

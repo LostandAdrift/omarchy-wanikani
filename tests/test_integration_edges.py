@@ -108,6 +108,71 @@ class IntegrationEdgeTests(unittest.TestCase):
         integrate(self.home, ROOT, remove=True, runtime=False)
         self.assertEqual("[Desktop Entry]\nName=My own launcher\n", launcher.read_text())
 
+    def test_journal_cannot_remove_or_read_unrelated_paths(self):
+        integrate(self.home, ROOT, runtime=False)
+        victim = self.home / "private-note.txt"
+        victim.write_text("unrelated personal content")
+        previous = json.loads(self.journal.read_text())
+        previous["files"][str(victim)] = digest(victim.read_text())
+        previous.pop("bindings_original")
+        previous["bindings_backup"] = str(victim)
+        self.journal.write_text(json.dumps(previous))
+        integrate(self.home, ROOT, remove=True, runtime=False)
+        self.assertEqual("unrelated personal content", victim.read_text())
+        self.assertNotIn("personal content", self.bindings.read_text())
+        self.assertNotIn(START, self.bindings.read_text())
+
+    def test_replacement_launcher_symlink_is_preserved_on_install_and_remove(self):
+        integrate(self.home, ROOT, runtime=False)
+        launcher = self.home / ".local/share/applications" / f"{ID}.resume.desktop"
+        victim = self.home / "another.desktop"
+        victim.write_text(launcher.read_text())
+        before = victim.read_text()
+        launcher.unlink()
+        launcher.symlink_to(victim)
+        integrate(self.home, ROOT / "different-source", runtime=False)
+        self.assertEqual(before, victim.read_text())
+        integrate(self.home, ROOT, remove=True, runtime=False)
+        self.assertTrue(launcher.is_symlink())
+        self.assertEqual(before, victim.read_text())
+
+    def test_dangling_launcher_symlink_is_not_followed(self):
+        launcher = self.home / ".local/share/applications" / f"{ID}.resume.desktop"
+        launcher.parent.mkdir(parents=True)
+        victim = self.home / "must-not-be-created.desktop"
+        launcher.symlink_to(victim)
+        integrate(self.home, ROOT, runtime=False)
+        self.assertTrue(launcher.is_symlink())
+        self.assertFalse(victim.exists())
+
+    def test_existing_state_directory_and_binding_backups_are_private(self):
+        self.journal.parent.mkdir(parents=True, mode=0o755)
+        self.journal.parent.chmod(0o755)
+        integrate(self.home, ROOT, runtime=False)
+        backup = Path(json.loads(self.journal.read_text())["bindings_backup"])
+        self.assertEqual(0o700, self.journal.parent.stat().st_mode & 0o777)
+        self.assertEqual(0o600, backup.stat().st_mode & 0o777)
+        backup.chmod(0o644)
+        integrate(self.home, ROOT, runtime=False)
+        self.assertEqual(0o600, backup.stat().st_mode & 0o777)
+
+    def test_orphaned_shortcuts_are_not_restored_after_reinstall(self):
+        integrate(self.home, ROOT, runtime=False)
+        self.journal.unlink()
+        integrate(self.home, ROOT, runtime=False)
+        integrate(self.home, ROOT, remove=True, runtime=False)
+        self.assertNotIn(START, self.bindings.read_text())
+        self.assertEqual(self.original.rstrip(), self.bindings.read_text().rstrip())
+
+    def test_old_orphaned_original_is_not_restored(self):
+        integrate(self.home, ROOT, runtime=False)
+        previous = json.loads(self.journal.read_text())
+        previous["bindings_original"] = self.bindings.read_text()
+        self.journal.write_text(json.dumps(previous))
+        integrate(self.home, ROOT, remove=True, runtime=False)
+        self.assertNotIn(START, self.bindings.read_text())
+        self.assertEqual(self.original.rstrip(), self.bindings.read_text().rstrip())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,8 +5,9 @@ import threading
 import time
 from pathlib import Path
 
-from .common import stamp
+from .common import UserError, stamp
 from .engine import BUSY_STATES, SUBJECTS
+from .grading import validate_subject_answers
 
 
 def empty_result():
@@ -15,6 +16,11 @@ def empty_result():
             "missing_images": 0, "audio_total": 0, "audio_cached": 0}
     return {"complete": False, "checking": True, "checked_at": None,
         "reviews": group(), "lessons": group(), "message": "Checking offline availability…"}
+
+
+def _assets(data, name):
+    entries = data.get(name)
+    return [item for item in entries if isinstance(item, dict) and isinstance(item.get("url"), str)] if isinstance(entries, list) else []
 
 
 def calculate(engine, cancelled=lambda: False, max_items=12000, budget_seconds=5, clock=time.monotonic):
@@ -46,9 +52,14 @@ def calculate(engine, cancelled=lambda: False, max_items=12000, budget_seconds=5
             if cancelled() or checked >= max_items or clock() >= deadline:
                 complete = False
                 break
-            rows = store.rows(f"""SELECT CAST(a.id AS INTEGER) AS assignment_id,s.body
+            rows = store.rows(f"""SELECT CAST(a.id AS INTEGER) AS assignment_id,s.body,
+                CASE WHEN d.body IS NOT NULL AND json_type(d.body)!='null'
+                  THEN d.body ELSE json_extract(m.body,'$.data') END AS material
               FROM resources a JOIN resources s INDEXED BY resource_numeric_id ON s.kind IN {SUBJECTS}
                 AND CAST(s.id AS INTEGER)=CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)
+              LEFT JOIN resources m ON m.kind='study_material'
+                AND CAST(json_extract(m.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
+              LEFT JOIN meta d ON d.key='material_draft_'||s.id
               WHERE a.kind='assignment' AND CAST(a.id AS INTEGER)>?
                 AND json_extract(s.body,'$.data.level')<=?
                 AND json_extract(s.body,'$.data.hidden_at') IS NULL
@@ -65,9 +76,8 @@ def calculate(engine, cancelled=lambda: False, max_items=12000, budget_seconds=5
             urls = set()
             for subject in subjects:
                 data = subject["data"]
-                for asset in data.get("character_images", []) + data.get("pronunciation_audios", []):
-                    if isinstance(asset.get("url"), str):
-                        urls.add(asset["url"])
+                for asset in _assets(data, "character_images") + _assets(data, "pronunciation_audios"):
+                    urls.add(asset["url"])
             cached = set()
             urls = list(urls)
             for offset in range(0, len(urls), 400):
@@ -85,11 +95,13 @@ def calculate(engine, cancelled=lambda: False, max_items=12000, budget_seconds=5
                     complete = False
                     break
                 data = subject["data"]
-                text_ok = any(m.get("accepted_answer") for m in data.get("meanings", []))
-                if subject["object"] in ("kanji", "vocabulary"):
-                    text_ok = text_ok and any(r.get("accepted_answer") for r in data.get("readings", []))
-                image_ok = bool(data.get("characters")) or any(a.get("url") in cached for a in data.get("character_images", []))
-                audio = data.get("pronunciation_audios", [])
+                try:
+                    validate_subject_answers(subject, json.loads(row["material"]) if row["material"] else None)
+                    text_ok = True
+                except UserError:
+                    text_ok = False
+                image_ok = bool(data.get("characters")) or any(a["url"] in cached for a in _assets(data, "character_images"))
+                audio = _assets(data, "pronunciation_audios")
                 counts["checked"] += 1
                 counts["ready"] += int(text_ok and image_ok)
                 counts["missing_text"] += int(not text_ok)

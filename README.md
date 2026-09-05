@@ -39,17 +39,19 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Reviews / lessons | `omarchy-shell wanikani reviews` / `omarchy-shell wanikani lessons` |
 | Lookup / Zen | `omarchy-shell wanikani lookup` / `omarchy-shell wanikani zen` |
 | Refresh / status | `omarchy-shell wanikani refresh` / `omarchy-shell wanikani status` |
-| Settings | `omarchy-shell wanikani settings` |
+| Settings / saved submissions | `omarchy-shell wanikani settings` / `omarchy-shell wanikani recovery` |
 | Practice library / help | `omarchy-shell wanikani practice` / `omarchy-shell wanikani help` |
 | Keyboard help | F1 |
 | Panel navigation outside text fields | Ctrl+1 Today, Ctrl+2 Study, Ctrl+3 Lookup, Ctrl+4 Zen, Ctrl+5 Settings, Ctrl+6 Practice |
 | Enter / leave demo | `omarchy-shell wanikani demo true` / `omarchy-shell wanikani demo false` |
 
-Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
+Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
 
 ## How study works
 
 Sessions contain five subjects by default. Lessons introduce the subjects before their quiz. Reviews test each required part; wrong answers retain their mistake counts until the subject is finished. Romaji converts to kana locally, and existing Japanese input methods are supported.
+
+**Require exact meanings** in Settings disables automatic spelling tolerance while keeping accepted variants, saved synonyms, and distinct retryable input mistakes. Readings always require exact normalized kana. Conservative grading preserves quantities and negation, and incomplete answer data cannot enter study.
 
 **I made a typo** is available only on the current incorrect feedback screen. Corrections are recorded locally. A finished subject enters the submission queue only after you acknowledge its last feedback screen. Already committed WaniKani progress is never retroactively overridden.
 
@@ -65,11 +67,11 @@ Lookup accepts romaji readings as well as Japanese, meanings, and personal synon
 
 Subject text is cached for your accessible levels. Media is downloaded incrementally, with up to 40 new assets per sync and a configurable disk limit. Image-only radicals require their image before they can be quizzed. Audio availability is shown explicitly.
 
-The dashboard and Settings show how many eligible reviews and lessons have their required text/images available offline. Optional audio is counted separately. Availability checks run in the background, and synchronization reports its current stage. Resuming saved work reads the latest durable question and draft immediately.
+The dashboard and Settings show how many eligible reviews and lessons have their required text/images available offline. Optional audio is counted separately. Availability checks run in the background, and synchronization reports its current stage. Resuming saved work reads the latest durable question and draft immediately. New online study refreshes account state first and defers optional media downloads. Reconnection triggers a coalesced refresh through the shell’s shared networking service; ordinary suspend does not invalidate the offline clock.
 
 Cached lessons and due reviews work offline. Completed work stays pending until confirmed. A pending subject cannot enter another graded cycle, and subsequent scheduling/unlocks wait for WaniKani's response. Subscription access and known expiry dates still apply offline.
 
-The API does not provide idempotency keys or retrievable individual review history. A timed-out submission is **uncertain**, never automatically retried. Refresh reconciles it against remote progress. When another client has changed the assignment, its state wins and the local answer remains recorded. Settings lets you keep remote progress and archive an unresolved local result. This recovery path deliberately offers no force-resubmit button.
+The API does not provide idempotency keys or retrievable individual review history. A timed-out submission is **uncertain**, never automatically retried. Refresh reconciles it against remote progress. When another client has changed the assignment, its state wins and the local answer remains recorded. The **Saved submissions** page shows paginated local records, error counts, and the reason a result is waiting or needs attention. Filter reviews, lessons, or note edits; inspect confirmed and archived records separately. An explicit recovery action lets you keep remote progress and archive an unresolved local result. This recovery path deliberately offers no force-resubmit button.
 
 Activity charts show only completed subjects and practice recorded by this plugin. They do not reconstruct your all-device review history.
 
@@ -111,6 +113,6 @@ python3 -m unittest discover -s tests -v
 omarchy plugin validate .
 ```
 
-See [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), the [contest demonstration](docs/CONTEST_DEMO.md), and the [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
+See [isolated native QA](docs/NATIVE_QA.md), [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), the [contest demonstration](docs/CONTEST_DEMO.md), and the [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
 
 The release gate includes two weeks of personal daily use, checks across desktop configurations, and deliberately answered live lessons/reviews. Those are not replaced by passing automated tests.

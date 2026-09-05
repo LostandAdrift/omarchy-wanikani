@@ -126,6 +126,10 @@ ColumnLayout {
   Repeater {
     model: [
       {
+        key: "strict_meanings",
+        label: "Require exact meanings"
+      },
+      {
         key: "companion_animation",
         label: "Companion animation"
       },
@@ -167,6 +171,12 @@ ColumnLayout {
         }
       }
     }
+  }
+  Label {
+    Layout.fillWidth: true
+    text: "Exact meanings keeps accepted variants and your saved synonyms, and turns off automatic spelling tolerance. Reading answers always require exact kana after normalization."
+    color: Qt.alpha(Color.foreground, 0.76)
+    font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
@@ -318,38 +328,9 @@ ColumnLayout {
     color: Qt.alpha(Color.foreground, 0.76)
     font.pixelSize: Style.font.bodySmall
   }
-  Repeater {
-    model: root.snapshot.outbox || []
-    Card {
-      required property var modelData
-      Layout.fillWidth: true
-      Layout.preferredHeight: entry.implicitHeight + Style.space(24)
-      ColumnLayout {
-        id: entry
-        anchors.fill: parent
-        anchors.margins: Style.space(12)
-        Label {
-          Layout.fillWidth: true
-          text: modelData.kind + " · Subject " + modelData.subject_id + " · " + modelData.state
-          font.bold: true
-        }
-        Label {
-          Layout.fillWidth: true
-          text: modelData.detail
-          color: Qt.alpha(Color.foreground, 0.76)
-          font.pixelSize: Style.font.bodySmall
-        }
-        Action {
-          text: "Keep remote progress & archive local result"
-          visible: ["uncertain", "conflicted", "blocked"].indexOf(modelData.state) >= 0
-          enabled: !root.snapshot.syncing
-          onClicked: root.controller.call("resolve", {
-            id: modelData.id,
-            action: "keep_remote"
-          })
-        }
-      }
-    }
+  Action {
+    text: "Open saved submissions · " + (root.snapshot.outbox_total || 0) + " open"
+    onClicked: root.controller.navigate("recovery")
   }
   Label {
     Layout.fillWidth: true

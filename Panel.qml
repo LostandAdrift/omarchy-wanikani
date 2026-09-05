@@ -41,6 +41,22 @@ Item {
       activity: []
     })
   readonly property string pluginId: "io.github.lostandadrift.wanikani"
+  readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0])
+  onContentAccessChanged: {
+    // Presentation caches must not outlive the account or its content grant.
+    // Durable answers remain owned by the worker and are revalidated there.
+    detail = null
+    helpReturnDetail = null
+    results = []
+    searchSequence++
+    searching = false
+    if (audio)
+      audio.stop()
+    if (opened && view === "lookup")
+      Qt.callLater(function () {
+        root.search(root.query)
+      })
+  }
   readonly property var focusedItem: frame.Window.activeFocusItem
   readonly property bool editingText: isTextEditor(focusedItem)
   readonly property bool composingText: focusedItem && focusedItem.inputMethodComposing === true
@@ -104,7 +120,7 @@ Item {
     if (["reviews", "lessons", "practice", "resume"].indexOf(requested) >= 0)
       begin(requested, payload.limit, payload.subjects)
     else
-      navigate(["dashboard", "lookup", "zen", "settings", "help", "practice-library"].indexOf(requested) >= 0 ? requested : "dashboard")
+      navigate(["dashboard", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
     if (requested === "lookup" && payload.selection)
       readSelection()
     else if (requested === "lookup" && typeof payload.text === "string")
@@ -280,8 +296,8 @@ Item {
   Connections {
     target: root.service
     function onSnapshotChanged() {
-      if (root.view === "study" && root.snapshot.session)
-        root.session = root.snapshot.session
+      if (root.view === "study")
+        root.session = root.snapshot.session || null
     }
     function onLockedChanged() {
       if (root.service.locked)
@@ -452,7 +468,7 @@ Item {
           Loader {
             id: content
             width: scroll.availableWidth
-            sourceComponent: root.view === "study" ? studyPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
+            sourceComponent: root.view === "study" ? studyPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "recovery" ? recoveryPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
             onLoaded: {
               if (scroll.contentItem && scroll.contentItem.contentY !== undefined)
                 scroll.contentItem.contentY = 0
@@ -518,6 +534,12 @@ Item {
   Component {
     id: practicePage
     Kani.Practice {
+      controller: root
+    }
+  }
+  Component {
+    id: recoveryPage
+    Kani.Recovery {
       controller: root
     }
   }

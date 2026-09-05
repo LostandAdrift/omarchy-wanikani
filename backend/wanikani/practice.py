@@ -34,6 +34,7 @@ import json
 from pathlib import Path
 
 from .common import UserError, epoch, stamp
+from .grading import validate_subject_answers
 
 
 GROUPS = ("suggested", "saved", "mistakes", "learned")
@@ -112,26 +113,34 @@ def catalogue(engine, group="suggested", query="", offset=0, limit=30):
     media = {row["url"]: row["path"] for row in engine.store.rows("SELECT url,path FROM media")}
     pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     rows = engine.store.rows(f"""SELECT CAST(s.id AS INTEGER) AS id,s.kind AS type,
+        json_object('meanings',json_extract(s.body,'$.data.meanings'),
+          'readings',json_extract(s.body,'$.data.readings'),
+          'auxiliary_meanings',CASE WHEN json_type(s.body,'$.data.auxiliary_meanings') IS NULL
+            THEN json('[]') ELSE json_extract(s.body,'$.data.auxiliary_meanings') END) AS answers,
+        CASE WHEN d.body IS NOT NULL AND json_type(d.body)!='null'
+          THEN d.body ELSE json_extract(m.body,'$.data') END AS material,
         json_extract(s.body,'$.data.characters') AS characters,
         json_extract(s.body,'$.data.level') AS level,
-        json_extract(s.body,'$.data.character_images') AS image_data,
-        (SELECT json_extract(m.value,'$.meaning') FROM json_each(json_extract(s.body,'$.data.meanings')) m
-          WHERE json_extract(m.value,'$.accepted_answer')=1
-          ORDER BY json_extract(m.value,'$.primary') DESC LIMIT 1) AS meaning,
-        EXISTS(SELECT 1 FROM json_each(json_extract(s.body,'$.data.readings')) r
-          WHERE json_extract(r.value,'$.accepted_answer')=1) AS has_reading,
+        json_quote(json_extract(s.body,'$.data.character_images')) AS image_data,
         json_extract(a.body,'$.data.started_at') AS started_at,
         COALESCE(json_extract(a.body,'$.data.srs_stage'),0) AS srs_stage,
         json_extract(rs.body,'$.data.percentage_correct') AS accuracy,
         (?='' OR json_extract(s.body,'$.data.characters') LIKE ? ESCAPE '\\'
-          OR EXISTS(SELECT 1 FROM json_each(json_extract(s.body,'$.data.meanings')) m
-            WHERE json_extract(m.value,'$.meaning') LIKE ? ESCAPE '\\')
-          OR EXISTS(SELECT 1 FROM json_each(json_extract(s.body,'$.data.readings')) r
-            WHERE json_extract(r.value,'$.reading') LIKE ? ESCAPE '\\')
+          OR EXISTS(SELECT 1 FROM json_each(CASE WHEN json_type(s.body,'$.data.meanings')='array'
+              THEN json_extract(s.body,'$.data.meanings') ELSE '[]' END) m
+            WHERE json_type(CASE WHEN m.type='object' THEN m.value ELSE '{{}}' END,'$.meaning')='text'
+              AND json_extract(CASE WHEN m.type='object' THEN m.value ELSE '{{}}' END,'$.meaning') LIKE ? ESCAPE '\\')
+          OR EXISTS(SELECT 1 FROM json_each(CASE WHEN json_type(s.body,'$.data.readings')='array'
+              THEN json_extract(s.body,'$.data.readings') ELSE '[]' END) r
+            WHERE json_type(CASE WHEN r.type='object' THEN r.value ELSE '{{}}' END,'$.reading')='text'
+              AND json_extract(CASE WHEN r.type='object' THEN r.value ELSE '{{}}' END,'$.reading') LIKE ? ESCAPE '\\')
           OR (length(json_extract(s.body,'$.data.characters'))>0
             AND instr(?,json_extract(s.body,'$.data.characters'))>0)) AS matches
       FROM resources s LEFT JOIN resources a ON a.kind='assignment'
         AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
+      LEFT JOIN resources m ON m.kind='study_material'
+        AND CAST(json_extract(m.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
+      LEFT JOIN meta d ON d.key='material_draft_'||s.id
       LEFT JOIN resources rs ON rs.kind='review_statistic'
         AND CAST(json_extract(rs.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
         AND COALESCE(json_extract(rs.body,'$.data.hidden'),0)=0
@@ -154,16 +163,24 @@ def catalogue(engine, group="suggested", query="", offset=0, limit=30):
             continue
         images = []
         if not row["characters"]:
-            for image in json.loads(row["image_data"] or "[]"):
+            image_data = json.loads(row["image_data"])
+            for image in image_data if isinstance(image_data, list) else []:
+                if not isinstance(image, dict) or not isinstance(image.get("url"), str):
+                    continue
                 path = media.get(image.get("url"))
                 if path and Path(path).is_file():
                     images.append(Path(path).as_uri())
         cache_note = "Ready offline"
-        if not row["meaning"]:
-            cache_note = "Refresh to cache accepted meanings."
-        elif row["type"] in ("kanji", "vocabulary") and not row["has_reading"]:
-            cache_note = "Refresh to cache accepted readings."
-        elif not row["characters"] and not images:
+        meaning = ""
+        try:
+            answers = json.loads(row["answers"])
+            prepared = validate_subject_answers({"object": row["type"], "data": answers},
+                json.loads(row["material"]) if row["material"] else None)
+            meaning = next((item["meaning"] for item in answers["meanings"]
+                if item.get("primary") is True and item["accepted_answer"] is True), prepared["meanings"][0])
+        except UserError:
+            cache_note = "Refresh to cache valid accepted answers."
+        if cache_note == "Ready offline" and not row["characters"] and not images:
             cache_note = "Refresh to download the radical image."
         ready = cache_note == "Ready offline"
         for name, included in membership.items():
@@ -186,7 +203,7 @@ def catalogue(engine, group="suggested", query="", offset=0, limit=30):
             reasons.append({"code": "learned", "label": "Learned subject"})
         result.append({"id": sid, "type": row["type"], "characters": row["characters"] or "", "images": images,
             "slug": "subject " + str(sid),  # neutral accessibility label for protected radical images
-            "meaning": "" if sid in protected else row["meaning"] or "", "level": row["level"],
+            "meaning": "" if sid in protected else meaning, "level": row["level"],
             "srs_stage": row["srs_stage"], "learned": learned, "pinned": saved, "ready": ready,
             "cache_note": cache_note, "pending_graded": sid in pending, "spoilers_hidden": sid in protected,
             "reasons": reasons, "mistakes": {part: recent[part] for part in ("meaning", "reading", "total")},

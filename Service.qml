@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Networking
 import "qml" as Kani
 import "qml/DesktopPolicy.mjs" as Policy
 
@@ -36,6 +37,15 @@ Item {
   property double lastNotification: 0
   property int ambientIndex: 0
   property int restartAttempts: 0
+  readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0])
+  onContentAccessChanged: ambientItems = []
+  readonly property bool networkOnline: Networking.connectivity === NetworkConnectivity.Full || (Networking.connectivity === NetworkConnectivity.Unknown && Networking.devices && Networking.devices.values.some(function (device) {
+      return device.connected
+    }))
+  onNetworkOnlineChanged: {
+    if (networkOnline && ready && snapshot.connected && !snapshot.demo)
+      reconnectTimer.restart()
+  }
   readonly property var lockService: shell ? shell.serviceFor("omarchy.lock") : null
   readonly property var notificationsService: shell ? shell.serviceFor("omarchy.notifications") : null
   readonly property var idleService: shell ? shell.serviceFor("omarchy.idle") : null
@@ -124,8 +134,9 @@ Item {
     }
   }
   function refreshAmbient() {
+    var access = contentAccess
     request("ambient", {}, function (ok, data) {
-      if (ok)
+      if (ok && root.contentAccess === access)
         ambientItems = data
     })
   }
@@ -181,6 +192,14 @@ Item {
       for (var key in pending)
         pending[key](false, null, root.error)
       restartTimer.restart()
+    }
+  }
+  Timer {
+    id: reconnectTimer
+    interval: 2000
+    onTriggered: {
+      if (root.ready && root.networkOnline && root.snapshot.connected && !root.snapshot.demo && !root.snapshot.syncing)
+        root.request("sync", {})
     }
   }
   Timer {
@@ -256,6 +275,9 @@ Item {
     }
     function practice(): void {
       root.summon("practice-library")
+    }
+    function recovery(): void {
+      root.summon("recovery")
     }
     function help(): void {
       root.summon("help")

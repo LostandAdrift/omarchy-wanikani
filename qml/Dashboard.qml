@@ -269,8 +269,8 @@ ColumnLayout {
     }
   }
   Action {
-    visible: (s.attention || 0) > 0
-    text: "Review " + s.attention + " sync issue(s)"
-    onClicked: root.controller.navigate("settings")
+    visible: (s.attention || 0) > 0 || (s.pending || 0) > 0
+    text: s.attention > 0 ? "Review " + s.attention + " sync issue(s)" : "View " + s.pending + " pending submission(s)"
+    onClicked: root.controller.navigate("recovery")
   }
 }

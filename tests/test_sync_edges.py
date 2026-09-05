@@ -462,12 +462,13 @@ class CredentialStateTests(unittest.TestCase):
         worker.emit = emit
         worker.changed = Mock()
         worker.sync = Mock()
-        worker.sync.run.side_effect = lambda: order.append("sync") or True
+        worker.sync.run.side_effect = lambda **kwargs: order.append("sync") or True
         worker.handle({"v": 1, "id": "new", "method": "start", "args": {"mode": "reviews", "limit": 1}})
         self.assertTrue(arrived.wait(2))
         self.assertTrue(worker.job_lock.acquire(timeout=2))
         worker.job_lock.release()
         self.assertEqual(["sync", "reply"], order)
+        worker.sync.run.assert_called_once_with(for_study=True)
 
     def test_explicit_deletion_removes_recoverable_sqlite_pages(self):
         worker = self.worker

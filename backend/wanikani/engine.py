@@ -6,13 +6,14 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from .common import UserError, epoch, plain, stamp
-from .grading import grade
+from .grading import grade, validate_subject_answers
 
 DEFAULTS = {
     "batch_size": 5, "notifications": True, "quiet_start": 22, "quiet_end": 8,
     "reminder_interval": 7200, "snooze_until": 0, "desktop_card": False,
     "idle_gallery": False, "companion_animation": True, "reduced_motion": False,
     "autoplay_audio": False, "voice_actor_id": 1, "cache_limit_mb": 256,
+    "strict_meanings": False,
     "last_notification_at": 0,
     "demo_offline": False,
 }
@@ -49,10 +50,18 @@ class Engine:
 
     def max_level(self):
         sub = self.user().get("subscription", {})
+        granted = sub.get("max_level_granted", 0)
+        if type(granted) is not int or not 0 <= granted <= 60:
+            return 0
+        kind = sub.get("type")
+        # WaniKani requires unknown subscription states to behave as free.
+        # Never expand an explicit lower grant while applying an expiry cap.
+        if kind not in ("recurring", "lifetime"):
+            return min(3, granted)
         end = epoch(sub.get("period_ends_at"))
-        if end and self.now() >= end and sub.get("type") == "recurring":
-            return 3
-        return int(sub.get("max_level_granted", 0))
+        if kind == "recurring" and (end is None or self.now() >= end):
+            return min(3, granted)
+        return granted
 
     def settings(self):
         return {**DEFAULTS, **self.store.get("settings", {})}
@@ -86,10 +95,10 @@ class Engine:
     def ensure_study_content(self, subject):
         self.ensure_access(subject)
         data = subject["data"]
-        if not any(m.get("accepted_answer") for m in data.get("meanings", [])):
-            raise UserError("Accepted answers are not cached for this subject. Refresh before continuing; your saved answers are retained.", "content_unavailable")
-        if subject["object"] in ("kanji", "vocabulary") and not any(r.get("accepted_answer") for r in data.get("readings", [])):
-            raise UserError("Accepted readings are not cached for this subject. Refresh before continuing; your saved answers are retained.", "content_unavailable")
+        material = self.store.get("material_draft_" + str(subject["id"]))
+        if material is None:
+            material = (self.store.related("study_material", subject["id"]) or {}).get("data")
+        validate_subject_answers(subject, material)
         if not data.get("characters") and not self.details(subject["id"], False)["images"]:
             raise UserError("The radical image is not cached. Refresh before continuing; your saved answers are retained.", "content_unavailable")
 
@@ -128,39 +137,66 @@ class Engine:
         data = subject["data"]
         material = self.store.related("study_material", int(subject_id))
         draft = self.store.get("material_draft_" + str(subject_id))
+        study_material = draft if draft is not None else (material or {}).get("data")
+        content_error = ""
+        try:
+            validate_subject_answers(subject, study_material)
+        except UserError as error:
+            content_error = str(error)
+        # Display safely shaped values without rewriting the cached resource.
+        # Graded entry points still validate the original subject and material.
+        visible_material = dict(study_material) if isinstance(study_material, dict) else {}
+        synonyms = visible_material.get("meaning_synonyms")
+        visible_material["meaning_synonyms"] = [value for value in synonyms if isinstance(value, str)] if isinstance(synonyms, list) else []
+        for key in ("meaning_note", "reading_note"):
+            if not isinstance(visible_material.get(key), str):
+                visible_material[key] = ""
         assignment = self.store.related("assignment", int(subject_id))
         statistic = self.store.related("review_statistic", int(subject_id))
+        def objects(name):
+            entries = data.get(name)
+            return [item for item in entries if isinstance(item, dict)] if isinstance(entries, list) else []
         def relatives(ids):
             output = []
-            for sid in ids[:30]:
+            for sid in ids[:30] if isinstance(ids, list) else []:
+                if type(sid) is not int:
+                    continue
                 item = self.store.subject(sid)
-                if item and item["data"].get("level", 61) <= self.max_level() and not item["data"].get("hidden_at"):
-                    output.append({"id": sid, "characters": item["data"].get("characters") or "◇", "meaning": next((m["meaning"] for m in item["data"].get("meanings", []) if m.get("primary")), "")})
+                if item and type(item["data"].get("level")) is int and item["data"]["level"] <= self.max_level() and not item["data"].get("hidden_at"):
+                    meanings = item["data"].get("meanings")
+                    output.append({"id": sid, "characters": item["data"].get("characters") if isinstance(item["data"].get("characters"), str) else "◇",
+                        "meaning": next((m["meaning"] for m in meanings if isinstance(m, dict) and m.get("primary") is True
+                          and m.get("accepted_answer") is True and isinstance(m.get("meaning"), str)), "") if isinstance(meanings, list) else ""})
             return output
         audio = []
-        for item in data.get("pronunciation_audios", []):
-            url = item.get("url", "")
+        audio_items = [item for item in objects("pronunciation_audios") if isinstance(item.get("url"), str)]
+        for item in audio_items:
+            url = item["url"]
             rows = self.store.rows("SELECT path FROM media WHERE url=?", (url,))
             if rows and Path(rows[0][0]).is_file():
-                audio.append({"url": Path(rows[0][0]).as_uri(), "actor": item.get("metadata", {}).get("voice_actor_id", 1)})
+                metadata = item.get("metadata")
+                actor = metadata.get("voice_actor_id") if isinstance(metadata, dict) else None
+                audio.append({"url": Path(rows[0][0]).as_uri(), "actor": actor if type(actor) is int else 1})
         audio.sort(key=lambda x: x["actor"] != self.settings()["voice_actor_id"])
         images = []
-        for image in data.get("character_images", []):
-            rows = self.store.rows("SELECT path FROM media WHERE url=?", (image.get("url", ""),))
+        for image in objects("character_images"):
+            if not isinstance(image.get("url"), str):
+                continue
+            rows = self.store.rows("SELECT path FROM media WHERE url=?", (image["url"],))
             if rows and Path(rows[0][0]).is_file():
                 images.append(Path(rows[0][0]).as_uri())
         return {
-            "id": subject["id"], "type": subject["object"], "characters": data.get("characters") or "",
-            "slug": data.get("slug", ""), "level": data.get("level"), "images": images,
-            "meanings": [m["meaning"] for m in data.get("meanings", []) if m.get("accepted_answer")],
-            "readings": [{"reading": r["reading"], "type": r.get("type", ""), "accepted": bool(r.get("accepted_answer"))} for r in data.get("readings", [])],
+            "id": subject["id"], "type": subject["object"], "characters": data.get("characters") if isinstance(data.get("characters"), str) else "",
+            "slug": data.get("slug") if isinstance(data.get("slug"), str) else "", "level": data.get("level"), "images": images,
+            "meanings": [m["meaning"] for m in objects("meanings") if m.get("accepted_answer") is True and isinstance(m.get("meaning"), str)],
+            "readings": [{"reading": r["reading"], "type": r.get("type", ""), "accepted": r.get("accepted_answer") is True} for r in objects("readings") if isinstance(r.get("reading"), str)],
             "meaning_mnemonic": plain(data.get("meaning_mnemonic")), "meaning_hint": plain(data.get("meaning_hint")),
             "reading_mnemonic": plain(data.get("reading_mnemonic")), "reading_hint": plain(data.get("reading_hint")),
-            "sentences": [{"ja": plain(s.get("ja")), "en": plain(s.get("en"))} for s in data.get("context_sentences", [])],
+            "sentences": [{"ja": plain(s.get("ja")), "en": plain(s.get("en"))} for s in objects("context_sentences")],
             "components": relatives(data.get("component_subject_ids", [])) if include_relations else [],
             "related": relatives(data.get("amalgamation_subject_ids", [])) if include_relations else [],
-            "audio": audio, "audio_available": bool(data.get("pronunciation_audios")),
-            "material": draft or (material or {}).get("data", {}), "material_pending": draft is not None,
+            "audio": audio, "audio_available": bool(audio_items), "content_error": content_error,
+            "material": visible_material, "material_pending": draft is not None,
             "pinned": int(subject_id) in self.store.get("pinned_subjects", []),
             "assignment": (assignment or {}).get("data", {}), "statistics": (statistic or {}).get("data", {}),
         }
@@ -261,8 +297,11 @@ class Engine:
                 return self.session_view(session)
             entry = session["queue"][session["index"]]
             subject = self.store.subject(entry["subject_id"])
-            material = self.store.get("material_draft_" + str(entry["subject_id"])) or (self.store.related("study_material", entry["subject_id"]) or {}).get("data", {})
-            feedback = grade(subject, session["part"], str(text), material)
+            material = self.store.get("material_draft_" + str(entry["subject_id"]))
+            if material is None:
+                material = (self.store.related("study_material", entry["subject_id"]) or {}).get("data")
+            feedback = grade(subject, session["part"], str(text), material,
+                strict_meanings=self.settings()["strict_meanings"])
             feedback["answer"] = str(text)[:300]
             feedback["corrected"] = False
             session["draft"] = str(text)[:300]
@@ -480,7 +519,8 @@ class Engine:
                     forecast[hour] += 1
         activity = [dict(r) for r in self.store.rows("""SELECT date(created_at,'localtime') AS day,COUNT(*) AS count
           FROM events WHERE kind IN ('subject_complete','practice_complete') GROUP BY day ORDER BY day DESC LIMIT 35""")]
-        outbox = [{"id": r["id"], "kind": r["kind"], "subject_id": r["subject_id"], "state": r["state"], "detail": r["detail"]} for r in self.store.rows("SELECT * FROM outbox WHERE state NOT IN ('confirmed','discarded') ORDER BY created_at")]
+        from .recovery import snapshot_summary
+        outbox_summary = snapshot_summary(self)
         media = self.store.rows("SELECT COUNT(*),COALESCE(SUM(size),0) FROM media")[0]
         cached_subjects = self.store.rows(f"SELECT COUNT(*) FROM resources WHERE kind IN {SUBJECTS} AND json_extract(body,'$.data.level')<=? AND json_extract(body,'$.data.hidden_at') IS NULL", (self.max_level(),))[0][0]
         session = self.session_view()
@@ -492,9 +532,7 @@ class Engine:
             "reviews": due, "lessons": lessons, "next_reviews_at": stamp(next_at) if next_at else None,
             "forecast": forecast, "level_total": counts[0], "level_passed": counts[1] or 0,
             "activity": activity, "session": session, "paused_graded": bool(graded and graded["phase"] != "complete"),
-            "pending": len([x for x in outbox if x["state"] in ("pending", "inflight", "blocked")]),
-            "attention": len([x for x in outbox if x["state"] in ("uncertain", "conflicted", "blocked")]),
-            "outbox": outbox, "last_sync": self.store.get("last_sync"), "settings": self.settings(),
+            **outbox_summary, "last_sync": self.store.get("last_sync"), "settings": self.settings(),
             "cache": {"files": media[0], "bytes": media[1], "subjects": cached_subjects}, "difficult": self.difficult(), "now": now,
             "credential_storage": self.store.get("credential_storage", "session"),
             "credential_cleanup_needed": bool(self.store.get("credential_may_exist", False)) and self.store.get("credential_storage") in ("session", "disconnected")}

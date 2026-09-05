@@ -67,3 +67,7 @@ omarchy theme set "$wanikani_demo_theme"
 Leave simulated offline mode off and restore any ambient or motion preferences changed for the demonstration. The demo can remain available for exploration. To return to an already connected account, use `omarchy-shell wanikani demo false`.
 
 This demonstration does not certify live-account reliability, cached audio, or the two-week daily-use release gate. Report those separately in the release notes once completed.
+
+## Rules recheck — September 4, 2026 Pacific
+
+The [official news index](https://omarchy.org/news/) and [August 28 competition announcement](https://omarchy.org/news/2026/08/the-first-plugin-competition-winners/) were rechecked during implementation. They still announce future competitions without a next deadline. The [publishing guide](https://plugins.omarchy.org/publish.html) currently requires a public GitHub repository, valid root manifest, README/license, and safe install/removal before listing submission. This repository remains local and unsubmitted.
