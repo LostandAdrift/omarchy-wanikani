@@ -1,5 +1,7 @@
 # What comes next
 
+The first daily-use feedback reprioritized the next iteration around audible pronunciation, explicit reviews versus lessons, and meaningful level progress. Follow [the learning upgrade plan](LEARNING_UPGRADE_PLAN.md) first. The exploratory extensions below remain later proposals.
+
 The current implementation covers the original native study workflow and adds a practice library, batch recaps, kanji comparisons, personal notes in lessons and feedback, a selectable review forecast, quiet recall, and a local reading trail. The next iteration should deepen the learning experience while preserving the short-session habit.
 
 The first reading-trail edition below is implemented; the extensions and other directions remain proposals. Live-account qualification and the two-week daily-use log remain the immediate release work.
