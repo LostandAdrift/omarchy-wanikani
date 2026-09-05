@@ -114,12 +114,15 @@ QtObject {
  id: root
  property var snapshot: ({})
  property var rhythm: null
+ property var manifest: null
+ property var workerVersion: null
  property bool ready: true
  property bool panelOpen: false
  property bool studying: false
  property int calls: 0
  function request() {calls++;throw new Error("Status must use its cached snapshot only")}
-''' + match.group(0) + "\n}\n")
+''' + re.search(r"(?ms)^  function productVersion\(.*?^  \}", source).group(0)
+                + "\n" + match.group(0) + "\n}\n")
             (directory / "tst_Status.qml").write_text(QML.replace("KNOWN_STAGES", json.dumps(sorted(cli.SYNC_STAGES))))
             process = subprocess.run([str(RUNNER), "-input", str(directory)], capture_output=True,
                 text=True, errors="replace", timeout=30,

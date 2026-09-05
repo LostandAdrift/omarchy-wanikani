@@ -193,6 +193,7 @@ class StudyNotesRenderingTests(unittest.TestCase):
                 "  property alias authoredReadingEditor: readingNote\n", 1))
             (qml / "Action.qml").write_text("import QtQuick.Controls\nButton { property string accessibleName: text }\n")
             (qml / "Lookalikes.qml").write_text("import QtQuick\nItem { property var subject; property bool showMeaning; property bool showReading }\n")
+            (qml / "KanjiExamples.qml").write_text("import QtQuick\nItem { property var controller; property var subject }\n")
             common = directory / "qs" / "Commons"
             common.mkdir(parents=True)
             (common / "qmldir").write_text("module qs.Commons\nsingleton Style 1.0 Style.qml\nsingleton Color 1.0 Color.qml\n")

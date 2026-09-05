@@ -70,6 +70,8 @@ Item {
  property string contentAccess: "fixture"
  property string audioContext: ""
  property int audioSubjectId: -1
+ property int audioParentSubjectId: -1
+ property var audioExample: null
  property string audioState: ""
  property string audioNotice: ""
  readonly property int playCount: audio.count

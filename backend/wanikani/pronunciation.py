@@ -89,14 +89,29 @@ def _voice_safe(engine, subject, protection=None):
         and not _readings(subject["data"]).intersection(readings))
 
 
-def _select(engine, subject_id, context, session_id, revision, voice_actor_id, protection=None):
+def _select(engine, subject_id, context, session_id, revision, voice_actor_id, protection=None,
+        parent_subject_id=None, origin_context=None, prepared_example=None):
     if type(subject_id) is not int or subject_id <= 0:
         raise UserError("Choose a valid vocabulary subject.")
-    if context not in ("details", "study", "voice_test"):
+    if context not in ("details", "study", "voice_test", "kanji_example"):
         raise UserError("Choose a pronunciation context.")
+    if context != "kanji_example" and (parent_subject_id is not None or origin_context is not None):
+        raise UserError("A vocabulary example needs its own pronunciation context.")
     if voice_actor_id is not None and (type(voice_actor_id) is not int or not 1 <= voice_actor_id <= 10000):
         raise UserError("Choose a valid recording voice.")
-    subject = engine.store.subject(subject_id)
+    example = None
+    example_sounds = None
+    if context == "kanji_example":
+        from . import kanji_examples
+        try:
+            # Only the locked catalogue pass supplies a prepared selection;
+            # every externally requested status/download authorizes it afresh.
+            subject, example_sounds, example, _ = prepared_example or kanji_examples.selection(
+                engine, subject_id, parent_subject_id, origin_context, session_id, revision)
+        except UserError as error:
+            return _result(subject_id, "error", str(error), error.code), None
+    else:
+        subject = engine.store.subject(subject_id)
     try:
         engine.ensure_access(subject)
     except UserError:
@@ -125,7 +140,7 @@ def _select(engine, subject_id, context, session_id, revision, voice_actor_id, p
         return _result(subject_id, "error", "Choose a learned sample outside paused graded work.", "protected_sample"), None
     if subject["object"] not in ("vocabulary", "kana_vocabulary"):
         return _result(subject_id, "no_recording", "WaniKani supplies pronunciation recordings for vocabulary."), None
-    sounds = media_plan.assets(subject["data"].get("pronunciation_audios"))
+    sounds = example_sounds if example_sounds is not None else media_plan.assets(subject["data"].get("pronunciation_audios"))
     if not sounds:
         return _result(subject_id, "no_recording", "No original pronunciation recording is available for this word."), None
     preferred = voice_actor_id if voice_actor_id is not None else engine.settings()["voice_actor_id"]
@@ -152,6 +167,8 @@ def _select(engine, subject_id, context, session_id, revision, voice_actor_id, p
     rows = engine.store.rows("SELECT path FROM media WHERE url=?", (url,))
     path = available_file(engine.store.path.parent / "media", rows[0][0]) if rows else None
     values = {"voice_actor_id": _actor(chosen), "voice_fallback": fallback}
+    if example is not None:
+        values["example"] = {**example, "pronunciation": kanji_examples.sound(chosen["metadata"]["pronunciation"])}
     if path:
         return _result(subject_id, "ready", "Ready to play.", uri=path.as_uri(), **values), chosen
     if engine.demo or not engine.connected or engine.status == "offline":
@@ -159,9 +176,11 @@ def _select(engine, subject_id, context, session_id, revision, voice_actor_id, p
     return _result(subject_id, "not_cached", "Download this recording to play it and keep it available offline.", **values), chosen
 
 
-def status(engine, subject_id, context="details", session_id=None, revision=None, voice_actor_id=None):
+def status(engine, subject_id, context="details", session_id=None, revision=None, voice_actor_id=None,
+        parent_subject_id=None, origin_context=None):
     with engine.store.lock:
-        return _select(engine, subject_id, context, session_id, revision, voice_actor_id)[0]
+        return _select(engine, subject_id, context, session_id, revision, voice_actor_id,
+            parent_subject_id=parent_subject_id, origin_context=origin_context)[0]
 
 
 def sample(engine, voice_actor_id=None):
@@ -195,11 +214,14 @@ def sample(engine, voice_actor_id=None):
         return fallback or _result(None, "no_recording", "No safe learned sample with this voice is available in the checked cache.")
 
 
-def prepare(sync, subject_id, context="details", session_id=None, revision=None, voice_actor_id=None):
+def prepare(sync, subject_id, context="details", session_id=None, revision=None, voice_actor_id=None,
+        parent_subject_id=None, origin_context=None):
     engine = sync.engine
-    arguments = (subject_id, context, session_id, revision, voice_actor_id)
+    arguments = {"subject_id": subject_id, "context": context, "session_id": session_id,
+        "revision": revision, "voice_actor_id": voice_actor_id,
+        "parent_subject_id": parent_subject_id, "origin_context": origin_context}
     with engine.store.lock:
-        result, chosen = _select(engine, *arguments)
+        result, chosen = _select(engine, **arguments)
         account = (engine.store.get("account_id"), engine.store.get("session_epoch"))
     if result["status"] != "not_cached":
         return result
@@ -207,7 +229,7 @@ def prepare(sync, subject_id, context="details", session_id=None, revision=None,
     try:
         with sync.media_lock:
             with engine.store.lock:
-                result, chosen = _select(engine, *arguments)
+                result, chosen = _select(engine, **arguments)
                 if account != (engine.store.get("account_id"), engine.store.get("session_epoch")):
                     return _result(subject_id, "error", "The account changed. Choose the recording again.", "account_changed")
             if result["status"] != "not_cached":
@@ -218,20 +240,34 @@ def prepare(sync, subject_id, context="details", session_id=None, revision=None,
                 return _result(subject_id, "error", "The cache is still being checked. Try this recording again.", "cache_incomplete")
             if not sync._remove_media(plan.orphans, plan):
                 return _result(subject_id, "error", "Interrupted cache files could not be cleaned. Try again after freeing space.", "cache_cleanup")
+            with engine.store.lock:
+                # Building the cache plan can yield to foreground study. Check
+                # its current authorization once more immediately before IO.
+                if account != (engine.store.get("account_id"), engine.store.get("session_epoch")):
+                    return _result(subject_id, "error", "The account changed. Choose the recording again.", "account_changed")
+                result, chosen = _select(engine, **arguments)
+            if result["status"] != "not_cached":
+                return result
             url = chosen["url"]
             # Keep required radical images ahead of optional pronunciation,
             # and this explicit clip ahead of other optional prefetch content.
             plan._candidate(url, subject_id, "audio", (1, 3, 0), engine.now())
             previous = getattr(sync, "_media_plan", None)
             sync._media_plan = plan
+            def permitted():
+                with engine.store.lock:
+                    if account != (engine.store.get("account_id"), engine.store.get("session_epoch")):
+                        return False
+                    current, selected = _select(engine, **arguments)
+                    return bool(current["status"] in ("ready", "not_cached") and selected and selected["url"] == url)
             try:
-                outcome = sync.download_media(url)
+                outcome = sync.download_media(url, permitted=permitted)
             finally:
                 sync._media_plan = previous
             with engine.store.lock:
                 if account != (engine.store.get("account_id"), engine.store.get("session_epoch")):
                     return _result(subject_id, "error", "The account changed. Choose the recording again.", "account_changed")
-                current = status(engine, *arguments)
+                current = status(engine, **arguments)
             if current["status"] in ("ready", "error", "no_recording", "offline"):
                 return current
             if outcome == "skipped_budget":

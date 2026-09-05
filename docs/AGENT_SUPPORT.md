@@ -87,6 +87,7 @@ Status now includes optional cached operational sections. Reading them starts no
 
 | Section | Meaning |
 |---|---|
+| `versions` | Optional `plugin` from the loaded service's injected manifest and `worker` from its latest ready event. Each is a validated product version or `null`; worker exit clears its version. Older services may leave the whole section `null`. These are neither a Git revision nor proof that every nested QML component was reloaded. |
 | `readiness` | Last-check `complete`, `checking`, and `checked_at`, with separate `reviews`, `lessons`, and `upcoming_reviews` groups. Each group reports `total`, `checked`, `ready`, required `missing_text`/`missing_images`, optional `audio_total`/`audio_cached`, and `total_complete`. Upcoming means the checked next 24 hours. |
 | `sync` | Cached allowlisted `stage`, `active`, `completed`, and optional `total`. A stage count is not account-wide study history; unknown stages become `unknown`. No freeform error message is exposed. |
 | `outbox_counts` | Current local counts for pending, in-flight, confirmed, conflicted, uncertain, blocked, and discarded operations. Confirmed is not a count confirmed today. |
@@ -95,6 +96,8 @@ Status now includes optional cached operational sections. Reading them starts no
 When `checking` is true, counts can describe the previous check. Incomplete totals are not proof that missing items do not exist. Even a complete check describes its `checked_at` timestamp; current access and study eligibility are rechecked when used. Missing optional pronunciation does not by itself block graded text reviews. These groups do not measure the separate familiar-word listening pool, and `listening_due` remains unknown.
 
 Doctor's `healthy` flag continues to describe local transport availability. A separate `guidance` list contains stable codes and static suggested actions based on cached evidence: inspect uncertain work in Recovery, review account access in Settings, wait for an active synchronization or cache check, or inspect required/optional cache gaps. Guidance neither changes the exit code of a healthy transport nor executes a repair, opens a view, refreshes the account, downloads audio, or deletes files. An explicit account refresh may submit previously completed pending work, so it is never used as an automatic diagnostic probe.
+
+When both product versions are known and differ, `runtime_version_mismatch` suggests an incomplete hot reload. It is separate from transport health and does not establish which version is newer. Wait until study is closed and the desktop is unlocked before a normal plugin update or shell restart; diagnostics never perform either action. Equal versions do not prove that all nested components are current, and a missing version is not replaced with zero or the helper's own version.
 
 | Exit | Meaning | Next action |
 |---|---|---|

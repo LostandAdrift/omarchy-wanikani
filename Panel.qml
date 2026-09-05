@@ -52,6 +52,8 @@ Item {
   property int audioSequence: 0
   property string audioContext: ""
   property int audioSubjectId: -1
+  property int audioParentSubjectId: -1
+  property var audioExample: null
   property string audioState: ""
   property string audioNotice: ""
   readonly property var snapshot: service ? service.snapshot : ({
@@ -319,10 +321,19 @@ Item {
     var studyRevision = args.revision
     audioSubjectId = args.subject_id || -1
     audioContext = args.context || "details"
+    audioParentSubjectId = audioContext === "kanji_example" ? args.parent_subject_id : -1
     audioState = "loading"
     audioNotice = "Checking pronunciation…"
     function current() {
-      return root.audioContextCurrent(sequence, navigation, access, studyId, studyRevision)
+      if (!root.audioContextCurrent(sequence, navigation, access, studyId, studyRevision))
+        return false
+      if (args.context !== "kanji_example")
+        return true
+      var parent = root.kanjiExampleArgs({
+        id: args.parent_subject_id,
+        type: "kanji"
+      })
+      return parent && parent.context === args.origin_context && parent.session_id === args.session_id && parent.revision === args.revision
     }
     function receive(ok, data, message) {
       if (!current())
@@ -334,6 +345,11 @@ Item {
       }
       root.audioSubjectId = data.subject_id || -1
       if (data.status === "not_cached") {
+        if (args.context === "kanji_example" && data.subject_id !== args.subject_id) {
+          root.audioState = "failed"
+          root.audioNotice = "This example changed. Open the vocabulary recordings again."
+          return
+        }
         args.subject_id = data.subject_id
         root.audioNotice = "Downloading this recording for offline playback…"
         root.service.request("pronunciation_prepare", args, function (prepared, clip, error) {
@@ -346,6 +362,14 @@ Item {
           }
         })
       } else if (data.status === "ready" && data.uri) {
+        if (args.context === "kanji_example") {
+          if (!data.example || data.example.parent_subject_id !== args.parent_subject_id || data.subject_id !== args.subject_id) {
+            root.audioState = "failed"
+            root.audioNotice = "This example changed. Open the vocabulary recordings again."
+            return
+          }
+          root.audioExample = data.example
+        }
         root.audioNotice = data.voice_fallback ? "Using another downloaded voice for this word." : "Recording ready offline"
         audio.source = data.uri
         audio.play()
@@ -377,6 +401,38 @@ Item {
       voice_actor_id: actor
     }, "pronunciation_sample")
   }
+  function kanjiExampleArgs(parent) {
+    if (!parent || parent.type !== "kanji" || !opened || !service || !service.ready || service.locked)
+      return null
+    var args = {
+      parent_subject_id: parent.id
+    }
+    if (view === "study") {
+      if (!session || !session.subject || session.subject.id !== parent.id)
+        return null
+      var discovery = session.phase === "lesson" && session.lesson_flow && ["reading", "context"].indexOf(session.lesson_flow.step) >= 0
+      var revealed = session.phase === "feedback" && session.part === "reading" && session.feedback && !session.feedback.retry
+      if (!discovery && !revealed)
+        return null
+      args.context = "study"
+      args.session_id = session.id
+      args.revision = session.revision
+    } else if (view === "lookup" && detail && detail.id === parent.id) {
+      args.context = "details"
+    } else {
+      return null
+    }
+    return args
+  }
+  function playKanjiExample(word, parent) {
+    var args = kanjiExampleArgs(parent)
+    if (!args || !word || !Number.isInteger(word.subject_id) || word.subject_id <= 0)
+      return
+    args.subject_id = word.subject_id
+    args.origin_context = args.context
+    args.context = "kanji_example"
+    requestAudio(args)
+  }
   function stopAudio() {
     if (audioContext === "listening" && audioState === "loading" && listenBusy) {
       listenSequence++
@@ -386,6 +442,8 @@ Item {
     if (audio)
       audio.stop()
     audioSubjectId = -1
+    audioParentSubjectId = -1
+    audioExample = null
     audioContext = ""
     audioState = ""
     audioNotice = ""

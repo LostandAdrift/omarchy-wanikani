@@ -248,6 +248,8 @@ Item {
   property bool searching: false
   property int audioSequence: 0
   property int audioSubjectId: -1
+ property int audioParentSubjectId: -1
+ property var audioExample: null
   property string audioContext: ""
   property string audioState: ""
   property string audioNotice: ""

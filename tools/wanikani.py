@@ -28,6 +28,7 @@ SYNC_STAGES = STATUSES | {"idle", "account", "resets", "subjects", "assignments"
     "level_progressions", "spaced_repetition_systems", "summary", "unlocks", "reconcile", "submitting", "media", "complete", "cancelled"}
 MAX_SAFE_INTEGER = 2**53 - 1
 MAX_RESPONSE = 65536
+PRODUCT_VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
 
 
 class CliError(Exception):
@@ -70,6 +71,7 @@ def capabilities():
             "readiness": "Cached last-check counts for due reviews, lessons and the next 24 hours. Partial or checking counts do not prove current offline availability; audio is optional for graded study.",
             "sync": "Cached synchronization stage and counts; no account request is initiated and no freeform error is returned.",
             "cache": "Registered cache file/byte counts and configured limit, not a fresh filesystem measurement or proof of playable audio.",
+            "versions": "Reported loaded plugin manifest and worker product versions, not a Git revision or proof that every nested QML component was reloaded. Missing versions remain unknown.",
             "doctor.guidance": "Static suggestions from cached aggregates; separate from transport health and never executed automatically.",
             "null": "Unavailable in the installed service, not zero."},
         "exit_codes": {"0": "Read succeeded or action dispatch accepted.", "2": "Invalid arguments.",
@@ -167,6 +169,12 @@ def _timestamp(value):
     return value
 
 
+def _product_version(value):
+    if value is not None and (not isinstance(value, str) or len(value) > 64 or PRODUCT_VERSION.fullmatch(value) is None):
+        raise CliError("invalid_response", "A product version is malformed.")
+    return value
+
+
 def status(timeout=5):
     value = _json(_call(["wanikani", "status"], timeout))
     if not isinstance(value, dict) or not isinstance(value.get("status"), str):
@@ -174,6 +182,10 @@ def status(timeout=5):
     if "schemaVersion" in value and (type(value["schemaVersion"]) is not int or value["schemaVersion"] != 1):
         raise CliError("incompatible_version", "This plugin uses an unsupported status protocol.", 4, "Update the helper and plugin together.")
     result = {"status": value["status"] if value["status"] in STATUSES else "unknown"}
+    result["versions"] = None
+    if value.get("versions") is not None:
+        versions = _object(value["versions"])
+        result["versions"] = {key: _product_version(versions.get(key)) for key in ("plugin", "worker")}
     for key in COUNTS:
         result[key] = _count(value.get(key))
     for key in BOOLS:
@@ -286,6 +298,9 @@ def _guidance(status):
     def add(code, action):
         result.append({"code": code, "action": action})
 
+    versions = status.get("versions") or {}
+    if versions.get("plugin") is not None and versions.get("worker") is not None and versions["plugin"] != versions["worker"]:
+        add("runtime_version_mismatch", "The loaded plugin and worker report different versions; a hot reload may be incomplete. Wait until study is closed and the desktop is unlocked before a normal plugin update or shell restart. This diagnostic performs neither action.")
     counts = status.get("outbox_counts") or {}
     if (counts.get("uncertain") or 0) > 0:
         add("uncertain_work", "Open Recovery to inspect uncertain submissions. Never force or blindly repeat a write.")

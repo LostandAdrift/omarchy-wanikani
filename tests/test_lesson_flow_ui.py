@@ -280,7 +280,7 @@ Rectangle {
 def build(directory):
     qml = directory / "qml"
     qml.mkdir()
-    for name in ("Study", "SubjectDetails", "Pronunciation", "Lookalikes", "Label", "Card", "Action",
+    for name in ("Study", "SubjectDetails", "Pronunciation", "KanjiExamples", "Lookalikes", "Label", "Card", "Action",
                  "ActivationGuard", "SubjectGlyph", "JapaneseText", "RadicalImage"):
         shutil.copyfile(ROOT / "qml" / (name + ".qml"), qml / (name + ".qml"))
     for name in ("Theme.mjs", "UnicodeText.mjs"):

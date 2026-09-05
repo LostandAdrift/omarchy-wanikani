@@ -161,6 +161,7 @@ class Worker:
 
     def prepare_pronunciation(self, request_id, args):
         """Fetch an explicitly requested clip without blocking answers or API reads."""
+        arguments = self.pronunciation_args(args)
         if not self.audio_job_lock.acquire(blocking=False):
             self.reply_error(request_id, UserError("Another recording is downloading. Try again shortly.", "busy"))
             return
@@ -173,7 +174,7 @@ class Worker:
         def run():
             try:
                 from wanikani.pronunciation import prepare
-                value = prepare(synchronizer, **self.pronunciation_args(args))
+                value = prepare(synchronizer, **arguments)
                 if not self.stopping:
                     self.emit({"v": 1, "id": request_id, "ok": True, "data": value})
             except UserError as error:
@@ -194,9 +195,22 @@ class Worker:
 
     @staticmethod
     def pronunciation_args(args):
-        return {"subject_id": args.get("subject_id"), "context": args.get("context", "details"),
+        allowed = {"subject_id", "context", "session_id", "revision", "voice_actor_id"}
+        if args.get("context") == "kanji_example":
+            allowed |= {"parent_subject_id", "origin_context"}
+            required = {"subject_id", "context", "parent_subject_id", "origin_context"}
+            if args.get("origin_context") == "study":
+                required |= {"session_id", "revision"}
+            if not required <= set(args):
+                raise UserError("Choose the kanji's current whole-word recording context.")
+        if not args or set(args) - allowed:
+            raise UserError("Choose only the supported pronunciation options.")
+        result = {"subject_id": args.get("subject_id"), "context": args.get("context", "details"),
             "session_id": args.get("session_id"), "revision": args.get("revision"),
             "voice_actor_id": args.get("voice_actor_id")}
+        if args.get("context") == "kanji_example":
+            result.update(parent_subject_id=args["parent_subject_id"], origin_context=args["origin_context"])
+        return result
 
     def prepare_listening(self, request_id):
         """Explicit cache preparation shares media ownership, never study state."""
@@ -430,6 +444,9 @@ class Worker:
             from wanikani.recovery import catalogue
             result = catalogue(self.engine, state=args.get("state", "open"), kind=args.get("kind", "all"),
                 offset=args.get("offset", 0), limit=args.get("limit", 30))
+        elif method == "kanji_examples":
+            from wanikani.kanji_examples import catalogue
+            result = catalogue(self.engine, args)
         elif method == "pronunciation":
             from wanikani.pronunciation import status
             result = status(self.engine, **self.pronunciation_args(args))
@@ -600,7 +617,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "progress", "learning_insights", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "progress", "learning_insights", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

@@ -27,6 +27,7 @@ Item {
     })
   property var ambientItems: []
   property bool ready: false
+  property var workerVersion: null
   property bool panelOpen: false
   property bool studying: false
   property string error: ""
@@ -156,6 +157,12 @@ Item {
     }) + "\n")
     return id
   }
+  function productVersion(value) {
+    if (typeof value !== "string" || value.length > 64)
+      return null
+    var match = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(value)
+    return match && match[0] === value ? value : null
+  }
   function receive(line) {
     var message
     try {
@@ -167,6 +174,7 @@ Item {
     if (message.v !== 1)
       return
     if (message.event === "ready") {
+      workerVersion = productVersion(message.data ? message.data.version : null)
       stateOrder = SessionState.workerRestart(ordering())
       ready = true
       considerNotification("startup")
@@ -392,6 +400,7 @@ Item {
       }
     }
     onExited: {
+      root.workerVersion = null
       root.ready = false
       root.error = "The study service stopped. Reconnecting to your saved session…"
       var pending = root.callbacks
@@ -598,6 +607,10 @@ Item {
       }
       return JSON.stringify({
         schemaVersion: 1,
+        versions: {
+          plugin: root.productVersion(root.manifest ? root.manifest.version : null),
+          worker: root.productVersion(root.workerVersion)
+        },
         ready: root.ready,
         connected: root.snapshot.connected === true,
         demo: root.snapshot.demo === true,

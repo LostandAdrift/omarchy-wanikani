@@ -24,6 +24,7 @@ RUNTIME_FILES = {"manifest.json", "Service.qml", "Panel.qml", "LICENSE"}
 REQUIRED_RUNTIME = ("manifest.json", "Service.qml", "Panel.qml", "backend/worker.py",
     "backend/wanikani/listening.py", "backend/wanikani/lessons.py", "backend/wanikani/reminders.py",
     "backend/wanikani/listening_preparation.py", "backend/wanikani/lesson_flow.py",
+    "backend/wanikani/kanji_examples.py", "qml/KanjiExamples.qml",
     "backend/wanikani/insights.py", "qml/LearningActivity.qml",
     "qml/Listening.qml", "qml/StudyOverview.qml", "qml/StudyRhythm.qml")
 
@@ -1163,7 +1164,7 @@ def latency(run, samples=10):
 
 def require_unlocked_desktop():
     state = json.loads(command(["omarchy-shell", "lock", "status"]))
-    keys = ("locked", "requested", "pending", "sessionLocked")
+    keys = ("locked", "requested", "pending", "sessionLocked", "secure")
     if not isinstance(state, dict) or any(type(state.get(key)) is not bool for key in keys):
         raise RuntimeError("Native QA is deferred: the shell lock state is unavailable.")
     if any(state[key] for key in keys):

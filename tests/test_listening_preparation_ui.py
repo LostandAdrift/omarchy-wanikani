@@ -266,12 +266,13 @@ def build_adapter(directory):
     access = re.search(r"(?m)^  readonly property string contentAccess:.*$", source).group(0)
     exited = re.search(r"(?ms)^    onExited: \{(.*?)^    \}", source).group(1)
     methods = "\n".join(panel_fixture.function(source, name) for name in
-        ("ordering", "applySnapshot", "applySession", "request", "receive", "prepareListening", "cancelListeningPreparation"))
+        ("ordering", "applySnapshot", "applySession", "request", "productVersion", "receive", "prepareListening", "cancelListeningPreparation"))
     (directory / "ServiceCore.qml").write_text('''import QtQuick
 import "SessionState.mjs" as SessionState
 Item {
  id: root
  property bool ready: false
+ property var workerVersion: null
  property bool locked: false
  property bool studying: false
  property bool panelOpen: false

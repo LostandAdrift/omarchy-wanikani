@@ -445,6 +445,12 @@ ColumnLayout {
       showMeaning: root.session && (root.session.phase === "lesson" || root.session.part === "meaning")
       showReading: root.session && (root.session.phase === "lesson" || root.session.part === "reading")
     }
+    KanjiExamples {
+      Layout.fillWidth: true
+      controller: root.controller
+      subject: root.subject
+      visible: root.feedback && root.session && root.session.part === "reading" && root.session.feedback && root.session.feedback.correct && !root.session.feedback.retry && root.subject && root.subject.type === "kanji"
+    }
     Pronunciation {
       Layout.fillWidth: true
       controller: root.controller

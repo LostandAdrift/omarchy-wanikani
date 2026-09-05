@@ -210,6 +210,7 @@ class InputThemeRenderingTests(unittest.TestCase):
                 'Crab':'property bool animate:false;property bool celebrating:false',
                 'SessionRecap':'property var controller;property var session',
                 'Pronunciation':'property var controller;property var subject',
+                'KanjiExamples':'property var controller;property var subject',
                 'Lookalikes':'property var subject;property bool showMeaning;property bool showReading',
                 'ReadingTrail':'property var controller',
                 'VoiceChoices':'property var controller',

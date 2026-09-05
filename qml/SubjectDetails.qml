@@ -283,6 +283,12 @@ ColumnLayout {
       text: root.readingNoteText
     }
   }
+  KanjiExamples {
+    Layout.fillWidth: true
+    visible: root.showReading && (root.sectionVisible("reading") || root.sectionVisible("context")) && root.subject && root.subject.type === "kanji"
+    controller: root.controller
+    subject: root.subject
+  }
   Pronunciation {
     Layout.fillWidth: true
     visible: root.showReading && root.sectionVisible("reading") && root.subject && root.subject.audio_available

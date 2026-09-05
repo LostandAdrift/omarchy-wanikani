@@ -161,7 +161,8 @@ finally:
                 qa.cleanup({"id": qa.PRODUCTION_ID})
 
     def test_locking_or_unknown_desktop_defers_hosted_installation(self):
-        for state in ({'locked': True, 'requested': True, 'pending': True, 'sessionLocked': False}, {}):
+        for state in ({'locked': True, 'requested': True, 'pending': True, 'sessionLocked': False, 'secure': True},
+                {'locked': False, 'requested': False, 'pending': False, 'sessionLocked': False, 'secure': True}, {}):
             with self.subTest(state=state), patch.object(qa, 'command', return_value=json.dumps(state)) as command:
                 with self.assertRaisesRegex(RuntimeError, 'deferred'):
                     qa.hosted(self.record)
@@ -177,7 +178,8 @@ finally:
             installed.mkdir(parents=True)
             marker = installed / ".native-qa.json"
             marker.write_text(json.dumps(run))
-            for state in ({"locked": True, "requested": True, "pending": True, "sessionLocked": False}, {}):
+            for state in ({"locked": True, "requested": True, "pending": True, "sessionLocked": False, "secure": True},
+                    {"locked": False, "requested": False, "pending": False, "sessionLocked": False, "secure": True}, {}):
                 with self.subTest(state=state), patch.object(Path, "home", return_value=home), \
                         patch.object(qa, "command", return_value=json.dumps(state)) as command:
                     with self.assertRaisesRegex(RuntimeError, "cleanup is deferred"):
@@ -185,7 +187,7 @@ finally:
                     command.assert_called_once_with(["omarchy-shell", "lock", "status"])
                     self.assertEqual("cleanup-deferred", json.loads((Path(run["root"]) / "run.json").read_text())["status"])
                     self.assertEqual({"id": run["id"], "root": run["root"]}, json.loads(marker.read_text()))
-            unlocked = {key: False for key in ("locked", "requested", "pending", "sessionLocked")}
+            unlocked = {key: False for key in ("locked", "requested", "pending", "sessionLocked", "secure")}
             with patch.object(Path, "home", return_value=home), \
                     patch.object(qa, "command", return_value=json.dumps(unlocked)) as command:
                 qa.cleanup(run)
