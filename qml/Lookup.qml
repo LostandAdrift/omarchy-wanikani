@@ -21,7 +21,31 @@ ColumnLayout {
   }
   spacing: Style.space(14)
   function focusInput() {
-    searchField.forceActiveFocus()
+    if (controller.detail)
+      detailBack.forceActiveFocus(Qt.TabFocusReason)
+    else
+      searchField.forceActiveFocus()
+  }
+  function togglePin() {
+    var subject = controller.detail
+    if (!active || !subject)
+      return
+    var id = subject.id
+    var access = controller.contentAccess
+    var navigation = controller.navigationSequence
+    var guarded = controller.progressReturn === true
+    var context = controller.progressContext
+    controller.call("pin", {
+      subject_id: id,
+      enabled: !subject.pinned
+    }, function (ok, data) {
+      if (!root || !ok || !root.active || !root.controller.detail || root.controller.detail.id !== id || root.controller.contentAccess !== access || root.controller.navigationSequence !== navigation || (root.controller.progressReturn === true) !== guarded || (guarded && root.controller.progressContext !== context))
+        return
+      if (guarded)
+        root.controller.showProgressSubject(id)
+      else
+        root.controller.detail = data
+    })
   }
   function refreshWhenActive() {
     var expected = controller.searchSequence
@@ -32,6 +56,8 @@ ColumnLayout {
     })
   }
   function editSearch() {
+    if (typeof controller.progressReturn !== "undefined")
+      controller.progressReturn = false
     controller.detail = null
     var points = UnicodeText.characters(searchField.text)
     controller.queryTruncated = points.length > 256
@@ -230,10 +256,16 @@ ColumnLayout {
     visible: root.controller.detail !== null
     spacing: Style.space(14)
     Action {
-      text: "← Back to results"
+      id: detailBack
+      objectName: "lookup-detail-back"
+      text: root.controller.progressReturn === true ? "← Back to progress" : "← Back to results"
       onClicked: {
-        root.controller.detail = null
-        root.focusInput()
+        if (root.controller.progressReturn === true)
+          root.controller.returnToProgress()
+        else {
+          root.controller.detail = null
+          root.focusInput()
+        }
       }
     }
     SubjectGlyph {
@@ -251,13 +283,7 @@ ColumnLayout {
     }
     Action {
       text: root.controller.detail && root.controller.detail.pinned ? "Remove from difficult items" : "Keep in difficult items"
-      onClicked: root.controller.call("pin", {
-        subject_id: root.controller.detail.id,
-        enabled: !root.controller.detail.pinned
-      }, function (ok, data) {
-        if (ok)
-          root.controller.detail = data
-      })
+      onClicked: root.togglePin()
     }
     SubjectDetails {
       Layout.fillWidth: true

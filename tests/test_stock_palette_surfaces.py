@@ -175,6 +175,13 @@ PROGRESS_TEST = r'''
       screen=pageComponent.createObject(parent);verify(screen!==null);tryVerify(function(){return screen.page.items.length===24})
       var saved=JSON.stringify(screen.page);var requests=service.requests.length
       applyPalette(data);checkText(screen,data.tag+" progress");checkButtons(screen,data.tag+" progress")
+      var category=findChild(screen,"progress-group-apprentice");verify(category!==null)
+      category.forceActiveFocus();wait(140)
+      var categorySurface=Theme.composite(category.color,category.surfaceColor)
+      for(var role of ["label","count"]){
+        var categoryText=findChild(screen,"progress-group-"+role+"-apprentice")
+        verify(Theme.contrast(categoryText.color,categorySurface)>=4.5,data.tag+" focused category "+role+" follows its actual native fill")
+      }
       checkText(home,data.tag+" dashboard level target");checkButtons(home,data.tag+" dashboard level target")
       var meter=findChild(home,"levelPassingMeter");var filled=meter.children[0]
       var meterContrast=Theme.contrast(filled.color,meter.color)
@@ -203,7 +210,7 @@ def source_for(name):
 def build(directory, name):
     study.build(directory)
     (directory / "tst_LessonFlow.qml").unlink()
-    for component in ("Listening", "LevelProgress", "Progress", "LevelHistory"):
+    for component in ("Listening", "LevelProgress", "Progress", "SrsExplorer", "LevelHistory"):
         shutil.copyfile(ROOT / "qml" / (component + ".qml"), directory / "qml" / (component + ".qml"))
     pure_native_style(directory)
     (directory / "tst_StockPalette.qml").write_text(source_for(name))

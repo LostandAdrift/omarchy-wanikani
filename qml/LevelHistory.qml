@@ -24,6 +24,9 @@ ColumnLayout {
   }))
   spacing: Style.space(12)
 
+  function focusInput() {
+    historyRefresh.forceActiveFocus(Qt.TabFocusReason)
+  }
   function invalidate(resetPage) {
     serial++
     report = null
@@ -143,6 +146,7 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: Style.space(8)
     Action {
+      id: historyRefresh
       objectName: "history-refresh"
       text: root.loading ? "Reading history…" : root.error ? "Retry history" : "Refresh history"
       enabled: root.active && !root.loading

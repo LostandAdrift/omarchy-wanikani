@@ -18,6 +18,8 @@ That is a shortened, authored example. Actual status also includes supported agg
 
 When supplied by the installed service, `learning_progress` reports the current level's `passed`, `required`, and `remaining` counts with completeness and pending/attention flags. For example, 24 passed of 27 required means three more are needed; incomplete cache data leaves the requirement unknown. `saved_sessions` exposes only review/lesson/practice presence. `panel_open` and `studying` describe native UI state. `reminders` exposes its suppression status, next opportunity, and remaining daily budget. Optional `last_sync` and `next_reviews_at` are validated ISO timestamps. These fields support both learning suggestions and an operational handoff without exposing personal study content.
 
+The Progress view's **SRS explorer** drills into confirmed current Apprentice/Guru/etc. groups across levels. Native type/level/substage filters and pagination are preserved when returning from details. These cached counts can be partial and include protected subjects; a pending result does not predict its next stage. The helper opens Progress but does not export the private catalogue, raw detail records or notes. Use [the Explorer scope](SRS_EXPLORER.md) when interpreting the native view.
+
 For account milestones, open Progress and choose **Level history**. It shows separate recorded visits and dated passing/burned milestones from the accessible account cache. Older history can be absent even after synchronization completes. **Activity** remains the separate record of work done in this client. The helper does not export individual history records or submit their private worker requests; see [history scope](LEVEL_HISTORY.md).
 
 ## Optional agent playbook

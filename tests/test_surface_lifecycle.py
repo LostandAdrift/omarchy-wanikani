@@ -59,6 +59,7 @@ Item {
  property string query: ""
  property bool queryTruncated: false
  property var detail: null
+ property bool progressReturn: false
  property var results: []
  property string searchType: "all"
  property string searchState: "all"

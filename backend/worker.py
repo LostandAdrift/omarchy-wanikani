@@ -552,6 +552,18 @@ class Worker:
             if not {"session_id", "handle", "text", "cursor"} <= set(args) or set(args) - {"session_id", "handle", "text", "cursor", "preedit"}:
                 raise UserError("Use only the current dictation draft fields.", "invalid_request")
             result = dictation.draft(self.engine, args["session_id"], args["handle"], args["text"], args["cursor"], args.get("preedit", ""))
+        elif method == "srs_catalogue":
+            from wanikani.srs_explorer import catalogue
+            if set(args) - {"group", "subject_type", "level", "stage", "order", "offset", "limit"}:
+                raise UserError("Choose only the cached SRS explorer filters.", "invalid_request")
+            result = catalogue(self.engine, group=args.get("group", "apprentice"),
+                subject_type=args.get("subject_type"), level=args.get("level"), stage=args.get("stage"),
+                order=args.get("order", "level"), offset=args.get("offset", 0), limit=args.get("limit", 24))
+        elif method == "progress_details":
+            from wanikani.srs_explorer import guarded_details
+            if set(args) != {"subject_id"}:
+                raise UserError("Choose one subject from current cached progress.", "invalid_request")
+            result = guarded_details(self.engine, args["subject_id"])
         elif method == "progress":
             from wanikani.progress import overview
             result = overview(self.engine)
@@ -653,7 +665,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "dictation_state", "dictation", "dictation_media", "dictation_draft", "progress", "learning_insights", "level_history", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "dictation_state", "dictation", "dictation_media", "dictation_draft", "progress", "srs_catalogue", "progress_details", "learning_insights", "level_history", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

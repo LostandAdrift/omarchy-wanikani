@@ -67,7 +67,8 @@ Rectangle {
     property var openedIds: []
     property int explored: 0
     readonly property var snapshot: service ? service.snapshot : ({})
-    function showSubject(id) { openedIds=openedIds.concat([id]) }
+    property var progressNavigation: ({})
+    function showProgressSubject(id) { openedIds=openedIds.concat([id]) }
     function call(method,args,callback) { if(method!=="sync") throw new Error("Unexpected mutation"); if(callback)callback(true,{}) }
   }
   TestCase {
@@ -85,7 +86,7 @@ Rectangle {
       service.ready=true;service.locked=false;service.hold=false;service.protectedWord=false;service.malformed=false
       service.requests=[];service.pending=[]
       service.snapshot={level:2,max_level:60,last_sync:"fixture",session_revision:1,session_epoch:"fixture",pending:0,attention:0}
-      owner.service=service;owner.opened=true;owner.contentAccess="authored-account";owner.openedIds=[];owner.explored=0
+      owner.service=service;owner.opened=true;owner.contentAccess="authored-account";owner.openedIds=[];owner.explored=0;owner.progressNavigation=({})
       Color.background="#ffffff";Color.foreground="#202020";Color.accent="#006699"
       home.progress=service.current();home.width=350
     }
@@ -123,6 +124,28 @@ Rectangle {
       screen.openSubject(1);screen.openSubject(9000);compare(owner.openedIds,[1,9000])
       screen.openSubject(99999);compare(owner.openedIds.length,2)
     }
+    function test_filter_and_page_changes_reuse_the_same_overview() {
+      make();settle();screen.chooseType("vocabulary");settle()
+      screen.changePage(24);settle();screen.chooseLevel(1);settle()
+      compare(service.requests.map(function(request){return request.method}),["progress","level_board","level_board","level_board","level_board"])
+      service.snapshot=Object.assign({},service.snapshot,{syncing:true,status:"syncing"})
+      settle();compare(service.requests.slice(-2).map(function(request){return request.method}),["progress","level_board"])
+    }
+    function test_old_reply_cannot_clear_newer_loading_or_overwrite_its_page() {
+      make();settle();service.hold=true
+      screen.chooseType("radical");tryVerify(function(){return service.pending.length===1})
+      screen.chooseType("vocabulary");tryVerify(function(){return service.pending.length===2})
+      verify(screen.loading);service.reply();verify(screen.loading);compare(screen.page.items.length,0)
+      service.reply();settle();compare(screen.page.subject_type,"vocabulary")
+    }
+    function test_saved_board_selection_restores_after_detail_view_is_destroyed() {
+      make();settle();screen.chooseLevel(1);settle();screen.chooseType("radical");settle()
+      screen.changePage(24);settle();var saved=JSON.stringify(owner.progressNavigation)
+      screen.destroy();screen=null;wait(1);service.requests=[]
+      make();settle();compare(screen.page.offset,24);compare(screen.page.subject_type,"radical");compare(screen.page.level,1)
+      compare(JSON.stringify(owner.progressNavigation),saved)
+      compare(service.requests.map(function(request){return request.method}),["progress","level_board"])
+    }
     function test_protected_subjects_have_no_answer_text_or_open_action() {
       service.protectedWord=true;make();settle()
       verify(screen.page.items.every(function(item){return !item.can_open && item.meaning===""}))
@@ -141,7 +164,7 @@ Rectangle {
       compare(service.pending.length,1);compare(service.pending[0].method,"level_board")
       screen.chooseType("vocabulary");service.reply();compare(screen.page.items.length,0)
       service.hold=false;settle();compare(screen.page.subject_type,"vocabulary")
-      compare(service.requests.length,4)
+      compare(service.requests.length,3)
     }
     function test_access_and_saved_session_changes_clear_answers_immediately() {
       make();settle();service.hold=true
@@ -185,11 +208,11 @@ class LearningProgressRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("LevelProgress.qml", "Progress.qml", "LevelHistory.qml", "Card.qml", "Label.qml", "Theme.mjs"):
+            for name in ("LevelProgress.qml", "Progress.qml", "SrsExplorer.qml", "JapaneseText.qml", "LevelHistory.qml", "Card.qml", "Label.qml", "Theme.mjs"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
             (qml / "Action.qml").write_text('import QtQuick\nimport QtQuick.Controls\nButton {\n'
                 'property bool selected: false\nproperty string accessibleName: text\n'
-                'property color surfaceColor: "white"\nproperty color textColor: "black"\n'
+                'property color surfaceColor: "white"\nproperty color color: "transparent"\nproperty color textColor: "black"\n'
                 'Accessible.name: accessibleName\nAccessible.ignored: !visible\n}\n')
             common = directory / "qs" / "Commons"
             common.mkdir(parents=True)

@@ -184,7 +184,7 @@ def source():
 def build(directory):
     foundation.build(directory)
     (directory / "tst_LessonFlow.qml").unlink()
-    for name in ("Progress", "LevelHistory", "LevelProgress"):
+    for name in ("Progress", "SrsExplorer", "LevelHistory", "LevelProgress"):
         shutil.copyfile(ROOT / "qml" / (name + ".qml"), directory / "qml" / (name + ".qml"))
     palettes.pure_native_style(directory)
     (directory / "tst_LevelHistory.qml").write_text(source())

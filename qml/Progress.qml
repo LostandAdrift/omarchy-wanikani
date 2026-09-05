@@ -6,8 +6,12 @@ import "Theme.mjs" as Theme
 ColumnLayout {
   id: root
   required property var controller
+  readonly property var service: controller.service
   property int selectedLevel: 0
-  property bool historyOpen: false
+  property string section: "subjects"
+  readonly property bool historyOpen: section === "history"
+  readonly property bool explorerOpen: section === "explorer"
+  property var explorerNavigation: ({})
   property string subjectType: ""
   property int offset: 0
   readonly property int pageSize: 24
@@ -23,10 +27,12 @@ ColumnLayout {
   property bool dirty: true
   property bool initialized: false
   property int serial: 0
+  property int fetchOwner: -1
+  property string overviewContext: ""
   property string notice: ""
   readonly property string contentAccess: controller.contentAccess || ""
-  readonly property bool active: visible && !historyOpen && controller.opened && controller.service && controller.service.ready && !controller.service.locked
-  readonly property string contextKey: JSON.stringify([controller.contentAccess || "", controller.snapshot.last_sync, controller.snapshot.session_epoch, controller.snapshot.session_revision, controller.snapshot.pending, controller.snapshot.attention, controller.snapshot.level])
+  readonly property bool active: visible && !historyOpen && !explorerOpen && controller.opened && controller.service && controller.service.ready && !controller.service.locked
+  readonly property string contextKey: JSON.stringify([controller.contentAccess || "", controller.snapshot.last_sync, controller.snapshot.session_epoch, controller.snapshot.session_revision, controller.snapshot.pending, controller.snapshot.attention, controller.snapshot.level, controller.snapshot.syncing, controller.snapshot.status])
   readonly property int currentLevel: overview && overview.current && Number.isInteger(overview.current.level) ? overview.current.level : (controller.snapshot.level || 0)
   readonly property int boardLevel: selectedLevel || currentLevel
   readonly property int maximumLevel: Math.min(currentLevel, controller.snapshot.max_level || currentLevel)
@@ -36,20 +42,67 @@ ColumnLayout {
   spacing: Style.space(16)
 
   function focusInput() {
-    refreshProgress.forceActiveFocus(Qt.TabFocusReason)
+    if (explorerOpen)
+      srsExplorer.focusInput()
+    else if (historyOpen)
+      historyPage.focusInput()
+    else
+      refreshProgress.forceActiveFocus(Qt.TabFocusReason)
+  }
+  function saveNavigation() {
+    if (!initialized || typeof controller.progressNavigation === "undefined")
+      return
+    controller.progressNavigation = {
+      schema: 1,
+      section: section,
+      selected_level: selectedLevel,
+      subject_type: subjectType,
+      offset: offset,
+      explorer: explorerNavigation
+    }
+  }
+  function restoreNavigation() {
+    var state = controller.progressNavigation
+    if (!state || state.schema !== 1)
+      return
+    if (["subjects", "history", "explorer"].indexOf(state.section) >= 0)
+      section = state.section
+    if (Number.isInteger(state.selected_level) && state.selected_level >= 0 && state.selected_level <= (controller.snapshot.max_level || 0))
+      selectedLevel = state.selected_level
+    if (["", "radical", "kanji", "vocabulary", "kana_vocabulary"].indexOf(state.subject_type) >= 0)
+      subjectType = state.subject_type
+    if (Number.isInteger(state.offset) && state.offset >= 0 && state.offset <= 1000)
+      offset = state.offset
+    if (state.explorer && typeof state.explorer === "object")
+      explorerNavigation = state.explorer
+  }
+  function chooseSection(next) {
+    if (["subjects", "history", "explorer"].indexOf(next) < 0)
+      return
+    section = next
+    saveNavigation()
+    Qt.callLater(focusInput)
+  }
+  function chooseExplorer(group) {
+    chooseSection("explorer")
+    srsExplorer.chooseGroup(group)
   }
   function invalidate(clearOverview) {
     serial++
     dirty = true
     loading = false
+    fetching = false
+    fetchOwner = -1
     page = {
       items: [],
       total: 0,
       has_more: false,
       complete: false
     }
-    if (clearOverview)
+    if (clearOverview) {
       overview = null
+      overviewContext = ""
+    }
     if (active && initialized)
       Qt.callLater(fetch)
   }
@@ -58,6 +111,7 @@ ColumnLayout {
       return
     subjectType = type
     offset = 0
+    saveNavigation()
     invalidate(false)
   }
   function chooseLevel(level) {
@@ -65,12 +119,14 @@ ColumnLayout {
       return
     selectedLevel = level
     offset = 0
+    saveNavigation()
     invalidate(false)
   }
   function changePage(next) {
     if (loading || !Number.isInteger(next) || next < 0 || next > 1000)
       return
     offset = next
+    saveNavigation()
     invalidate(false)
   }
   function validCard(card, nested) {
@@ -91,24 +147,19 @@ ColumnLayout {
     loading = true
     notice = ""
     var request = serial
+    fetchOwner = request
     var context = contextKey
     var start = offset
     var type = subjectType
-    controller.service.request("progress", {}, function (ok, data, message) {
+    function fetchBoard(data) {
       if (!current(request, context)) {
-        finishFetch()
+        finishFetch(request)
         return
       }
-      if (!ok || !data || !data.current || !data.distribution) {
-        notice = message || "Progress could not be loaded. Try refreshing your account."
-        finishFetch()
-        return
-      }
-      overview = data
       var level = selectedLevel || data.current.level
       if (!Number.isInteger(level) || level < 1 || level > (controller.snapshot.max_level || 0)) {
         notice = "This level is outside your current account access."
-        finishFetch()
+        finishFetch(request)
         return
       }
       controller.service.request("level_board", {
@@ -123,16 +174,37 @@ ColumnLayout {
           else
             notice = boardMessage || "The level board could not be loaded. Refresh to try again."
         }
-        finishFetch()
+        finishFetch(request)
       })
+    }
+    if (overview && overviewContext === context) {
+      fetchBoard(overview)
+      return
+    }
+    controller.service.request("progress", {}, function (ok, data, message) {
+      if (!current(request, context)) {
+        finishFetch(request)
+        return
+      }
+      if (!ok || !data || !data.current || !data.distribution) {
+        notice = message || "Progress could not be loaded. Try refreshing your account."
+        finishFetch(request)
+        return
+      }
+      overview = data
+      overviewContext = context
+      fetchBoard(data)
     })
   }
   function current(request, context) {
     return active && request === serial && context === contextKey
   }
-  function finishFetch() {
+  function finishFetch(request) {
+    if (request !== fetchOwner)
+      return
     fetching = false
     loading = false
+    fetchOwner = -1
     if (dirty && active && initialized)
       Qt.callLater(fetch)
   }
@@ -147,7 +219,7 @@ ColumnLayout {
     if (matches.some(function (item) {
       return item.id === id && item.can_open === true && item.spoilers_hidden === false
     }))
-      controller.showSubject(id)
+      controller.showProgressSubject(id)
   }
   function statusLabel(item) {
     if (item.spoilers_hidden)
@@ -173,15 +245,27 @@ ColumnLayout {
       return (part.characters || "Radical") + " · " + reviewLabel(part)
     }).join("\n")
   }
-  onActiveChanged: invalidate(true)
+  onServiceChanged: invalidate(true)
+  Connections {
+    target: root.service
+    function onReadyChanged() {
+      if (!root.service.ready)
+        root.invalidate(true)
+    }
+  }
+  onActiveChanged: invalidate(false)
   onContentAccessChanged: {
     selectedLevel = 0
     offset = 0
+    explorerNavigation = ({})
+    saveNavigation()
     invalidate(true)
   }
   onContextKeyChanged: invalidate(true)
   Component.onCompleted: {
+    restoreNavigation()
     initialized = true
+    saveNavigation()
     Qt.callLater(fetch)
   }
 
@@ -230,24 +314,43 @@ ColumnLayout {
     Action {
       objectName: "progress-subjects-tab"
       text: "Subjects & unlocks"
-      selected: !root.historyOpen
-      onClicked: root.historyOpen = false
+      selected: root.section === "subjects"
+      onClicked: root.chooseSection("subjects")
+    }
+    Action {
+      objectName: "progress-explorer-tab"
+      text: "SRS explorer"
+      selected: root.explorerOpen
+      onClicked: root.chooseSection("explorer")
     }
     Action {
       objectName: "progress-history-tab"
       text: "Level history"
       selected: root.historyOpen
-      onClicked: root.historyOpen = true
+      onClicked: root.chooseSection("history")
     }
   }
   LevelHistory {
+    id: historyPage
     Layout.fillWidth: true
     controller: root.controller
     visible: root.historyOpen
   }
+  SrsExplorer {
+    id: srsExplorer
+    objectName: "srs-explorer"
+    Layout.fillWidth: true
+    controller: root.controller
+    visible: root.explorerOpen
+    navigationState: root.explorerNavigation
+    onNavigationChanged: function (state) {
+      root.explorerNavigation = state
+      root.saveNavigation()
+    }
+  }
   ColumnLayout {
     Layout.fillWidth: true
-    visible: !root.historyOpen
+    visible: root.section === "subjects"
     spacing: Style.space(16)
     Label {
       text: "Your learning, now"
@@ -271,6 +374,15 @@ ColumnLayout {
           readonly property var group: root.groups[index]
           width: Math.max(90, (distributionFlow.width - distributionFlow.spacing * (distributionFlow.width < 500 ? 2 : 3)) / (distributionFlow.width < 500 ? 3 : 4))
           height: groupContent.implicitHeight + Style.space(20)
+          Action {
+            id: distributionAction
+            anchors.fill: parent
+            objectName: "progress-group-" + distributionCard.group.key
+            text: ""
+            accessibleName: "Explore " + distributionCard.group.label + ", " + distributionCard.group.count + " subjects"
+            surfaceColor: distributionCard.color
+            onClicked: root.chooseExplorer(distributionCard.group.key)
+          }
           ColumnLayout {
             id: groupContent
             anchors.fill: parent
@@ -278,14 +390,16 @@ ColumnLayout {
             spacing: Style.space(4)
             Label {
               Layout.fillWidth: true
+              objectName: "progress-group-label-" + distributionCard.group.key
               text: distributionCard.group.label || "Unknown"
-              surfaceColor: distributionCard.color
+              surfaceColor: Theme.composite(distributionAction.color, distributionCard.color)
               secondary: true
               font.pixelSize: Style.font.bodySmall
             }
             Label {
+              objectName: "progress-group-count-" + distributionCard.group.key
               text: String(distributionCard.group.count || 0)
-              surfaceColor: distributionCard.color
+              surfaceColor: Theme.composite(distributionAction.color, distributionCard.color)
               textColor: Color.accent
               font.pixelSize: Style.space(25)
               font.bold: true

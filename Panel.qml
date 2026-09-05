@@ -36,6 +36,11 @@ Item {
   onListenContextChanged: invalidateListening()
   property var results: []
   property var detail: null
+  property var progressNavigation: ({})
+  property bool progressReturn: false
+  property bool helpReturnProgress: false
+  readonly property string progressContext: JSON.stringify([contentAccess, snapshot.last_sync, snapshot.session_epoch, snapshot.session_revision, snapshot.pending, snapshot.attention, snapshot.syncing, snapshot.status])
+  onProgressContextChanged: invalidateProgressDetails()
   property string query: ""
   property bool queryTruncated: false
   property string searchType: "all"
@@ -72,6 +77,8 @@ Item {
     // Presentation caches must not outlive the account or its content grant.
     // Durable answers remain owned by the worker and are revalidated there.
     detail = null
+    progressReturn = false
+    progressNavigation = ({})
     listenSequence++
     listenSession = null
     listenStatus = null
@@ -123,12 +130,13 @@ Item {
     }
     helpReturnView = view
     helpReturnDetail = detail
+    helpReturnProgress = progressReturn
     navigate("help")
   }
   function closeHelp() {
     navigate(helpReturnView)
     if (helpReturnView === "lookup" && helpReturnDetail)
-      showSubject(helpReturnDetail.id)
+      showSubject(helpReturnDetail.id, helpReturnProgress)
     helpReturnDetail = null
   }
 
@@ -187,6 +195,7 @@ Item {
     listenBusy = false
     stopAudio()
     navigationSequence++
+    progressReturn = false
     view = next
     moreNavigation = ["practice-library", "activity", "zen", "settings", "help", "recovery"].indexOf(next) >= 0
     if (next === "listen")
@@ -252,6 +261,7 @@ Item {
     })
   }
   function search(text) {
+    progressReturn = false
     stopAudio()
     var characters = UnicodeText.characters(String(text || ""))
     queryTruncated = characters.length > 256
@@ -286,7 +296,19 @@ Item {
     searchState = state
     search(query)
   }
-  function showSubject(id) {
+  function showProgressSubject(id) {
+    showSubject(id, true)
+  }
+  function returnToProgress() {
+    navigate("progress")
+  }
+  function invalidateProgressDetails() {
+    if (opened && view === "lookup" && progressReturn && detail) {
+      navigate("progress")
+      error = "Account progress changed. Reopen the subject from the refreshed list. Your note drafts are saved."
+    }
+  }
+  function showSubject(id, fromProgress) {
     stopAudio()
     if (!opened || !service || !service.ready || service.locked)
       return
@@ -297,14 +319,23 @@ Item {
     var expectedNavigation = navigationSequence
     var expectedSearch = searchSequence
     var expectedAccess = contentAccess
-    call("details", {
+    var guarded = fromProgress === true || progressReturn === true
+    var expectedProgress = progressContext
+    call(guarded ? "progress_details" : "details", {
       subject_id: id
     }, function (ok, data) {
-      if (ok && root.opened && root.service && root.service.ready && !root.service.locked && root.detailSequence === expectedDetail && root.navigationSequence === expectedNavigation && root.searchSequence === expectedSearch && root.contentAccess === expectedAccess) {
-        root.detail = data
-        root.view = "lookup"
-        if (root.service)
-          root.service.studying = false
+      if (root.opened && root.service && root.service.ready && !root.service.locked && root.detailSequence === expectedDetail && root.navigationSequence === expectedNavigation && root.searchSequence === expectedSearch && root.contentAccess === expectedAccess && (!guarded || root.progressContext === expectedProgress)) {
+        if (ok) {
+          root.progressReturn = guarded
+          root.detail = data
+          root.view = "lookup"
+          if (root.service)
+            root.service.studying = false
+        } else if (guarded) {
+          var reason = root.error
+          root.navigate("progress")
+          root.error = reason || "This subject could not be opened from current progress. Choose another subject or refresh your account."
+        }
       }
     })
   }
@@ -581,6 +612,7 @@ Item {
   }
   function readSelection() {
     if (opened && view === "lookup" && !clipboard.running) {
+      progressReturn = false
       // An explicit selection request supersedes the view's queued initial search.
       searchSequence++
       searching = false

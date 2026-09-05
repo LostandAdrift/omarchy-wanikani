@@ -222,6 +222,8 @@ Item {
  property int navigationSequence: 0
  property bool moreNavigation: false
  property var detail: null
+ property bool progressReturn: false
+ property var progressNavigation: ({})
  property var session: null
  property string error: ""
  property string observedSync: ""

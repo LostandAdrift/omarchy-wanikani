@@ -43,6 +43,9 @@ Item {
       panel.detailSequence = 0
       panel.searchSequence = 0
       panel.detail = null
+      panel.progressReturn = false
+      panel.progressContext = "authored-progress"
+      panel.progressNavigation = ({schema:1,section:"explorer",explorer:{group:"guru",offset:24}})
       panel.busy = false
       panel.error = ""
       panel.query = ""
@@ -54,6 +57,93 @@ Item {
     function cleanup() {
       panel.close()
       wait(0)
+    }
+    function test_progress_links_revalidate_and_back_preserves_navigation() {
+      panel.view="progress"
+      var saved=JSON.stringify(panel.progressNavigation)
+      panel.showProgressSubject(990001)
+      compare(worker.pending[0].method,"progress_details")
+      worker.reply(0,990001)
+      verify(panel.progressReturn);compare(panel.view,"lookup")
+      panel.returnToProgress()
+      compare(panel.view,"progress");compare(panel.detail,null);verify(!panel.progressReturn)
+      compare(JSON.stringify(panel.progressNavigation),saved)
+    }
+    function test_related_progress_details_keep_the_same_guard_and_return() {
+      panel.showProgressSubject(990001);worker.reply(0,990001)
+      panel.showSubject(990002)
+      compare(worker.pending[1].method,"progress_details")
+      worker.reply(1,990002);verify(panel.progressReturn)
+    }
+    function test_late_progress_detail_after_partial_sync_context_is_discarded() {
+      panel.view="progress";panel.showProgressSubject(990001)
+      panel.progressContext="partial-sync-changed"
+      worker.reply(0,990001)
+      compare(panel.detail,null);compare(panel.view,"progress")
+    }
+    function test_progress_change_after_visible_detail_returns_to_same_list() {
+      panel.showProgressSubject(990001);worker.reply(0,990001)
+      var saved=JSON.stringify(panel.progressNavigation)
+      panel.progressContext="different-saved-study"
+      compare(panel.detail,null);compare(panel.view,"progress")
+      compare(JSON.stringify(panel.progressNavigation),saved)
+      verify(panel.error.indexOf("note drafts are saved")>=0)
+    }
+    function test_help_returns_to_guarded_progress_detail() {
+      panel.showProgressSubject(990001);worker.reply(0,990001)
+      panel.showHelp();compare(panel.view,"help")
+      panel.closeHelp();compare(worker.pending[1].method,"progress_details")
+      worker.reply(1,990001);verify(panel.progressReturn)
+      compare(panel.detail.id,990001)
+    }
+    function test_guarded_failure_after_help_returns_to_preserved_progress() {
+      panel.showProgressSubject(990001);worker.reply(0,990001)
+      var saved=JSON.stringify(panel.progressNavigation)
+      panel.showHelp();panel.progressContext="new-protected-session";panel.closeHelp()
+      compare(worker.pending[1].method,"progress_details")
+      worker.pending[1].callback(false,null,"This answer is kept for saved study.")
+      compare(panel.view,"progress");compare(panel.detail,null);verify(!panel.progressReturn)
+      compare(JSON.stringify(panel.progressNavigation),saved)
+      compare(panel.error,"This answer is kept for saved study.")
+    }
+    function lookupForPin() {
+      panel.view="lookup";panel.detail={id:990001,characters:"Existing safe card",pinned:false}
+      var component=Qt.createComponent("LookupCore.qml")
+      compare(component.status,Component.Ready,component.errorString())
+      var lookup=component.createObject(panel,{controller:panel});verify(lookup!==null)
+      return lookup
+    }
+    function test_progress_pin_ignores_raw_write_body_and_rechecks_details() {
+      var lookup=lookupForPin();panel.progressReturn=true
+      try {
+        lookup.togglePin();compare(worker.pending[0].method,"pin")
+        worker.pending[0].callback(true,{id:990001,characters:"Unverified response"},"")
+        compare(panel.detail.characters,"Existing safe card")
+        compare(worker.pending[1].method,"progress_details")
+        worker.reply(1,990001);compare(panel.detail.characters,"山")
+      } finally {lookup.destroy()}
+    }
+    function test_progress_pin_after_protection_change_cannot_rehydrate() {
+      var lookup=lookupForPin();panel.progressReturn=true
+      try {
+        lookup.togglePin();panel.progressContext="changed-protection"
+        worker.reply(0,990001);compare(panel.detail,null);compare(panel.view,"progress")
+        compare(worker.pending.length,1)
+      } finally {lookup.destroy()}
+    }
+    function test_manual_pin_still_applies_current_result_only() {
+      var lookup=lookupForPin()
+      try {
+        lookup.togglePin();worker.reply(0,990001);compare(panel.detail.characters,"山")
+        lookup.togglePin();panel.navigate("zen");worker.reply(1,990001)
+        compare(panel.view,"zen");compare(panel.detail,null)
+      } finally {lookup.destroy()}
+    }
+    function test_explicit_lookup_search_leaves_the_progress_return_route() {
+      panel.showProgressSubject(990001);worker.reply(0,990001)
+      panel.search("Authored deliberate search")
+      verify(!panel.progressReturn);compare(panel.detail,null)
+      panel.showSubject(990002);compare(worker.pending[2].method,"details")
     }
     function test_dashboard_open_and_related_subject_followup_still_work() {
       panel.showSubject(990001)
@@ -213,7 +303,7 @@ class PanelDetailsTests(unittest.TestCase):
     def test_production_detail_callbacks_respect_current_view_and_access(self):
         source = (ROOT / "Panel.qml").read_text()
         functions = []
-        for name in ("call", "showSubject", "navigate", "close", "readSelection", "search", "refreshSearch", "stopAudio"):
+        for name in ("call", "showSubject", "showProgressSubject", "returnToProgress", "invalidateProgressDetails", "showHelp", "closeHelp", "navigate", "close", "readSelection", "search", "refreshSearch", "stopAudio"):
             match = re.search(r"(?ms)^  function " + name + r"\(.*?(?=^  function )", source)
             self.assertIsNotNone(match, "Review the actual Panel function boundary for " + name)
             functions.append(match.group(0))
@@ -241,6 +331,13 @@ Item {
   property bool busy: false
   property string error: ""
   property var detail: null
+  property bool progressReturn: false
+  property var progressNavigation: ({})
+  property string progressContext: "authored-progress"
+  onProgressContextChanged: invalidateProgressDetails()
+  property string helpReturnView: "dashboard"
+  property var helpReturnDetail: null
+  property bool helpReturnProgress: false
   property string query: ""
   property bool queryTruncated: false
   property string searchType: "all"
@@ -292,7 +389,7 @@ Item {
                 env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_QPA_PLATFORMTHEME": "",
                     "QT_QUICK_CONTROLS_STYLE": "Basic"})
             self.assertEqual(0, process.returncode, process.stdout + process.stderr)
-            self.assertIn("18 passed", process.stdout)
+            self.assertIn("28 passed", process.stdout)
 
 
 if __name__ == "__main__":

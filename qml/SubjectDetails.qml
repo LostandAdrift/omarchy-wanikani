@@ -18,6 +18,7 @@ ColumnLayout {
   property bool restoringEditor: false
   property bool preserveEditor: false
   property bool refreshingDetails: false
+  property int detailRequest: 0
   property int editorSubjectId: 0
   property int editGeneration: 0
   property bool editorDirty: false
@@ -30,6 +31,8 @@ ColumnLayout {
     })
   readonly property bool composingEditor: synonyms.inputMethodComposing || meaningNote.inputMethodComposing || readingNote.inputMethodComposing
   readonly property bool editorAvailable: !!(controller.service && controller.service.ready)
+  readonly property var detailService: controller.service
+  readonly property string detailContext: JSON.stringify([controller.contentAccess, controller.navigationSequence, controller.view, controller.opened, controller.progressReturn === true, controller.progressReturn === true ? controller.progressContext : null, controller.service ? controller.service.ready : false, controller.service ? controller.service.locked : false, editorSubjectId])
   readonly property string meaningNoteText: subject && subject.material ? subject.material.meaning_note || "" : ""
   readonly property string readingNoteText: subject && subject.material ? subject.material.reading_note || "" : ""
   spacing: Style.space(12)
@@ -116,8 +119,25 @@ ColumnLayout {
       }
     })
   }
-  function materialResult(ok, data, id, generation) {
-    if (!ok || !data || !controller.detail || controller.detail.id !== id)
+  function invalidateDetails() {
+    detailRequest++
+    refreshingDetails = false
+  }
+  function detailTicket() {
+    return {
+      request: ++detailRequest,
+      context: detailContext,
+      owner: controller,
+      service: controller.service,
+      subjectId: editorSubjectId,
+      guarded: controller.progressReturn === true
+    }
+  }
+  function currentDetails(ticket) {
+    return ticket.request === detailRequest && ticket.context === detailContext && ticket.owner === controller && ticket.service === controller.service && editable && controller.opened && controller.service && controller.service.ready && !controller.service.locked && controller.detail && controller.detail.id === ticket.subjectId && editorSubjectId === ticket.subjectId
+  }
+  function applyMaterial(data, id, generation) {
+    if (!data || data.id !== id)
       return
     var newer = editorSubjectId === id && editGeneration !== generation
     preserveEditor = newer
@@ -126,10 +146,53 @@ ColumnLayout {
     if (!newer && editorSubjectId === id)
       restoreEditor(true)
   }
+  function refreshDetails(generation) {
+    if (!editable || !controller.opened || !editorSubjectId || !controller.service || !controller.service.ready || controller.service.locked)
+      return
+    var ticket = detailTicket()
+    refreshingDetails = true
+    ticket.service.request(ticket.guarded ? "progress_details" : "details", {
+      subject_id: ticket.subjectId
+    }, function (ok, data, message) {
+      if (!root)
+        return
+      if (ticket.request === root.detailRequest)
+        root.refreshingDetails = false
+      if (!root.currentDetails(ticket))
+        return
+      if (ok && data && data.id === ticket.subjectId) {
+        if (generation !== undefined)
+          root.applyMaterial(data, ticket.subjectId, generation)
+        else
+          root.controller.detail = data
+      } else if (ticket.guarded) {
+        root.controller.returnToProgress()
+        root.controller.error = message || "This subject is no longer available from current progress. Your note draft is kept on this computer."
+      } else {
+        root.controller.detail = null
+        root.controller.error = message || "This subject is no longer available. Your draft is kept on this computer."
+        root.controller.search(root.controller.query)
+      }
+    })
+  }
+  function materialResult(ok, data, id, generation, ticket) {
+    if (!ok || !data || !currentDetails(ticket))
+      return
+    // A material command returns ordinary Lookup details. Progress links need
+    // a fresh guarded projection before any returned answer data is displayed.
+    if (ticket.guarded)
+      refreshDetails(generation)
+    else
+      applyMaterial(data, id, generation)
+  }
   function saveEditor() {
+    if (!editable || !controller.opened || !editorAvailable || controller.service.locked || composingEditor)
+      return
     var values = rawEditor()
     var id = editorSubjectId
     var generation = editGeneration
+    var ticket = detailTicket()
+    refreshingDetails = false
     controller.call("set_material", {
       subject_id: id,
       values: {
@@ -144,21 +207,28 @@ ColumnLayout {
       editor_draft: values
     }, function (ok, data) {
       if (root)
-        root.materialResult(ok, data, id, generation)
+        root.materialResult(ok, data, id, generation, ticket)
     })
   }
   function discardEditor() {
+    if (!editable || !controller.opened || !editorAvailable || controller.service.locked || composingEditor)
+      return
     var id = editorSubjectId
     var generation = editGeneration
+    var ticket = detailTicket()
+    refreshingDetails = false
     controller.call("editor_discard", {
       subject_id: id,
       expected: rawEditor()
     }, function (ok, data) {
       if (root)
-        root.materialResult(ok, data, id, generation)
+        root.materialResult(ok, data, id, generation, ticket)
     })
   }
   onSubjectChanged: restoreEditor(false)
+  onDetailContextChanged: invalidateDetails()
+  onControllerChanged: invalidateDetails()
+  onDetailServiceChanged: invalidateDetails()
   Component.onCompleted: {
     editorReady = true
     restoreEditor(true)
@@ -168,26 +238,7 @@ ColumnLayout {
     function onSnapshotChanged() {
       if (!root.editable || !root.controller.opened || !root.editorSubjectId || root.refreshingDetails)
         return
-      var id = root.editorSubjectId
-      var owner = root.controller
-      var access = owner.contentAccess
-      root.refreshingDetails = true
-      owner.service.request("details", {
-        subject_id: id
-      }, function (ok, data, message) {
-        if (!root)
-          return
-        root.refreshingDetails = false
-        if (owner.contentAccess === access && owner.detail && owner.detail.id === id) {
-          if (ok)
-            owner.detail = data
-          else {
-            owner.detail = null
-            owner.error = message || "This subject is no longer available. Your draft is kept on this computer."
-            owner.search(owner.query)
-          }
-        }
-      })
+      root.refreshDetails()
     }
   }
   Label {
