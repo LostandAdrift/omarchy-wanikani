@@ -144,14 +144,16 @@ class RecoveryTests(EngineFixture, unittest.TestCase):
         self.record(0)
         with self.store.transaction():
             for index in range(1000):
-                self.store.execute("INSERT INTO sessions VALUES (?,?)", (str(index), "{}"))
-        statements = []
-        self.store.db.set_trace_callback(statements.append)
-        try:
+                self.store.execute("INSERT INTO sessions VALUES (?,?)", (str(index),
+                    json.dumps({"phase": "complete", "marker": "HISTORICAL-SESSION-BODY"})))
+        decode = json.loads
+        decoded = []
+        def observed_decode(value, *args, **kwargs):
+            decoded.append(value)
+            return decode(value, *args, **kwargs)
+        with patch("wanikani.practice.json.loads", side_effect=observed_decode):
             catalogue(self.engine)
-        finally:
-            self.store.db.set_trace_callback(None)
-        self.assertFalse(any("FROM sessions" in sql for sql in statements))
+        self.assertFalse(any("HISTORICAL-SESSION-BODY" in value for value in decoded))
 
     def test_recovery_actions_never_offer_replay(self):
         for index, state in enumerate(STATES):

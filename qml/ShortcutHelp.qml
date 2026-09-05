@@ -74,7 +74,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Your question and draft stay saved when you close the panel."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Flow {
     Layout.fillWidth: true
@@ -111,7 +111,7 @@ ColumnLayout {
         Layout.preferredWidth: Math.min(Style.space(200), root.width * 0.38)
         text: basicRow.modelData.key
         font.bold: true
-        color: Color.accent
+        textColor: Color.accent
       }
       Label {
         Layout.fillWidth: true
@@ -122,7 +122,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "For reading answers, type romaji or use your Japanese input method. You can edit the answer with the usual text keys."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   RowLayout {
     Layout.fillWidth: true
@@ -132,7 +132,7 @@ ColumnLayout {
       Layout.preferredWidth: Math.min(Style.space(200), root.width * 0.38)
       text: "F1"
       font.bold: true
-      color: Color.accent
+      textColor: Color.accent
     }
     Label {
       Layout.fillWidth: true
@@ -151,7 +151,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: "These shortcuts work when you are outside a text field."
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
     Repeater {
@@ -165,7 +165,7 @@ ColumnLayout {
           Layout.preferredWidth: Math.min(Style.space(200), root.width * 0.38)
           text: navigationRow.modelData.key
           font.bold: true
-          color: Color.accent
+          textColor: Color.accent
         }
         Label {
           Layout.fillWidth: true
@@ -182,6 +182,6 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Super+Alt+W opens study. Super+Alt+Shift+W looks up selected text. Enable desktop shortcuts in Settings; existing bindings are preserved."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
 }

@@ -1,18 +1,36 @@
 import QtQuick
+import qs.Commons
 import qs.Ui as Ui
+import "Theme.mjs" as Theme
 
 Ui.Button {
   id: root
   property string accessibleName: text
   property string accessibleHint: tooltipText
+  property color surfaceColor: Theme.surface(parent, Color.background)
+  property color textColor: Theme.foreground(parent, Color.foreground)
+  foreground: enabled ? Theme.readable(textColor, surfaceColor, Color.foreground) : Theme.secondary(textColor, surfaceColor)
+  accent: Theme.readable(Color.accent, surfaceColor, Color.foreground)
   focusable: true
   bordered: true
   activeFocusOnTab: focusable && enabled
   Keys.enabled: enabled
   Keys.forwardTo: [activationGuard]
-  opacity: enabled ? 1 : 0.45
+  // Keep disabled labels readable; disabled interaction and accessible state
+  // still come from the native control. Do not fade its entire subtree.
+  opacity: 1
   ActivationGuard {
     id: activationGuard
+  }
+  Rectangle {
+    objectName: "wanikani-action-focus"
+    anchors.fill: parent
+    anchors.margins: 2
+    radius: Math.max(0, root.radius - 2)
+    color: "transparent"
+    border.width: 2
+    border.color: Theme.indicator(Color.accent, Theme.composite(root.color, root.surfaceColor), Color.foreground)
+    visible: root.enabled && root.activeFocus
   }
 
   // The native button already owns Enter, Space, and the themed focus border.

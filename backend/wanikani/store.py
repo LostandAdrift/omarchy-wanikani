@@ -95,6 +95,7 @@ class Store:
               ON d.kind=r.kind AND d.id=r.id
               WHERE r.kind IN ('radical','kanji','vocabulary','kana_vocabulary') AND d.id IS NULL"""):
                 self._put_search_document(json.loads(row[0]))
+            self._migrate_study_references()
             self.execute("PRAGMA user_version=2")
         # A process disappearing between HTTP send and commit has an unknown outcome.
         self.execute("UPDATE outbox SET state='uncertain',detail='Interrupted while sending; check remote progress before recovery.' WHERE state='inflight'")
@@ -176,6 +177,35 @@ class Store:
     def all(self, kind):
         return [json.loads(r[0]) for r in self.rows("SELECT body FROM resources WHERE kind=?", (kind,))]
 
+    def _migrate_study_references(self):
+        """Adopt old saved sessions without changing their answers or position."""
+        if self.get("study_mode_references") == 1:
+            return
+        candidates = []
+        for key in ("active_session", "graded_session", "practice_session"):
+            reference = self.get(key)
+            session = self.session(reference) if isinstance(reference, str) else None
+            if session and session.get("phase") != "complete":
+                candidates.append(session)
+        # Older versions kept only one graded pointer. An unfinished record
+        # must survive migration even if that pointer no longer names it.
+        candidates += [json.loads(row[0]) for row in self.rows("""SELECT body FROM sessions
+          WHERE json_extract(body,'$.phase')!='complete' AND json_extract(body,'$.mode')!='practice'
+          ORDER BY COALESCE(json_extract(body,'$.revision'),0) DESC,rowid DESC""")]
+        for mode in ("reviews", "lessons", "practice"):
+            key = mode + "_session" if mode != "practice" else "practice_session"
+            reference = self.get(key)
+            current = self.session(reference) if isinstance(reference, str) else None
+            if current and current.get("mode") == mode and current.get("phase") != "complete":
+                continue
+            saved = next((session for session in candidates if session.get("mode") == mode), None)
+            if saved:
+                self.set(key, saved["id"])
+        latest = next((session for session in candidates if session.get("mode") in ("reviews", "lessons")), None)
+        if latest:
+            self.set("graded_session", latest["id"])
+        self.set("study_mode_references", 1)
+
     def save_session(self, session, activate=True):
         with self.transaction():
             revision = self.get("session_revision", 0)
@@ -183,9 +213,13 @@ class Store:
             session["revision"] = revision + 1
             self.set("session_revision", session["revision"])
             self.execute("INSERT OR REPLACE INTO sessions VALUES (?,?)", (session["id"], json.dumps(session, ensure_ascii=False)))
-            self.set("practice_session" if session["mode"] == "practice" else "graded_session", session["id"])
+            reference = session["mode"] + "_session"
+            if activate or not self.get(reference):
+                self.set(reference, session["id"])
             if activate:
                 self.set("active_session", session["id"])
+                if session["mode"] in ("reviews", "lessons"):
+                    self.set("graded_session", session["id"])
 
     def session(self, session_id=None):
         rows = self.rows("SELECT body FROM sessions WHERE id=?", (session_id or self.get("active_session"),))

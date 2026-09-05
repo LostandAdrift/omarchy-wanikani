@@ -14,6 +14,7 @@ DEFAULTS = {
     "reminder_interval": 7200, "snooze_until": 0, "desktop_card": False,
     "idle_gallery": False, "companion_animation": True, "reduced_motion": False,
     "autoplay_audio": False, "voice_actor_id": 1, "cache_limit_mb": 256,
+    "autoplay_lessons": False, "autoplay_listening": True,
     "strict_meanings": False,
     "last_notification_at": 0,
     "demo_offline": False,
@@ -153,6 +154,9 @@ class Engine:
                 ELSE json_extract(s.body,'$.data.lesson_position') END AS lesson_position,
               json_extract(a.body,'$.data.unlocked_at') AS unlocked_at"""
         rows = self._assignment_rows(mode, columns, indexed=True)
+        from .practice import _sessions
+        protected, _ = _sessions(self)
+        rows = [row for row in rows if int(row["subject_id"]) not in protected]
         if mode == "lessons":
             # The old full-body path rejected malformed unlock dates before
             # lesson sorting. Preserve that order using only projected dates.
@@ -201,8 +205,12 @@ class Engine:
             return [item for item in entries if isinstance(item, dict)] if isinstance(entries, list) else []
         def relatives(ids):
             output = []
+            if not isinstance(ids, list) or not ids:
+                return output
+            from .practice import _sessions
+            protected, _ = _sessions(self)
             for sid in ids[:30] if isinstance(ids, list) else []:
-                if type(sid) is not int:
+                if type(sid) is not int or sid in protected:
                     continue
                 item = self.store.subject(sid)
                 if accessible_subject(item, self.max_level()):
@@ -253,29 +261,42 @@ class Engine:
         from .search import lookup
         return lookup(self, text, limit, filters, reading_query)
 
+    def saved_session(self, mode="resume"):
+        """Resolve a saved mode without changing its draft or active reference."""
+        if mode not in ("reviews", "lessons", "practice", "resume"):
+            raise UserError("Unknown study mode.", "invalid_mode")
+        def unfinished(reference, expected=None):
+            session = self.store.session(reference) if isinstance(reference, str) else None
+            return session if (session and session.get("phase") != "complete"
+                and session.get("mode") in ("reviews", "lessons", "practice")
+                and (expected is None or session["mode"] == expected)) else None
+        with self.store.lock:
+            if mode != "resume":
+                return unfinished(self.store.get(mode + "_session"), mode)
+            latest = unfinished(self.store.get("graded_session"))
+            if latest and latest["mode"] in ("reviews", "lessons"):
+                return latest
+            candidates = [unfinished(self.store.get(name + "_session"), name) for name in ("reviews", "lessons")]
+            candidates = [session for session in candidates if session]
+            if candidates:
+                return max(candidates, key=lambda session: session.get("revision", 0))
+            active = unfinished(self.store.get("active_session"), "practice")
+            return active or unfinished(self.store.get("practice_session"), "practice")
+
     def start(self, mode="reviews", limit=None, subjects=None, replace_practice=False):
         if mode not in ("reviews", "lessons", "practice", "resume"):
-            raise UserError("Unknown study mode.")
+            raise UserError("Unknown study mode.", "invalid_mode")
         if not isinstance(replace_practice, bool) or (replace_practice and mode != "practice"):
             raise UserError("Only ungraded practice can start a new selection.")
         with self.store.transaction():
             if replace_practice:
                 from .practice import validate_selection
                 subjects = validate_selection(self, subjects)
-            existing = self.store.session()
-            # Each mode keeps its own durable session. Explicit practice can run
-            # while graded work is paused (including during vacation); returning
-            # to reviews/resume restores the exact graded question and draft.
-            # Every edit already committed before its acknowledgment. Merely
-            # changing study modes must not rewrite the paused session record.
-            reference = self.store.get("practice_session" if mode == "practice" else "graded_session")
-            saved = self.store.session(reference) if reference else None
-            if saved and saved["phase"] != "complete" and not replace_practice:
+            saved = self.saved_session(mode)
+            if saved and not replace_practice:
                 self.store.save_session(saved)
                 return self.session_view(saved)
             if mode == "resume":
-                if existing and existing["phase"] != "complete":
-                    return self.session_view(existing)
                 mode = "reviews"
             if not self.user():
                 raise UserError("Connect your account or try the demo first.")
@@ -285,7 +306,12 @@ class Engine:
                 raise UserError("The system clock differs from WaniKani. Correct it before graded study.", "clock_changed")
             count = max(1, min(20, int(limit or self.settings()["batch_size"])))
             if mode == "practice":
-                ids = subjects or [s["id"] for s in self.difficult()]
+                if subjects:
+                    ids = subjects
+                else:
+                    from .practice import _sessions
+                    protected, _ = _sessions(self)
+                    ids = [s["id"] for s in self.difficult() if s["id"] not in protected]
                 candidates = []
                 for sid in list(dict.fromkeys(int(x) for x in ids))[:count]:
                     item = self.store.subject(sid)
@@ -322,6 +348,8 @@ class Engine:
         session = self.store.session()
         if not session or session["phase"] == "complete":
             raise UserError("There is no active session.")
+        if session.get("mode") not in ("reviews", "lessons", "practice"):
+            raise UserError("Unknown saved study mode. Your saved work was retained.", "invalid_mode")
         index = session["lesson_index"] if session["phase"] == "lesson" else session["index"]
         self.ensure_study_content(self.store.subject(session["queue"][index]["subject_id"]))
         return session
@@ -547,9 +575,20 @@ class Engine:
         """Current durable session without rescanning account-wide collections."""
         with self.store.lock:
             session = self.session_view()
-            graded_id = self.store.get("graded_session")
-            graded = self.store.session(graded_id) if graded_id and (not session or graded_id != session["id"]) else None
-            return {"session": session, "paused_graded": bool(graded and graded["phase"] != "complete"),
+            summaries = {}
+            for mode in ("reviews", "lessons", "practice"):
+                saved = self.saved_session(mode)
+                if not saved:
+                    summaries[mode] = None
+                    continue
+                total = min(len(saved["queue"]), saved.get("finish_at", len(saved["queue"])))
+                position = saved["lesson_index"] if saved["phase"] == "lesson" else saved["index"]
+                summaries[mode] = {key: saved[key] for key in ("id", "mode", "phase", "part", "completed")}
+                summaries[mode].update(total=total, position=min(position + 1, total),
+                    active=bool(session and session["id"] == saved["id"]),
+                    invalidated=saved.get("invalidated", ""), revision=saved.get("revision", 0))
+            paused = any(value and not value["active"] for mode, value in summaries.items() if mode != "practice")
+            return {"session": session, "saved_sessions": summaries, "paused_graded": paused,
                 "session_revision": self.store.get("session_revision", 0),
                 "session_epoch": self.store.get("session_epoch", "")}
 

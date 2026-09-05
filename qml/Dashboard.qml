@@ -17,7 +17,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: !s.username
     text: "Native lessons and reviews, ready whenever you have a few minutes. Connect your WaniKani account or explore with sample material."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Card {
     Layout.fillWidth: true
@@ -40,12 +40,12 @@ ColumnLayout {
           Layout.fillWidth: true
           text: root.s.milestone ? (root.s.demo ? "Demo milestone · Level " + root.s.milestone.level : "Level " + root.s.milestone.level + " confirmed") : ""
           font.bold: true
-          color: Color.accent
+          textColor: Color.accent
         }
         Label {
           Layout.fillWidth: true
           text: root.s.demo ? "A presentation preview using authored fixtures. Account milestones appear only after WaniKani confirms a new level." : "WaniKani confirmed your account’s new level. A little progress, shared across your devices."
-          color: Qt.alpha(Color.foreground, 0.76)
+          secondary: true
           font.pixelSize: Style.font.bodySmall
         }
       }
@@ -75,69 +75,92 @@ ColumnLayout {
       })
     }
   }
-  RowLayout {
+  GridLayout {
     Layout.fillWidth: true
-    spacing: Style.space(12)
+    columns: root.width < Style.space(480) ? 1 : 2
+    columnSpacing: Style.space(12)
+    rowSpacing: Style.space(12)
     visible: !!s.username
     Repeater {
       model: [
         {
-          label: "REVIEWS READY",
+          label: "Reviews",
+          mode: "reviews",
           value: root.s.reviews || 0
         },
         {
-          label: "LESSONS READY",
+          label: "Lessons",
+          mode: "lessons",
           value: root.s.lessons || 0
-        },
-        {
-          label: "LEVEL",
-          value: root.s.level || 0
         }
       ]
       Card {
+        id: studyCard
         required property var modelData
+        readonly property var saved: root.s.saved_sessions ? root.s.saved_sessions[modelData.mode] : null
         Layout.fillWidth: true
-        Layout.preferredHeight: Style.space(116)
-        Column {
+        Layout.preferredHeight: studyCardContent.implicitHeight + Style.space(32)
+        ColumnLayout {
+          id: studyCardContent
           anchors.fill: parent
           anchors.margins: Style.space(16)
           spacing: Style.space(8)
           Label {
-            text: modelData.label
-            color: Qt.alpha(Color.foreground, 0.76)
-            font.pixelSize: Style.font.bodySmall
-            font.letterSpacing: 1
+            Layout.fillWidth: true
+            text: studyCard.modelData.label
+            font.pixelSize: Style.font.title
+            font.bold: true
           }
           Label {
-            text: String(modelData.value)
+            text: studyCard.modelData.value + (studyCard.modelData.mode === "reviews" ? " due" : " new")
             font.pixelSize: Style.space(40)
-            color: Color.accent
+            textColor: Color.accent
+          }
+          Label {
+            Layout.fillWidth: true
+            text: studyCard.saved ? studyCard.saved.completed + " of " + studyCard.saved.total + " subjects completed · Session saved" : studyCard.modelData.mode === "reviews" ? "Recall subjects you have learned." : "Discover new meanings and readings."
+            font.pixelSize: Style.font.bodySmall
+          }
+          Flow {
+            Layout.fillWidth: true
+            spacing: Style.space(6)
+            Action {
+              text: studyCard.saved ? "Resume " + studyCard.modelData.mode + " →" : studyCard.modelData.mode === "reviews" ? "Review 5 →" : "Choose lessons →"
+              selected: true
+              enabled: !root.controller.busy && (!!studyCard.saved || (studyCard.modelData.value > 0 && !root.s.vacation))
+              onClicked: {
+                if (studyCard.saved || studyCard.modelData.mode === "reviews")
+                  root.controller.begin(studyCard.modelData.mode, 5)
+                else
+                  root.controller.navigate("lesson-overview")
+              }
+            }
+            Action {
+              text: "Overview"
+              accessibleName: studyCard.modelData.label + " overview"
+              onClicked: root.controller.navigate(studyCard.modelData.mode === "reviews" ? "review-overview" : "lesson-overview")
+            }
           }
         }
       }
     }
   }
+  LevelProgress {
+    Layout.fillWidth: true
+    visible: !!root.s.username
+    progress: root.s.learning_progress || null
+    onExplore: root.controller.navigate("progress")
+  }
   Label {
     Layout.fillWidth: true
     visible: s.vacation === true
     text: "Vacation mode is on. Take your time; ungraded practice is available."
-    color: Color.accent
+    textColor: Color.accent
   }
   Flow {
     Layout.fillWidth: true
     spacing: Style.space(8)
     visible: !!s.username
-    Action {
-      text: root.s.paused_graded || (root.s.session && root.s.session.phase !== "complete") ? "Resume your session →" : root.s.reviews > 0 ? "Five reviews →" : "Reviews complete"
-      selected: true
-      enabled: !root.controller.busy && (root.s.paused_graded || (root.s.session && root.s.session.phase !== "complete") || root.s.reviews > 0)
-      onClicked: root.controller.begin(root.s.paused_graded || (root.s.session && root.s.session.phase !== "complete") ? "resume" : "reviews", 5)
-    }
-    Action {
-      text: "Learn something new"
-      enabled: !root.controller.busy && root.s.lessons > 0 && !root.s.vacation
-      onClicked: root.controller.begin("lessons", 5)
-    }
     Action {
       text: "Refresh"
       enabled: !root.s.syncing
@@ -154,7 +177,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: !!s.message
     text: s.message || ""
-    color: Color.urgent
+    textColor: Color.urgent
   }
   OfflineStatus {
     Layout.fillWidth: true
@@ -173,22 +196,6 @@ ColumnLayout {
       nextReviewsAt: root.s.next_reviews_at || ""
       active: root.controller.opened && root.visible
     }
-    Label {
-      text: "Level " + (s.level || 0) + " kanji · " + (s.level_passed || 0) + " / " + (s.level_total || 0) + " at Guru or above"
-      font.pixelSize: Style.font.bodySmall
-    }
-    Rectangle {
-      Layout.fillWidth: true
-      height: Style.space(5)
-      radius: 2
-      color: Qt.alpha(Color.foreground, 0.1)
-      Rectangle {
-        height: parent.height
-        width: parent.width * Math.min(1, (root.s.level_passed || 0) / Math.max(1, root.s.level_total || 0))
-        color: Color.accent
-        radius: 2
-      }
-    }
   }
   ColumnLayout {
     Layout.fillWidth: true
@@ -200,7 +207,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: "Practice recent mistakes and subjects with lower recorded accuracy. Practice never changes your WaniKani schedule."
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
     Flow {
@@ -233,7 +240,7 @@ ColumnLayout {
       Layout.fillWidth: true
       text: (s.activity || []).length ? "Completed subjects and practice recorded by this plugin. Other clients are not included." : "Your first session starts the story. Activity from other clients is not available as individual review history."
       font.pixelSize: Style.font.bodySmall
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
     }
     Flow {
       Layout.fillWidth: true
@@ -249,12 +256,12 @@ ColumnLayout {
             Label {
               text: modelData.day.slice(5)
               font.pixelSize: Style.font.bodySmall
-              color: Qt.alpha(Color.foreground, 0.76)
+              secondary: true
             }
             Label {
               text: String(modelData.count)
               font.bold: true
-              color: Color.accent
+              textColor: Color.accent
             }
           }
         }

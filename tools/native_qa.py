@@ -86,6 +86,13 @@ sys.path.insert(0, str(Path(sys.argv[1]) / 'backend'))
 from wanikani.store import Store
 store = Store(Path(sys.argv[2]) / 'demo.sqlite3')
 with store.transaction():
+    # Give the authored dashboard a meaningful partially passed current level.
+    user = store.get('user')
+    user['data']['level'] = 2
+    store.set('user', user)
+    current = store.related('assignment', 11)
+    current['data'].update(srs_stage=3, passed_at=None)
+    store.put(current)
     original = store.subject(6)
     eye = copy.deepcopy(original)
     eye['id'] = 990201
@@ -223,7 +230,7 @@ QA_DRIVER = r'''
     try {
       var action = JSON.parse(encoded)
       if (action.kind === "open" || action.kind === "measure-open") {
-        var views = ["dashboard", "lessons", "reviews", "resume", "lookup", "practice-library", "settings", "zen", "help", "recovery"]
+        var views = ["dashboard", "review-overview", "lesson-overview", "progress", "lessons", "reviews", "resume", "lookup", "practice-library", "settings", "zen", "help", "recovery"]
         if (views.indexOf(action.view) < 0) throw new Error("Unknown QA view")
         if (action.kind === "measure-open") {
           if (root.opened) throw new Error("Close the QA panel before measuring its opening")
@@ -605,7 +612,7 @@ def smoke(run):
     capture(run, "milestone-preview")
     action(run, {"kind": "activate", "selector": {"text": "Dismiss"}})
     wait_snapshot(run, lambda s: not s["state"].get("milestone"))
-    for view in ("dashboard", "lessons", "help", "lookup", "practice-library", "settings", "zen", "recovery"):
+    for view in ("dashboard", "review-overview", "lesson-overview", "progress", "lessons", "help", "lookup", "practice-library", "settings", "zen", "recovery"):
         action(run, {"kind": "open", "view": view, "text": "山"})
         page = wait_snapshot(run, lambda s: s["opened"] and s["view"] == ("study" if view == "lessons" else view))
         if view in ("dashboard", "lessons", "help", "lookup", "practice-library", "settings") and page["requestCounts"].get("ambient", 0):
@@ -614,6 +621,21 @@ def smoke(run):
             wait_snapshot(run, lambda s: s["ambient"]["wanted"] and s["ambient"]["count"] > 0
                           and not s["ambient"]["fetching"] and s["pendingRequests"] == 0)
         capture(run, view)
+        if view in ("review-overview", "lesson-overview", "progress"):
+            expected = {"review-overview": "Reviews", "lesson-overview": "Lessons", "progress": "See what you’re building"}[view]
+            if not any(expected in label for label in page["labels"]):
+                raise RuntimeError("New study route did not render its explicit heading: " + view)
+            if view == "progress":
+                page = wait_snapshot(run, lambda s: s["pendingRequests"] == 0)
+                meter = page["state"].get("learning_progress", {})
+                if not meter.get("complete") or meter.get("passed") != 2 or meter.get("required") != 3:
+                    raise RuntimeError("Authored confirmed level passing did not show two of three kanji.")
+            action(run, {"kind": "bounds", "width": 540, "height": 650})
+            narrow = wait_snapshot(run)
+            if any(c["x"] < -1 or c["x"] + c["width"] > narrow["frame"]["width"] + 1 for c in narrow["controls"]):
+                raise RuntimeError("A new learning route clips a control horizontally: " + view)
+            capture(run, view + "-narrow")
+            action(run, {"kind": "bounds"})
         if view == "lessons":
             page = wait_snapshot(run, lambda s: button(s, "Tell them apart · 1") and settled(s))
             for note in ("My reminder: sunlight through the kitchen window.", "My sound cue: say にち with the morning calendar."):

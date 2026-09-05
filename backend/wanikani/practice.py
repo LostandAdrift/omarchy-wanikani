@@ -87,6 +87,20 @@ def _sessions(engine):
                     "total": min(len(session["queue"]), session.get("finish_at", len(session["queue"])))}
         else:
             protected.update(item["subject_id"] for item in session["queue"] if not item["done"])
+    # A radical, kanji and vocabulary can share the same visible characters.
+    # Their automatic cards must not expose a paused question through an alias.
+    characters = set()
+    if protected:
+        placeholders = ",".join("?" for _ in protected)
+        characters.update(row[0] for row in engine.store.rows(f"""SELECT json_extract(body,'$.data.characters')
+          FROM resources WHERE kind IN ('radical','kanji','vocabulary','kana_vocabulary')
+            AND id IN ({placeholders}) AND json_type(body,'$.data.characters')='text'
+            AND length(json_extract(body,'$.data.characters'))>0""", tuple(str(sid) for sid in protected)))
+    if characters:
+        placeholders = ",".join("?" for _ in characters)
+        protected.update(int(row[0]) for row in engine.store.rows(f"""SELECT id FROM resources
+          WHERE kind IN ('radical','kanji','vocabulary','kana_vocabulary')
+            AND json_extract(body,'$.data.characters') IN ({placeholders})""", tuple(characters)))
     return protected, practice
 
 

@@ -35,7 +35,7 @@ Item {
           width: parent.width
           horizontalAlignment: Text.AlignHCenter
           text: root.gallery ? "A MOMENT OF JAPANESE" : "LEARNED & GROWING"
-          color: Qt.alpha(Color.foreground, 0.76)
+          secondary: true
           font.pixelSize: Style.font.bodySmall
           font.letterSpacing: 2
         }
@@ -48,7 +48,7 @@ Item {
           width: parent.width
           horizontalAlignment: Text.AlignHCenter
           text: root.service.ambientSubject ? root.service.ambientSubject.meanings.join(" · ") : ""
-          color: Color.accent
+          textColor: Color.accent
           font.pixelSize: Style.font.title
         }
         Label {

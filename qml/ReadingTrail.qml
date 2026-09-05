@@ -147,7 +147,7 @@ ColumnLayout {
     Layout.fillWidth: true
     text: "WaniKani catalogue matches. Select a linked word to explore it; this is not a translation."
     font.pixelSize: Style.font.bodySmall
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Card {
     Layout.fillWidth: true
@@ -178,7 +178,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.loading || root.notice !== "" || root.report !== null && root.matches.length === 0
     text: root.loading ? "Finding words in your cached catalogue…" : root.notice || "No matching words are cached for this selection."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
@@ -240,6 +240,6 @@ ColumnLayout {
     visible: root.report !== null && root.report.truncated === true
     text: "A partial local trail is shown. Try a shorter selection for more matches."
     font.pixelSize: Style.font.bodySmall
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
 }

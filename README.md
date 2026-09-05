@@ -45,9 +45,15 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Panel navigation outside text fields | Ctrl+1 Today, Ctrl+2 Study, Ctrl+3 Lookup, Ctrl+4 Zen, Ctrl+5 Settings, Ctrl+6 Practice |
 | Enter / leave demo | `omarchy-shell wanikani demo true` / `omarchy-shell wanikani demo false` |
 
-Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
+Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, review-overview, lesson-overview, progress, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help, recovery. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
 
 ## How study works
+
+**Reviews** and **Lessons** have separate overview screens and independently saved sessions. Today shows both actions and any saved position. Switching between them preserves the current question, draft and mistake counts for each. Direct commands still start or resume their requested mode.
+
+**Progress** shows confirmed first passing toward the current level’s 90% kanji requirement, pending submissions separately, current SRS distribution, and a paged level board with prerequisites and known review times. Incomplete account data is labeled explicitly. Unrevealed subjects in unfinished graded work stay protected on the board.
+
+Vocabulary pronunciation has visible replay/stop and download/error states. An explicitly requested recording can download without holding up answers. Settings includes separate lesson/review autoplay and **Test selected voice**, using a safe learned sample. A downloaded alternate voice remains usable when the preferred voice is missing offline. Recordings stop when the surface, subject, account or study question changes.
 
 Sessions contain five subjects by default. Lessons introduce the subjects before their quiz. Reviews test each required part; wrong answers retain their mistake counts until the subject is finished. Romaji converts to kana locally, and existing Japanese input methods are supported.
 

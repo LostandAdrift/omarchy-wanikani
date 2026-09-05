@@ -100,7 +100,7 @@ class SessionProtocolTests(unittest.TestCase):
     def assert_session_only(self):
         events = [item for item in self.messages if "event" in item]
         self.assertEqual(["session"], [item["event"] for item in events])
-        self.assertEqual({"session", "session_revision", "session_epoch", "paused_graded"}, set(events[0]["data"]))
+        self.assertEqual({"session", "session_revision", "session_epoch", "paused_graded", "saved_sessions"}, set(events[0]["data"]))
         self.assertEqual(self.worker.engine.session_state(), events[0]["data"])
         self.assertNotIn("event", self.messages[0])  # Durable response comes first.
         self.worker.readiness.refresh.assert_not_called()

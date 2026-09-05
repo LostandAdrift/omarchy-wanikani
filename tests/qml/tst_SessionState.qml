@@ -26,6 +26,19 @@ TestCase {
         compare(state.snapshot.session.phase, "feedback")
         compare(state.snapshot.paused_graded, false)
     }
+    function test_saved_modes_follow_session_order_and_survive_reply() {
+        var saved = {reviews: {id: "review-a", completed: 1}, lessons: {id: "lesson-a", completed: 0}}
+        var state = State.full(State.initial(), snapshot(1, 1, {saved_sessions: saved}))
+        state = State.reply(state, session(2, "feedback"), state.context)
+        compare(state.snapshot.saved_sessions.lessons.id, "lesson-a")
+        var updated = {reviews: {id: "review-a", completed: 2}, lessons: saved.lessons}
+        state = State.partial(state, {session: session(2), session_revision: 2, saved_sessions: updated})
+        compare(state.snapshot.saved_sessions.reviews.completed, 2)
+        state = State.full(state, snapshot(2, 1, {saved_sessions: saved}))
+        compare(state.snapshot.saved_sessions.reviews.completed, 2)
+        state = State.full(state, snapshot(3, 0, {session_epoch: "new-account", saved_sessions: {}}))
+        compare(Object.keys(state.snapshot.saved_sessions).length, 0)
+    }
     function test_same_revision_partial_finishes_rpc_metadata_without_catalogue_work() {
         var state = State.full(State.initial(), snapshot(1, 1))
         state = State.reply(state, session(2), state.context)

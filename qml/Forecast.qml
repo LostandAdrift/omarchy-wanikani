@@ -63,7 +63,7 @@ ColumnLayout {
       Layout.fillWidth: true
       horizontalAlignment: Text.AlignRight
       text: root.selection.total + " in 24h" + (root.nextReviewsAt ? " · next " + Qt.formatDateTime(new Date(root.nextReviewsAt), "ddd HH:mm") : "")
-      color: Color.accent
+      textColor: Color.accent
       font.pixelSize: Style.font.bodySmall
     }
   }
@@ -173,7 +173,7 @@ ColumnLayout {
         required property int modelData
         text: root.selection.start !== null ? Qt.formatDateTime(new Date((root.snapshotTime + modelData * 3600) * 1000), "HH:mm") : "+" + modelData + "h"
         x: Math.max(0, Math.min(parent.width - width, parent.width * modelData / 24 - width / 2))
-        color: Qt.alpha(Color.foreground, 0.60)
+        textColor: Qt.alpha(Color.foreground, 0.60)
         font.pixelSize: Style.font.bodySmall
         Accessible.ignored: true
       }
@@ -193,12 +193,12 @@ ColumnLayout {
         Layout.fillWidth: true
         text: (root.displayedHour === 0 ? "First hour · " : "Hour " + (root.displayedHour + 1) + " · ") + root.interval
         font.pixelSize: Style.font.bodySmall
-        color: Qt.alpha(Color.foreground, 0.76)
+        secondary: true
       }
       Label {
         Layout.fillWidth: true
         text: root.selection.count + (root.selection.count === 1 ? " review" : " reviews") + " in this hour · " + root.selection.cumulative + " upcoming by then"
-        color: Color.accent
+        textColor: Color.accent
         font.bold: true
       }
     }
@@ -206,7 +206,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: root.selection.total ? "Choose an hour with the pointer or arrow keys. Hourly windows follow the cached schedule; reviews already due are shown above." : "No upcoming reviews in this 24-hour window. Reviews already due are shown above."
-    color: Qt.alpha(Color.foreground, 0.60)
+    textColor: Qt.alpha(Color.foreground, 0.60)
     font.pixelSize: Style.font.bodySmall
   }
 }

@@ -162,7 +162,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Choose up to " + root.selectionLimit + " subjects for ungraded practice. Your WaniKani review schedule stays as it is."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Card {
     Layout.fillWidth: true
@@ -182,7 +182,7 @@ ColumnLayout {
         Label {
           Layout.fillWidth: true
           text: root.library.saved_practice ? root.library.saved_practice.completed + " / " + root.library.saved_practice.total + " subjects completed" : ""
-          color: Qt.alpha(Color.foreground, 0.76)
+          secondary: true
           font.pixelSize: Style.font.bodySmall
         }
       }
@@ -197,7 +197,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.library.graded_paused === true
     text: "Your graded session is saved. Meanings stay hidden here for its unfinished subjects."
-    color: Color.accent
+    textColor: Color.accent
     font.pixelSize: Style.font.bodySmall
   }
   Flow {
@@ -234,7 +234,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: root.group === "mistakes" ? "Mistakes recorded by this plugin in the last " + root.library.mistake_days + " days. Typo corrections are excluded." : root.group === "saved" ? "Subjects you chose to keep in difficult items from lookup." : root.group === "learned" ? "Subjects you have started, including completed lessons waiting to sync." : "Saved subjects, recent local mistakes, and subjects with WaniKani recorded accuracy below 90%."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   RowLayout {
@@ -286,33 +286,33 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: root.selectedIds.length + " / " + root.selectionLimit + " selected. Selections stay with you as you change groups or pages."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
     visible: root.library.saved_practice !== null && root.selectedIds.length > 0
     text: "Starting this selection keeps the earlier practice record and begins a new ungraded set."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
     visible: root.notice !== ""
     text: root.notice
-    color: Color.urgent
+    textColor: Color.urgent
   }
   Label {
     Layout.fillWidth: true
     visible: root.loading
     text: "Loading your local practice library…"
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Label {
     Layout.fillWidth: true
     visible: !root.loading && root.library.items.length === 0
     text: searchField.text.length > 0 ? "No matching subjects in this group. Try a shorter search or another group." : root.group === "saved" ? "Save a subject from lookup to build your own practice collection." : root.group === "mistakes" ? "No uncorrected mistakes were recorded here during the last " + root.library.mistake_days + " days." : root.group === "learned" ? "Started subjects will appear here after account synchronization. Completed offline lessons appear immediately." : "No suggested subjects yet. Browse Learned to choose your own practice set."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Repeater {
     model: root.library.items
@@ -342,13 +342,13 @@ ColumnLayout {
           Label {
             Layout.fillWidth: true
             text: subjectCard.modelData.spoilers_hidden ? "Meaning hidden during your graded session" : subjectCard.modelData.meaning || "Radical image"
-            color: subjectCard.modelData.spoilers_hidden ? Qt.alpha(Color.foreground, 0.76) : Color.foreground
+            textColor: subjectCard.modelData.spoilers_hidden ? Qt.alpha(Color.foreground, 0.76) : Color.foreground
             font.bold: !subjectCard.modelData.spoilers_hidden
           }
           Label {
             Layout.fillWidth: true
             text: subjectCard.modelData.type.replace("_", " ") + " · Level " + subjectCard.modelData.level + " · " + (subjectCard.modelData.learned ? "SRS " + subjectCard.modelData.srs_stage : "Lesson not started")
-            color: Qt.alpha(Color.foreground, 0.76)
+            secondary: true
             font.pixelSize: Style.font.bodySmall
           }
           Label {
@@ -356,14 +356,14 @@ ColumnLayout {
             text: subjectCard.modelData.reasons.map(function (reason) {
               return reason.label
             }).join(" · ")
-            color: Qt.alpha(Color.foreground, 0.76)
+            secondary: true
             font.pixelSize: Style.font.bodySmall
           }
           Label {
             Layout.fillWidth: true
             visible: !subjectCard.modelData.ready
             text: subjectCard.modelData.cache_note
-            color: Color.urgent
+            textColor: Color.urgent
             font.pixelSize: Style.font.bodySmall
           }
         }
@@ -382,7 +382,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: root.library.total ? (root.library.offset + 1) + "–" + Math.min(root.library.offset + root.library.items.length, root.library.total) + " of " + root.library.total + " · " + (root.library.readiness_scope === "page" ? root.library.page_ready + " on this page ready offline" : root.library.ready_total + " ready offline") : "0 subjects"
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
     Action {

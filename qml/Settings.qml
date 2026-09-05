@@ -31,7 +31,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: snapshot.demo ? "You are exploring independently authored sample material. No account is connected in demo mode." : snapshot.username ? "Connected data for " + snapshot.username + ". Token storage: " + snapshot.credential_storage + "." : "Create a personal API token in WaniKani Settings. Reading works with a read-only token; native study also needs permissions to start assignments and create reviews. Notes need study-material create/update permissions."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Action {
     text: snapshot.demo ? "Leave demo" : "Explore demo"
@@ -111,13 +111,13 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: notice !== ""
     text: notice
-    color: Color.accent
+    textColor: Color.accent
   }
   Label {
     Layout.fillWidth: true
     visible: root.snapshot.credential_cleanup_needed === true && root.notice === ""
     text: "An older saved token still needs removal. Unlock the keyring, then use Disconnect or Retry token removal."
-    color: Color.urgent
+    textColor: Color.urgent
   }
   Label {
     text: "Study & atmosphere"
@@ -147,7 +147,11 @@ ColumnLayout {
       },
       {
         key: "autoplay_audio",
-        label: "Play cached pronunciation after a reading answer"
+        label: "Autoplay pronunciation after review readings"
+      },
+      {
+        key: "autoplay_lessons",
+        label: "Autoplay pronunciation while learning lessons"
       },
       {
         key: "notifications",
@@ -175,13 +179,13 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Exact meanings keeps accepted variants and your saved synonyms, and turns off automatic spelling tolerance. Reading answers always require exact kana after normalization."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
     text: "Ambient subjects are learned and not due in the next 24 hours. Idle views yield to your existing screensaver and lock. Reminders respect Do Not Disturb, quiet hours, vacation, and study sessions."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   RowLayout {
@@ -263,7 +267,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: root.snapshot.cache ? (root.snapshot.cache.subjects || 0) + " subjects available offline · " + root.snapshot.cache.files + " media files · " + (root.snapshot.cache.bytes / 1048576).toFixed(1) + " MB. Answers and sessions are saved separately." : "No cached media"
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   RowLayout {
@@ -312,7 +316,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Pending work stays saved until confirmed. If a request loses its response, refresh to reconcile. Keeping remote progress archives your local result without resubmitting it."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Action {
@@ -322,7 +326,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Super+Alt+W opens study; Super+Alt+Shift+W looks up selected text. Add the available shortcuts and Study/Lookup launcher entries here. Existing bindings are preserved."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Flow {
@@ -342,7 +346,7 @@ ColumnLayout {
     visible: root.controller.integrationNotice !== ""
     text: root.controller.integrationNotice
     font.pixelSize: Style.font.bodySmall
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Action {
     text: showDeletion ? "Cancel data deletion" : "Remove local account data…"
@@ -354,7 +358,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: "This removes the selected mode's cached account data, local history, saved sessions, and token. It does not delete your WaniKani account."
-      color: Color.urgent
+      textColor: Color.urgent
     }
     Controls.CheckBox {
       text: "Also discard unresolved local submissions"
@@ -386,7 +390,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "WaniKani for Omarchy · 0.1.0\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
 }

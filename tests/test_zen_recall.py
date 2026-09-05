@@ -176,7 +176,7 @@ class ZenRecallTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("Zen.qml", "Label.qml"):
+            for name in ("Zen.qml", "Label.qml", "Theme.mjs"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
             (qml / "Action.qml").write_text("import QtQuick.Controls\nButton { property bool selected: false }\n")
             (qml / "Crab.qml").write_text("import QtQuick\nItem { property bool animate: false }\n")
@@ -188,7 +188,7 @@ class ZenRecallTests(unittest.TestCase):
                 '  function space(value) { return value }\n'
                 '  readonly property var font: ({family: "Sans", body: 14, bodySmall: 12, title: 20})\n}\n')
             (common / "Color.qml").write_text('pragma Singleton\nimport QtQuick\nQtObject {\n'
-                '  readonly property color foreground: "#202020"\n'
+                '  readonly property color background: \"#ffffff\"\n  readonly property color foreground: "#202020"\n'
                 '  readonly property color accent: "#006699"\n}\n')
             (directory / "tst_ZenRecall.qml").write_text(QML)
             process = subprocess.run([str(RUNNER), "-input", str(directory), "-import", str(directory)],

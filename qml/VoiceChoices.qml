@@ -110,31 +110,52 @@ ColumnLayout {
       }
     }
   }
+  Flow {
+    Layout.fillWidth: true
+    spacing: Style.space(8)
+    Action {
+      text: root.controller.audioContext === "voice_test" && root.controller.audioState === "loading" ? "Preparing voice sample…" : "Test selected voice"
+      enabled: root.active && root.preferenceAvailable && !(root.controller.audioContext === "voice_test" && root.controller.audioState === "loading")
+      onClicked: root.controller.testVoice(root.preferred)
+    }
+    Action {
+      text: "Stop sample"
+      visible: root.controller.audioContext === "voice_test" && root.controller.audioState === "playing"
+      onClicked: root.controller.stopAudio()
+    }
+  }
+  Label {
+    Layout.fillWidth: true
+    visible: root.controller.audioContext === "voice_test" && !!root.controller.audioNotice
+    text: visible ? root.controller.audioNotice : ""
+    secondary: true
+    font.pixelSize: Style.font.bodySmall
+  }
   Label {
     Layout.fillWidth: true
     visible: root.selectedDescription !== ""
     text: root.selectedDescription
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
     text: root.loading ? "Reading available voices from your cached catalogue…" : root.voices.length === 0 ? "Voices appear when pronunciation metadata is cached from your account. Your saved voice preference is kept." : "Uses downloaded pronunciation clips. If the preferred voice is not cached for a word, another downloaded voice is used."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
     visible: !root.loading && root.voices.length > 0 && !root.preferenceAvailable
     text: "Saved preference: Voice " + root.preferred + ". This voice is not listed in the accessible cached catalogue."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
     visible: root.notice !== ""
     text: root.notice
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
 }

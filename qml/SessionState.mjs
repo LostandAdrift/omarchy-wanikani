@@ -17,6 +17,7 @@ function epoch(value) {
 
 function sessionFields(snapshot) {
     return {session: snapshot.session || null, paused_graded: snapshot.paused_graded === true,
+        saved_sessions: snapshot.saved_sessions || {},
         session_revision: revision(snapshot.session_revision), session_epoch: epoch(snapshot.session_epoch)};
 }
 
@@ -89,7 +90,7 @@ export function reply(state, incoming, issuedContext) {
             || epoch(incoming.session_epoch) !== epoch(state.sessionEpoch))
         return Object.assign({}, state, {replyAccepted: false});
     const result = mergeSession(state, {session: incoming,
-        paused_graded: state.snapshot.paused_graded, session_revision: incoming.revision,
+        paused_graded: state.snapshot.paused_graded, saved_sessions: state.snapshot.saved_sessions, session_revision: incoming.revision,
         session_epoch: epoch(incoming.session_epoch)});
     return Object.assign({}, result, {replyAccepted: true, catalogueAccepted: false});
 }

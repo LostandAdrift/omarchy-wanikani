@@ -51,7 +51,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: "Look for the stroke that changes. Say each " + (root.showMeaning && root.showReading ? "meaning and reading" : root.showMeaning ? "meaning" : "reading") + " to yourself."
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
     Flow {
@@ -93,7 +93,7 @@ ColumnLayout {
               Layout.fillWidth: true
               text: index === 0 ? "THIS KANJI" : "COMPARE"
               horizontalAlignment: Text.AlignHCenter
-              color: Qt.alpha(Color.foreground, 0.66)
+              textColor: Qt.alpha(Color.foreground, 0.66)
               font.pixelSize: Style.font.bodySmall
               font.letterSpacing: 1
             }
@@ -108,7 +108,7 @@ ColumnLayout {
               text: root.showMeaning ? root.meaningsFor(cardSubject).join(" · ") : ""
               horizontalAlignment: Text.AlignHCenter
               font.pixelSize: Style.font.title
-              color: Color.accent
+              textColor: Color.accent
             }
             Label {
               Layout.fillWidth: true
@@ -124,7 +124,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: "Similar kanji from WaniKani. Subjects in unfinished graded work are kept out of comparisons."
-      color: Qt.alpha(Color.foreground, 0.66)
+      textColor: Qt.alpha(Color.foreground, 0.66)
       font.pixelSize: Style.font.bodySmall
     }
   }

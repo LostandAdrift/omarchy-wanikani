@@ -14,20 +14,22 @@ TestCase {
     property bool hold: false
     property bool ready: true
     property bool locked: false
-    function result(args) {
+    property var audioResult: ({status:"ready",subject_id:4,uri:"file:///authored-fixture.wav"})
+    function result(args,method) {
+      if (method.indexOf("pronunciation") === 0) return audioResult
       return {items:[{id:1,label:"Authored voice",description:"",ready:true}],offset:args.offset||0,
         counts:{},ready_counts:{},total:1,ready_total:1}
     }
     function request(method,args,callback) {
       requests=requests.concat([{method:method,args:args}])
       if (!callback) return
-      if (hold) pending=pending.concat([{callback:callback,args:args}])
-      else callback(true,result(args),"")
+      if (hold) pending=pending.concat([{callback:callback,args:args,method:method}])
+      else callback(true,result(args,method),"")
     }
     function reply() {
       var item=pending[0]
       pending=pending.slice(1)
-      item.callback(true,result(item.args),"")
+      item.callback(true,result(item.args,item.method),"")
     }
   }
   QtObject {
@@ -43,10 +45,12 @@ TestCase {
     property var session: null
     property bool searching: false
     property int searchSequence: 0
+    property int stops: 0
     property int plays: 0
     property var actions: []
     readonly property var snapshot: service.snapshot
     function play(subject) { plays++ }
+    function stopAudio() { stops++ }
     function studyAction(method,args) { actions=actions.concat([{method:method,args:args}]) }
     function search(text) { query=text; searchSequence++; service.request("search",{text:text}) }
   }
@@ -59,10 +63,11 @@ TestCase {
     return item
   }
   function init() {
-    controller.opened=true;controller.busy=false;controller.plays=0;controller.actions=[]
+    controller.opened=true;controller.busy=false;controller.plays=0;controller.stops=0;controller.actions=[]
     controller.session=null;controller.detail=null;controller.query="";controller.searching=false
     controller.searchSequence=0;controller.contentAccess="fixture"
     service.hold=false;service.ready=true;service.locked=false;service.requests=[];service.pending=[]
+    service.audioResult={status:"ready",subject_id:4,uri:"file:///authored-fixture.wav"}
     service.snapshot={settings:{autoplay_audio:true,voice_actor_id:1},state_revision:1,last_sync:"initial",cache:{subjects:16}}
   }
   function cleanup() { objects.forEach(function(item){item.destroy()});objects=[];wait(1) }
@@ -164,15 +169,61 @@ TestCase {
   }
   function test_panel_search_and_audio_require_visible_ready_unlocked_surface() {
     var item=make("Panel")
-    item.opened=false;item.search("山");item.play({audio:[{url:"file:///fixture.wav"}]})
+    item.opened=false;item.search("山");item.play({id:4,audio:[{url:"file:///fixture.wav"}]})
     compare(service.requests.length,0);compare(item.playCount,0)
-    item.opened=true;service.ready=false;item.refreshSearch();item.play({audio:[{url:"file:///fixture.wav"}]})
+    item.opened=true;service.ready=false;item.refreshSearch();item.play({id:4,audio:[{url:"file:///fixture.wav"}]})
     compare(service.requests.length,0);compare(item.playCount,0)
-    service.ready=true;service.locked=true;item.refreshSearch();item.play({audio:[{url:"file:///fixture.wav"}]})
+    service.ready=true;service.locked=true;item.refreshSearch();item.play({id:4,audio:[{url:"file:///fixture.wav"}]})
     compare(service.requests.length,0);compare(item.playCount,0)
-    service.locked=false;item.refreshSearch();item.play({audio:[{url:"file:///fixture.wav"}]})
-    compare(service.requests.length,1);compare(item.playCount,1)
-    item.view="study";item.refreshSearch();compare(service.requests.length,1)
+    service.locked=false;item.refreshSearch();item.play({id:4,audio:[{url:"file:///fixture.wav"}]})
+    compare(service.requests.length,2);compare(item.playCount,1)
+    item.view="study";item.refreshSearch();compare(service.requests.length,2)
+  }
+  function test_late_recording_cannot_play_after_navigation_access_close_or_stop_data() {
+    return [{tag:"closed",change:"closed"},{tag:"navigation",change:"navigation"},{tag:"access",change:"access"},{tag:"stop",change:"stop"},{tag:"locked",change:"locked"}]
+  }
+  function test_late_recording_cannot_play_after_navigation_access_close_or_stop(data) {
+    service.hold=true;var item=make("Panel");item.play({id:4})
+    compare(service.requests.length,1);compare(item.audioState,"loading")
+    if(data.change==="closed") item.opened=false
+    if(data.change==="navigation") item.navigationSequence++
+    if(data.change==="access") item.contentAccess="another account"
+    if(data.change==="stop") item.stopAudio()
+    if(data.change==="locked") service.locked=true
+    service.reply();compare(item.playCount,0)
+  }
+  function test_lookup_query_change_invalidates_pending_pronunciation() {
+    service.hold=true;var item=make("Panel");item.play({id:4});item.search("new word")
+    service.reply();compare(item.playCount,0)
+  }
+  function test_finishing_study_stops_last_recording() {
+    var item=make("Study");controller.session=session("feedback","reading");wait(20)
+    var stops=controller.stops;controller.session={id:"fixture",phase:"complete"};wait(20)
+    compare(controller.stops,stops+1)
+  }
+  function test_missing_recording_downloads_once_and_never_automatically_retries() {
+    service.hold=true;service.audioResult={status:"not_cached",subject_id:4}
+    var item=make("Panel");item.play({id:4});service.reply()
+    compare(service.requests.length,2);compare(service.requests[1].method,"pronunciation_prepare")
+    service.reply();compare(service.requests.length,2);compare(item.playCount,0);compare(item.audioState,"failed")
+  }
+  function test_study_audio_requires_revealed_current_subject_and_revision() {
+    var item=make("Panel");item.view="study";item.session=session("question","reading");item.play(item.session.subject)
+    compare(service.requests.length,0)
+    item.session=session("feedback","meaning");item.play(item.session.subject);compare(service.requests.length,0)
+    var next=session("feedback","reading");next.revision=7;item.session=next
+    item.play({id:99});compare(service.requests.length,0)
+    service.hold=true;item.play(item.session.subject);compare(service.requests.length,1)
+    compare(service.requests[0].args.context,"study");compare(service.requests[0].args.revision,7)
+    next=Object.assign({},next,{revision:8});item.session=next;service.reply();compare(item.playCount,0)
+    next=Object.assign({},next,{feedback:{retry:true}});item.session=next;item.play(next.subject);compare(service.requests.length,1)
+  }
+  function test_voice_sample_uses_requested_actor_during_download() {
+    service.hold=true;service.audioResult={status:"not_cached",subject_id:4}
+    var item=make("Panel");item.testVoice(9);service.reply()
+    compare(service.requests[0].method,"pronunciation_sample");compare(service.requests[1].args.context,"voice_test")
+    compare(service.requests[1].args.voice_actor_id,9);compare(service.requests[1].args.subject_id,4)
+    service.audioResult={status:"ready",subject_id:4,uri:"file:///authored-fixture.wav"};service.reply();compare(item.playCount,1)
   }
   function test_late_search_response_cannot_repopulate_closed_panel() {
     service.hold=true;var item=make("Panel");item.search("山")

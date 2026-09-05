@@ -188,7 +188,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: !!(root.subject && root.subject.content_error)
     text: root.subject ? root.subject.content_error || "" : ""
-    color: Color.urgent
+    textColor: Color.urgent
   }
   Label {
     objectName: "subject-meaning-heading"
@@ -196,14 +196,14 @@ ColumnLayout {
     visible: root.showMeaning
     text: "Meaning"
     font.bold: true
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Label {
     Layout.fillWidth: true
     visible: root.showMeaning
     text: root.subject ? root.subject.meanings.join(" · ") : ""
     font.pixelSize: Style.font.title
-    color: Color.accent
+    textColor: Color.accent
   }
   Label {
     Layout.fillWidth: true
@@ -214,7 +214,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.showMeaning && text !== ""
     text: root.subject ? root.subject.meaning_hint : ""
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   ColumnLayout {
     objectName: "subject-meaning-note"
@@ -225,7 +225,7 @@ ColumnLayout {
       text: "Your meaning note"
       font.bold: true
       font.pixelSize: Style.font.bodySmall
-      color: Color.accent
+      textColor: Color.accent
     }
     Label {
       objectName: "subject-meaning-note-text"
@@ -239,7 +239,7 @@ ColumnLayout {
     visible: root.showReading && root.subject && root.subject.readings.length > 0
     text: "Reading"
     font.bold: true
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Label {
     Layout.fillWidth: true
@@ -258,7 +258,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.showReading && text !== ""
     text: root.subject ? root.subject.reading_hint : ""
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   ColumnLayout {
     objectName: "subject-reading-note"
@@ -269,7 +269,7 @@ ColumnLayout {
       text: "Your reading note"
       font.bold: true
       font.pixelSize: Style.font.bodySmall
-      color: Color.accent
+      textColor: Color.accent
     }
     Label {
       objectName: "subject-reading-note-text"
@@ -277,18 +277,11 @@ ColumnLayout {
       text: root.readingNoteText
     }
   }
-  RowLayout {
+  Pronunciation {
+    Layout.fillWidth: true
     visible: root.showReading && root.subject && root.subject.audio_available
-    Action {
-      text: "Play pronunciation"
-      enabled: root.subject && root.subject.audio.length > 0
-      onClicked: root.controller.play(root.subject)
-    }
-    Label {
-      text: root.subject && root.subject.audio.length ? "Cached for offline use" : "Audio not cached yet"
-      color: Qt.alpha(Color.foreground, 0.76)
-      font.pixelSize: Style.font.bodySmall
-    }
+    controller: root.controller
+    subject: root.subject
   }
   Label {
     objectName: "subject-context-heading"
@@ -296,7 +289,7 @@ ColumnLayout {
     visible: root.showMeaning && root.showReading && root.subject && root.subject.sentences.length > 0
     text: "In context"
     font.bold: true
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Repeater {
     model: root.showMeaning && root.showReading && root.subject ? root.subject.sentences : []
@@ -311,7 +304,7 @@ ColumnLayout {
       Label {
         Layout.fillWidth: true
         text: modelData.en
-        color: Qt.alpha(Color.foreground, 0.76)
+        secondary: true
         font.pixelSize: Style.font.bodySmall
       }
     }
@@ -371,7 +364,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: root.subject && root.subject.material_pending ? "Your local edit is waiting to sync." : "Synonyms and notes synchronize with WaniKani. Separate synonyms with commas."
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
     Ui.TextField {
@@ -430,7 +423,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: root.draftError || (root.draftSaving ? "Keeping your draft…" : root.editorDirty ? "Draft kept on this computer. Save notes to apply it." : "Notes are up to date.")
-      color: root.draftError ? Color.urgent : Qt.alpha(Color.foreground, 0.76)
+      textColor: root.draftError ? Color.urgent : Qt.alpha(Color.foreground, 0.76)
       font.pixelSize: Style.font.bodySmall
     }
     Flow {

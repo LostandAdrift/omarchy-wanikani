@@ -229,7 +229,7 @@ class MediaPlan:
 
 def _active_subjects(store):
     active = {}
-    references = [store.get(name) for name in ("active_session", "graded_session", "practice_session")]
+    references = [store.get(name) for name in ("active_session", "graded_session", "practice_session", "reviews_session", "lessons_session")]
     for context, reference in enumerate(references):
         session = store.session(reference) if isinstance(reference, str) else None
         if not session or session.get("phase") == "complete":

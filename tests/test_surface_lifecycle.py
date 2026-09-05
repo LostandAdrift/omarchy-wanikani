@@ -64,9 +64,17 @@ Item {
  property string searchState: "all"
  property int searchSequence: 0
  property bool searching: false
+ property var session: null
+ property int audioSequence: 0
+ property int navigationSequence: 0
+ property string contentAccess: "fixture"
+ property string audioContext: ""
+ property int audioSubjectId: -1
+ property string audioState: ""
+ property string audioNotice: ""
  readonly property int playCount: audio.count
- QtObject { id: audio; property var source; property int count: 0; function play() { count++ } }
-''' + function('play') + function('search') + function('refreshSearch') + '}\n')
+ QtObject { id: audio; property var source; property int count: 0; function play() { count++ } function stop() {} }
+''' + function('audioContextCurrent') + function('requestAudio') + function('play') + function('testVoice') + function('stopAudio') + function('search') + function('refreshSearch') + '}\n')
     shutil.copyfile(ROOT / 'vendor/WanaKana.mjs', directory / 'WanaKana.mjs')
     shutil.copyfile(ROOT / 'qml/UnicodeText.mjs', directory / 'UnicodeText.mjs')
     shutil.copyfile(ROOT / 'tests/fixtures/SurfaceLifecycle.qml', directory / 'tst_SurfaceLifecycle.qml')

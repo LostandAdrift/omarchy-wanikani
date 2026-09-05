@@ -167,14 +167,14 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Your local answers stay saved while WaniKani confirms progress. An uncertain response is checked against your account before any recovery action."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   RowLayout {
     Layout.fillWidth: true
     Label {
       Layout.fillWidth: true
       text: root.page.pending + " pending · " + root.page.attention + " need attention"
-      color: root.page.attention ? Color.urgent : Color.accent
+      textColor: root.page.attention ? Color.urgent : Color.accent
     }
     Action {
       id: refreshButton
@@ -254,20 +254,20 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "This history records submissions made by this plugin. It is not your account’s complete review history."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   Label {
     Layout.fillWidth: true
     visible: root.notice !== ""
     text: root.notice
-    color: Color.urgent
+    textColor: Color.urgent
   }
   Label {
     Layout.fillWidth: true
     visible: root.page.items.length === 0
     text: root.loading ? "Loading saved submissions…" : "No submissions in this view."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Repeater {
     model: root.page.items
@@ -300,7 +300,7 @@ ColumnLayout {
             Label {
               Layout.fillWidth: true
               text: itemCard.modelData.kind + " · " + root.stateLabel(itemCard.modelData.state)
-              color: ["uncertain", "conflicted", "blocked"].indexOf(itemCard.modelData.state) >= 0 ? Color.urgent : Color.accent
+              textColor: ["uncertain", "conflicted", "blocked"].indexOf(itemCard.modelData.state) >= 0 ? Color.urgent : Color.accent
               font.pixelSize: Style.font.bodySmall
             }
           }
@@ -308,7 +308,7 @@ ColumnLayout {
         Label {
           Layout.fillWidth: true
           text: "Saved " + root.createdLabel(itemCard.modelData.created_at) + (itemCard.modelData.errors ? " · Errors: " + itemCard.modelData.errors.meaning + " meaning, " + itemCard.modelData.errors.reading + " reading" : "")
-          color: Qt.alpha(Color.foreground, 0.76)
+          secondary: true
           font.pixelSize: Style.font.bodySmall
         }
         Label {
@@ -319,7 +319,7 @@ ColumnLayout {
         Label {
           Layout.fillWidth: true
           text: itemCard.modelData.rationale
-          color: Qt.alpha(Color.foreground, 0.76)
+          secondary: true
           font.pixelSize: Style.font.bodySmall
         }
         Flow {
@@ -345,7 +345,7 @@ ColumnLayout {
           Layout.fillWidth: true
           visible: root.confirmId === itemCard.modelData.id
           text: "Archive this local submission and keep WaniKani’s progress? Your session and answers remain in local history. This submission will not be sent again."
-          color: Color.urgent
+          textColor: Color.urgent
         }
         Flow {
           Layout.fillWidth: true
@@ -369,7 +369,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: root.page.total ? (root.page.offset + 1) + "–" + Math.min(root.page.offset + root.page.items.length, root.page.total) + " of " + root.page.total : "0 submissions"
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
     Action {

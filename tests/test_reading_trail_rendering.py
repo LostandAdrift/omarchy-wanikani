@@ -186,7 +186,7 @@ class ReadingTrailRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / 'qml'
             qml.mkdir()
-            for name in ('ReadingTrail.qml', 'Label.qml', 'Card.qml', 'UnicodeText.mjs'):
+            for name in ('ReadingTrail.qml', 'Label.qml', 'Card.qml', 'UnicodeText.mjs', 'Theme.mjs'):
                 shutil.copyfile(ROOT / 'qml' / name, qml / name)
             (qml / 'Action.qml').write_text('import QtQuick\nimport QtQuick.Controls\nButton {\n'
                 ' property bool selected: false\n property string accessibleName: text\n property string accessibleHint: ""\n'
@@ -199,7 +199,7 @@ class ReadingTrailRenderingTests(unittest.TestCase):
                 ' function space(value) { return value }\n readonly property var font: ({family:"Sans",body:14,bodySmall:12,title:20})\n'
                 ' readonly property int cornerRadius: 6\n}\n')
             (common / 'Color.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject {\n'
-                ' readonly property color foreground: "#202020"\n property color accent: "#006699"\n}\n')
+                ' readonly property color background: \"#ffffff\"\n readonly property color foreground: "#202020"\n property color accent: "#006699"\n}\n')
             (directory / 'tst_ReadingTrail.qml').write_text(QML)
             result = subprocess.run([str(RUNNER), '-input', str(directory), '-import', str(directory)],
                 capture_output=True, text=True, timeout=30,

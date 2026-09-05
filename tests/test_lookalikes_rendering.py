@@ -254,7 +254,7 @@ class LookalikesRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("Lookalikes.qml", "SubjectGlyph.qml", "RadicalImage.qml", "JapaneseText.qml", "Label.qml", "Card.qml"):
+            for name in ("Lookalikes.qml", "SubjectGlyph.qml", "RadicalImage.qml", "JapaneseText.qml", "Label.qml", "Card.qml", "Theme.mjs"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
             (qml / "Action.qml").write_text('import QtQuick\nimport QtQuick.Controls\nButton {\n'
                 '  objectName: "fixture-action"\n'
@@ -270,7 +270,7 @@ class LookalikesRenderingTests(unittest.TestCase):
                 '  readonly property var font: ({family: "Sans", body: 14, bodySmall: 12, title: 20})\n'
                 '  readonly property int cornerRadius: 6\n}\n')
             (common / "Color.qml").write_text('pragma Singleton\nimport QtQuick\nQtObject {\n'
-                '  readonly property color foreground: "#202020"\n'
+                '  readonly property color background: \"#ffffff\"\n  readonly property color foreground: "#202020"\n'
                 '  readonly property color accent: "#006699"\n}\n')
             (directory / "tst_Lookalikes.qml").write_text(QML)
             process = subprocess.run([str(RUNNER), "-input", str(directory), "-import", str(directory)],

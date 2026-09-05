@@ -28,16 +28,24 @@ ColumnLayout {
       input.forceActiveFocus()
   }
   function restoreInput() {
-    if (!session || !subject || !input)
+    if (!session || !subject || !input) {
+      if (questionKey && typeof controller.stopAudio === "function")
+        controller.stopAudio()
+      questionKey = ""
       return
+    }
     var key = session.id + ":" + subject.id + ":" + session.part + ":" + session.phase
     if (key !== questionKey) {
+      if (typeof controller.stopAudio === "function")
+        controller.stopAudio()
       questionKey = key
       converting = true
       input.text = session.draft || ""
       converting = false
       Qt.callLater(focusInput)
       if (interactive && session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
+        controller.play(subject)
+      else if (interactive && session.phase === "lesson" && controller.snapshot.settings.autoplay_lessons)
         controller.play(subject)
     }
   }
@@ -100,29 +108,29 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.session && root.session.restricted === true
     text: "This subject is no longer accessible with the current account. Your saved answers are retained; refresh your account in Settings."
-    color: Color.urgent
+    textColor: Color.urgent
   }
   Label {
     Layout.fillWidth: true
     visible: !!(root.session && root.session.unavailable)
     text: root.session ? root.session.unavailable || "" : ""
-    color: Color.urgent
+    textColor: Color.urgent
   }
   RowLayout {
     Layout.fillWidth: true
     visible: root.session !== null
     Label {
-      text: root.session ? (root.session.mode === "practice" ? "UNGRADED PRACTICE" : root.session.mode === "lessons" ? "LESSONS" : "REVIEWS") : ""
+      text: !root.session ? "" : (root.session.mode === "practice" ? "PRACTICE" : root.session.mode === "lessons" ? "LESSONS" : "REVIEWS") + " · " + (root.session.phase === "lesson" ? "LEARN" : root.session.phase === "complete" ? "COMPLETE" : (root.session.mode === "lessons" ? "QUIZ · " : "") + (root.session.part === "reading" ? "READING" : "MEANING"))
       font.pixelSize: Style.font.bodySmall
       font.letterSpacing: 2
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
     }
     Item {
       Layout.fillWidth: true
     }
     Label {
       text: root.session ? root.session.completed + " / " + root.session.total + " subjects" : ""
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
   }
@@ -160,20 +168,20 @@ ColumnLayout {
       Layout.fillWidth: true
       visible: !!(root.session && root.session.invalidated)
       text: root.session ? root.session.invalidated : ""
-      color: Color.urgent
+      textColor: Color.urgent
       horizontalAlignment: Text.AlignHCenter
     }
     Label {
       Layout.fillWidth: true
       text: root.session ? root.session.completed + (root.session.completed === 1 ? " subject completed · " : " subjects completed · ") + root.session.errors + (root.session.errors === 1 ? " mistake · " : " mistakes · ") + root.session.overrides + (root.session.overrides === 1 ? " typo correction" : " typo corrections") : ""
       horizontalAlignment: Text.AlignHCenter
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
     }
     Label {
       Layout.fillWidth: true
       text: root.controller.snapshot.pending > 0 ? "Saved on this computer. " + root.controller.snapshot.pending + " results are waiting to sync." : root.controller.snapshot.demo ? "Demo progress stays on this computer." : "Your session is saved."
       horizontalAlignment: Text.AlignHCenter
-      color: Color.accent
+      textColor: Color.accent
     }
     Flow {
       Layout.fillWidth: true
@@ -239,7 +247,7 @@ ColumnLayout {
         Label {
           width: parent.width
           text: root.subject ? root.subject.type.replace("_", " ").toUpperCase() + " · LEVEL " + root.subject.level : ""
-          color: Qt.alpha(Color.foreground, 0.76)
+          secondary: true
           font.pixelSize: Style.font.bodySmall
           horizontalAlignment: Text.AlignHCenter
           font.letterSpacing: 2
@@ -255,7 +263,7 @@ ColumnLayout {
           width: parent.width
           text: root.session && root.session.phase === "lesson" ? "Discover · " + (root.session.lesson_index + 1) + " of " + root.session.total : root.session && root.session.part === "reading" ? "What is the reading?" : "What is the meaning?"
           horizontalAlignment: Text.AlignHCenter
-          color: Color.accent
+          textColor: Color.accent
           font.pixelSize: Style.font.title
         }
       }
@@ -264,7 +272,7 @@ ColumnLayout {
       Layout.fillWidth: true
       visible: !!root.subject && !root.promptReady
       text: subjectGlyph.displayLoading ? "Loading this subject image…" : "This subject image could not be shown. Refresh your account to try again."
-      color: subjectGlyph.displayLoading ? Qt.alpha(Color.foreground, 0.76) : Color.urgent
+      textColor: subjectGlyph.displayLoading ? Qt.alpha(Color.foreground, 0.76) : Color.urgent
     }
     Ui.TextField {
       id: input
@@ -290,7 +298,7 @@ ColumnLayout {
       Layout.fillWidth: true
       visible: root.session && root.session.feedback !== null
       text: root.session && root.session.feedback ? root.session.feedback.message : ""
-      color: root.session && root.session.feedback && root.session.feedback.correct ? Color.accent : Color.urgent
+      textColor: root.session && root.session.feedback && root.session.feedback.correct ? Color.accent : Color.urgent
       horizontalAlignment: Text.AlignHCenter
     }
     Label {
@@ -334,6 +342,12 @@ ColumnLayout {
       visible: root.session && (root.session.phase === "lesson" || (root.feedback && root.session && root.session.feedback && !root.session.feedback.correct))
       showMeaning: root.session && (root.session.phase === "lesson" || root.session.part === "meaning")
       showReading: root.session && (root.session.phase === "lesson" || root.session.part === "reading")
+    }
+    Pronunciation {
+      Layout.fillWidth: true
+      controller: root.controller
+      subject: root.subject
+      visible: root.feedback && root.session && root.session.feedback && root.session.feedback.correct && root.subject && root.subject.audio_available && (root.session.part === "reading" || root.subject.type === "kana_vocabulary")
     }
     Flow {
       Layout.fillWidth: true

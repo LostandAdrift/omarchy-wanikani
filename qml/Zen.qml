@@ -89,7 +89,7 @@ ColumnLayout {
     Layout.fillWidth: true
     text: root.quietRecall ? "QUIET RECALL · UNGRADED" : "A MOMENT OF JAPANESE"
     horizontalAlignment: Text.AlignHCenter
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.letterSpacing: 3
     font.pixelSize: Style.font.bodySmall
   }
@@ -109,7 +109,7 @@ ColumnLayout {
     visible: !root.subject || root.answersVisible
     text: root.subject ? root.subject.meanings.join(" · ") : "A little rest"
     font.pixelSize: Style.font.title
-    color: Color.accent
+    textColor: Color.accent
     horizontalAlignment: Text.AlignHCenter
   }
   Label {
@@ -120,7 +120,7 @@ ColumnLayout {
       return r.reading
     }).join(" · ") : "Learned subjects will appear here when their next review is more than a day away."
     font.family: root.subject ? "Noto Sans CJK JP" : Style.font.family
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     horizontalAlignment: Text.AlignHCenter
   }
   Label {
@@ -128,7 +128,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.quietRecall && root.subject !== null
     text: root.answerRevealed ? "Take a moment, then try another word." : root.subject && root.subject.readings.length ? "Recall the meaning and reading. Take your time." : "Recall the meaning. Take your time."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     horizontalAlignment: Text.AlignHCenter
   }
   Crab {

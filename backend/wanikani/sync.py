@@ -7,6 +7,7 @@ import threading
 import time
 import urllib.request
 from pathlib import Path
+from functools import wraps
 from .api import ApiError, NoRedirect, user_id, validate_user
 from .common import UserError, epoch, private_dir, stamp
 from .engine import baseline
@@ -20,6 +21,14 @@ COLLECTIONS = (
 )
 
 
+def serialized_media(method):
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with self.media_lock:
+            return method(self, *args, **kwargs)
+    return guarded
+
+
 class Synchronizer:
     def __init__(self, engine, api, media_dir, changed=lambda: None, progress=lambda value: None):
         self.engine, self.api, self.store = engine, api, engine.store
@@ -29,6 +38,14 @@ class Synchronizer:
         self.progress_changed = progress
         self.progress = {"stage": "idle", "message": "", "completed": 0, "total": None, "active": False}
         self.cancelled = threading.Event()
+        # The foreground clip job and account prefetch share this cache even
+        # when a reconnect constructs another Synchronizer for the same Store.
+        with self.store.lock:
+            if not hasattr(self.store, "_media_lock"):
+                self.store._media_lock = threading.RLock()
+                self.store._media_requested = threading.Event()
+            self.media_lock = self.store._media_lock
+            self.media_requested = self.store._media_requested
 
     def report(self, stage, message, completed=0, total=None, active=True):
         self.progress = {"stage": stage, "message": message, "completed": completed, "total": total, "active": active}
@@ -448,10 +465,12 @@ class Synchronizer:
                 self.store.set("material_draft_" + str(row["subject_id"]), None)
         return {"resolved": True}
 
+    @serialized_media
     def cache_media(self):
         deadline = time.monotonic() + 8
         self.report("media", "Caching images and optional pronunciation audio")
-        plan = media_plan.build(self.engine, self.media_dir, deadline, self.cancelled.is_set, clock=time.monotonic)
+        plan = media_plan.build(self.engine, self.media_dir, deadline,
+            lambda: self.cancelled.is_set() or self.media_requested.is_set(), clock=time.monotonic)
         self.check_cancelled()
         if not plan.complete:
             self.report("media", "Media planning will continue on the next refresh")
@@ -468,7 +487,7 @@ class Synchronizer:
                 return {"downloaded": 0, "attempts": 0, "skipped_budget": 0, "complete": False}
             for candidate in plan.downloads:
                 self.check_cancelled()
-                if time.monotonic() >= deadline:
+                if time.monotonic() >= deadline or self.media_requested.is_set():
                     break
                 url = candidate.url
                 admission = plan.admission(url, self._media_size_hints.get(url))
@@ -496,6 +515,7 @@ class Synchronizer:
         finally:
             self._media_plan = None
 
+    @serialized_media
     def download_media(self, url):
         plan = getattr(self, "_media_plan", None)
         if not plan or not plan.complete or not media_plan.valid_url(url):
@@ -567,6 +587,7 @@ class Synchronizer:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
 
+    @serialized_media
     def trim_media(self):
         plan = getattr(self, "_media_plan", None) or media_plan.build(self.engine, self.media_dir,
             cancelled=self.cancelled.is_set, clock=time.monotonic)
@@ -596,6 +617,7 @@ class Synchronizer:
             plan.forget(entry.url)
         return True
 
+    @serialized_media
     def clear_media(self):
         for row in self.store.rows("SELECT path FROM media"):
             path = Path(row[0])

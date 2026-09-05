@@ -27,6 +27,8 @@ class Worker:
         self.keyring = Keyring()
         self.request_budget = RequestBudget()
         self.job_lock = threading.Lock()
+        self.audio_job_lock = threading.Lock()
+        self.account_job = False
         self.snapshot_lock = threading.Lock()
         self.snapshot_sequence = 0
         self.last_attempt = 0
@@ -67,6 +69,8 @@ class Worker:
             self.snapshot_sequence += 1
             revision = self.snapshot_sequence
         value = self.engine.snapshot()
+        from wanikani.progress import current_level
+        value["learning_progress"] = current_level(self.engine)
         value["state_revision"] = revision
         value["readiness"] = self.readiness.get()
         value["sync_progress"] = dict(self.sync_progress)
@@ -124,19 +128,14 @@ class Worker:
         mode = args.get("mode", "reviews")
         if mode == "practice":
             return True  # Ungraded local study never needs a network preflight.
-        active = self.engine.store.session()
-        reference = self.engine.store.get("graded_session")
-        graded = self.engine.store.session(reference) if reference else None
-        if graded and graded["phase"] != "complete":
-            return True
-        return bool(active and active["phase"] != "complete"
-            and (mode == "resume" or active["mode"] != "practice"))
+        return self.engine.saved_session(mode) is not None
 
-    def job(self, request_id, fn):
+    def job(self, request_id, fn, account=False):
         if not self.job_lock.acquire(blocking=False):
             if request_id is not None:
                 self.reply_error(request_id, UserError("Synchronization is already running. Your saved work is safe.", "busy"))
             return
+        self.account_job = account
         def run():
             try:
                 value = fn()
@@ -153,9 +152,49 @@ class Worker:
                 if request_id is not None:
                     self.reply_error(request_id, UserError("The operation could not be completed. Your saved work was retained.", "internal_error"))
             finally:
+                self.account_job = False
                 self.job_lock.release()
                 self.changed(refresh_readiness=True)
         threading.Thread(target=run, daemon=True, name="wanikani-network").start()
+
+    def prepare_pronunciation(self, request_id, args):
+        """Fetch an explicitly requested clip without blocking answers or API reads."""
+        if not self.audio_job_lock.acquire(blocking=False):
+            self.reply_error(request_id, UserError("Another recording is downloading. Try again shortly.", "busy"))
+            return
+        engine = self.engine
+        try:
+            synchronizer = self.sync or Synchronizer(engine, None, self.directory / "media")
+        except Exception:
+            self.audio_job_lock.release()
+            raise
+        def run():
+            try:
+                from wanikani.pronunciation import prepare
+                value = prepare(synchronizer, **self.pronunciation_args(args))
+                if not self.stopping:
+                    self.emit({"v": 1, "id": request_id, "ok": True, "data": value})
+            except UserError as error:
+                if not self.stopping:
+                    self.reply_error(request_id, error)
+            except Exception:
+                if not self.stopping:
+                    self.reply_error(request_id, UserError("The recording could not be prepared. Try again when connected.", "audio_error"))
+            finally:
+                self.audio_job_lock.release()
+                if not self.stopping and self.engine is engine:
+                    self.readiness.refresh(force=True)
+        try:
+            threading.Thread(target=run, daemon=True, name="wanikani-pronunciation").start()
+        except Exception:
+            self.audio_job_lock.release()
+            raise
+
+    @staticmethod
+    def pronunciation_args(args):
+        return {"subject_id": args.get("subject_id"), "context": args.get("context", "details"),
+            "session_id": args.get("session_id"), "revision": args.get("revision"),
+            "voice_actor_id": args.get("voice_actor_id")}
 
     def reply_error(self, rid, error):
         self.emit({"v": 1, "id": rid, "ok": False, "error": {"code": error.code, "message": str(error)}})
@@ -177,7 +216,8 @@ class Worker:
         self.engine.store.set("user", user)
         if self.engine.store.get("settings") is None:
             preferences = user["data"].get("preferences", {})
-            self.engine.set_settings({"autoplay_audio": bool(preferences.get("reviews_autoplay_audio", False))})
+            self.engine.set_settings({"autoplay_audio": bool(preferences.get("reviews_autoplay_audio", False)),
+                "autoplay_lessons": bool(preferences.get("lessons_autoplay_audio", False))})
         remember = bool(args.get("remember", True))
         may_exist = self.credential_may_exist()
         # Disable automatic restoration before touching the keyring so a crash
@@ -212,7 +252,9 @@ class Worker:
             raise UserError("Invalid request envelope.")
         previous_session = self.engine.store.session() if method == "advance" else None
         if method == "authenticate":
-            self.job(rid, lambda: self.authenticate(args))
+            if self.audio_job_lock.locked():
+                raise UserError("Wait for the recording download before changing account state.", "busy")
+            self.job(rid, lambda: self.authenticate(args), account=True)
             return
         if method == "sync":
             if self.engine.demo:
@@ -265,9 +307,32 @@ class Worker:
             from wanikani.recovery import catalogue
             result = catalogue(self.engine, state=args.get("state", "open"), kind=args.get("kind", "all"),
                 offset=args.get("offset", 0), limit=args.get("limit", 30))
+        elif method == "pronunciation":
+            from wanikani.pronunciation import status
+            result = status(self.engine, **self.pronunciation_args(args))
+        elif method == "pronunciation_sample":
+            from wanikani.pronunciation import sample
+            result = sample(self.engine, args.get("voice_actor_id"))
+        elif method == "pronunciation_prepare":
+            # Authentication changes the account grant, so finish it before
+            # opening a new media job. Ordinary synchronization can coexist.
+            if self.account_job:
+                raise UserError("Wait for account connection before downloading pronunciation.", "busy")
+            self.prepare_pronunciation(rid, args)
+            return
         elif method == "voices":
             from wanikani.voices import catalogue
             result = catalogue(self.engine)
+        elif method == "progress":
+            from wanikani.progress import overview
+            result = overview(self.engine)
+        elif method == "level_board":
+            from wanikani.progress import level_board
+            result = level_board(self.engine, level=args.get("level"), subject_type=args.get("subject_type"),
+                offset=args.get("offset", 0), limit=args.get("limit", 60))
+        elif method == "subject_status":
+            from wanikani.progress import subject_status
+            result = subject_status(self.engine, args.get("subject_id"))
         elif method == "session_report":
             from wanikani.session_report import report
             result = report(self.engine, args.get("session_id"))
@@ -278,8 +343,8 @@ class Worker:
         elif method == "session":
             result = self.engine.session_view()
         elif method in ("use_demo", "disconnect", "delete_data", "clear_cache", "resolve"):
-            if self.job_lock.locked():
-                raise UserError("Wait for the current synchronization to finish before changing account state.", "busy")
+            if self.job_lock.locked() or self.audio_job_lock.locked():
+                raise UserError("Wait for synchronization and recording downloads to finish before changing account state.", "busy")
             if method == "use_demo":
                 self.select_mode(bool(args.get("enabled", True)))
                 if not self.engine.demo:
@@ -348,7 +413,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "progress", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

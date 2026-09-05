@@ -113,15 +113,8 @@ def snapshot_summary(engine):
 
 
 def _protected_subjects(engine):
-    # The two durable pointers bound this check independently of accumulated
-    # completed sessions. Graded sessions cannot be replaced by this interface.
-    protected = set()
-    references = {engine.store.get("graded_session"), engine.store.get("active_session")}
-    for reference in references - {None}:
-        session = engine.store.session(reference)
-        if session and session.get("mode") != "practice" and session.get("phase") != "complete":
-            protected.update(item["subject_id"] for item in session.get("queue", [])[:20] if not item.get("done"))
-    return protected
+    from .practice import _sessions
+    return _sessions(engine)[0]
 
 
 def _subject(engine, subject_id, maximum, protected):

@@ -183,7 +183,7 @@ class StudyNotesRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("SubjectDetails.qml", "Label.qml", "UnicodeText.mjs"):
+            for name in ("SubjectDetails.qml", "Label.qml", "UnicodeText.mjs", "Theme.mjs", "Pronunciation.qml"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
             # Expose the existing private inputs for interaction; their actual
             # text handlers/limit behavior remain unchanged from production.
@@ -191,7 +191,7 @@ class StudyNotesRenderingTests(unittest.TestCase):
             details.write_text(details.read_text().replace("  id: root\n", "  id: root\n"
                 "  property alias authoredMeaningEditor: meaningNote\n"
                 "  property alias authoredReadingEditor: readingNote\n", 1))
-            (qml / "Action.qml").write_text("import QtQuick.Controls\nButton {}\n")
+            (qml / "Action.qml").write_text("import QtQuick.Controls\nButton { property string accessibleName: text }\n")
             (qml / "Lookalikes.qml").write_text("import QtQuick\nItem { property var subject; property bool showMeaning; property bool showReading }\n")
             common = directory / "qs" / "Commons"
             common.mkdir(parents=True)
@@ -201,7 +201,7 @@ class StudyNotesRenderingTests(unittest.TestCase):
                 '  readonly property var font: ({family: "Sans", body: 14, bodySmall: 12, title: 20})\n'
                 '  readonly property int cornerRadius: 6\n}\n')
             (common / "Color.qml").write_text('pragma Singleton\nimport QtQuick\nQtObject {\n'
-                '  readonly property color foreground: "#202020"\n'
+                '  readonly property color background: \"#ffffff\"\n  readonly property color foreground: "#202020"\n'
                 '  readonly property color accent: "#006699"\n'
                 '  readonly property color urgent: "#bb0000"\n}\n')
             ui = directory / "qs" / "Ui"

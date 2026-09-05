@@ -213,7 +213,7 @@ class PanelDetailsTests(unittest.TestCase):
     def test_production_detail_callbacks_respect_current_view_and_access(self):
         source = (ROOT / "Panel.qml").read_text()
         functions = []
-        for name in ("call", "showSubject", "navigate", "close", "readSelection", "search", "refreshSearch"):
+        for name in ("call", "showSubject", "navigate", "close", "readSelection", "search", "refreshSearch", "stopAudio"):
             match = re.search(r"(?ms)^  function " + name + r"\(.*?(?=^  function )", source)
             self.assertIsNotNone(match, "Review the actual Panel function boundary for " + name)
             functions.append(match.group(0))
@@ -242,6 +242,11 @@ Item {
   property string searchType: "all"
   property string searchState: "all"
   property bool searching: false
+  property int audioSequence: 0
+  property int audioSubjectId: -1
+  property string audioContext: ""
+  property string audioState: ""
+  property string audioNotice: ""
   property var results: []
   QtObject { id: audio; function stop() {} }
   function focusContent() {}

@@ -97,7 +97,7 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.notice !== ""
     text: root.notice
-    color: Color.urgent
+    textColor: Color.urgent
   }
   ColumnLayout {
     Layout.fillWidth: true
@@ -106,7 +106,7 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       text: "This session only. Mistake counts keep acknowledged answers and exclude your guarded typo corrections."
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
       font.pixelSize: Style.font.bodySmall
     }
     Repeater {
@@ -133,19 +133,19 @@ ColumnLayout {
               Layout.fillWidth: true
               visible: modelData.subject.spoilers_hidden || !modelData.subject.accessible
               text: !modelData.subject.accessible ? "Subject content is unavailable at your current account access." : "Meaning hidden while this subject has unfinished graded work."
-              color: Qt.alpha(Color.foreground, 0.7)
+              textColor: Qt.alpha(Color.foreground, 0.7)
               font.pixelSize: Style.font.bodySmall
             }
             Label {
               Layout.fillWidth: true
               text: modelData.done ? (modelData.errors.total ? modelData.errors.meaning + " meaning · " + modelData.errors.reading + " reading mistakes" : "No recorded mistakes") : "The saved session ended before this subject was finished."
-              color: Qt.alpha(Color.foreground, 0.76)
+              secondary: true
               font.pixelSize: Style.font.bodySmall
             }
             Label {
               Layout.fillWidth: true
               text: modelData.status_label
-              color: ["uncertain", "conflicted", "blocked", "missing"].indexOf(modelData.state) >= 0 ? Color.urgent : Color.accent
+              textColor: ["uncertain", "conflicted", "blocked", "missing"].indexOf(modelData.state) >= 0 ? Color.urgent : Color.accent
               font.pixelSize: Style.font.bodySmall
             }
           }

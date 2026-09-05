@@ -7,9 +7,11 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.Commons
+import qs.Ui as Ui
 import "qml" as Kani
 import "vendor/WanaKana.mjs" as Kana
 import "qml/UnicodeText.mjs" as UnicodeText
+import "qml/Theme.mjs" as Theme
 
 Item {
   id: root
@@ -38,6 +40,11 @@ Item {
   property var chosenScreen: null
   property bool focusPrimed: false
   property string integrationNotice: ""
+  property int audioSequence: 0
+  property string audioContext: ""
+  property int audioSubjectId: -1
+  property string audioState: ""
+  property string audioNotice: ""
   readonly property var snapshot: service ? service.snapshot : ({
       settings: {},
       outbox: [],
@@ -57,8 +64,7 @@ Item {
     results = []
     searchSequence++
     searching = false
-    if (audio)
-      audio.stop()
+    stopAudio()
     if (opened && view === "lookup")
       Qt.callLater(function () {
         root.search(root.query)
@@ -128,7 +134,7 @@ Item {
     if (["reviews", "lessons", "practice", "resume"].indexOf(requested) >= 0)
       begin(requested, payload.limit, payload.subjects)
     else
-      navigate(["dashboard", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
+      navigate(["dashboard", "review-overview", "lesson-overview", "progress", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
     if (requested === "lookup" && payload.selection)
       readSelection()
     else if (requested === "lookup" && typeof payload.text === "string")
@@ -137,7 +143,7 @@ Item {
   function close() {
     navigationSequence++
     opened = false
-    audio.stop()
+    stopAudio()
     if (service) {
       service.panelOpen = false
       service.studying = false
@@ -149,6 +155,7 @@ Item {
       shell.hide(pluginId)
   }
   function navigate(next) {
+    stopAudio()
     navigationSequence++
     view = next
     detail = null
@@ -212,6 +219,7 @@ Item {
     })
   }
   function search(text) {
+    stopAudio()
     var characters = UnicodeText.characters(String(text || ""))
     queryTruncated = characters.length > 256
     query = characters.slice(0, 256).join("")
@@ -246,6 +254,7 @@ Item {
     search(query)
   }
   function showSubject(id) {
+    stopAudio()
     if (!opened || !service || !service.ready || service.locked)
       return
     // An explicit subject supersedes a new lookup view's queued initial query.
@@ -266,11 +275,82 @@ Item {
       }
     })
   }
-  function play(subject) {
-    if (opened && service && service.ready && !service.locked && subject && subject.audio && subject.audio.length) {
-      audio.source = subject.audio[0].url
-      audio.play()
+  function audioContextCurrent(sequence, navigation, access, studyId, studyRevision) {
+    return sequence === audioSequence && navigation === navigationSequence && access === contentAccess
+      && opened && service && service.ready && !service.locked
+      && (!studyId || (view === "study" && session && session.id === studyId && session.revision === studyRevision))
+  }
+  function requestAudio(args, method) {
+    if (!opened || !service || !service.ready || service.locked)
+      return
+    stopAudio()
+    var sequence = audioSequence
+    var navigation = navigationSequence
+    var access = contentAccess
+    var studyId = args.session_id || ""
+    var studyRevision = args.revision
+    audioSubjectId = args.subject_id || -1
+    audioContext = args.context || "details"
+    audioState = "loading"
+    audioNotice = "Checking pronunciation…"
+    function current() {
+      return root.audioContextCurrent(sequence, navigation, access, studyId, studyRevision)
     }
+    function receive(ok, data, message) {
+      if (!current())
+        return
+      if (!ok) {
+        root.audioState = "failed"
+        root.audioNotice = message || "The recording could not be prepared. Try again."
+        return
+      }
+      root.audioSubjectId = data.subject_id || -1
+      if (data.status === "not_cached") {
+        args.subject_id = data.subject_id
+        root.audioNotice = "Downloading this recording for offline playback…"
+        root.service.request("pronunciation_prepare", args, function (prepared, clip, error) {
+          // A failed download must remain a visible retry, never a retry loop.
+          if (current() && prepared && clip.status === "not_cached") {
+            root.audioState = "failed"
+            root.audioNotice = clip.message || "This recording is not downloaded yet."
+          } else {
+            receive(prepared, clip, error)
+          }
+        })
+      } else if (data.status === "ready" && data.uri) {
+        root.audioNotice = data.voice_fallback ? "Using another downloaded voice for this word." : "Recording ready offline"
+        audio.source = data.uri
+        audio.play()
+      } else {
+        root.audioState = "failed"
+        root.audioNotice = data.message || "No recording is available for this word."
+      }
+    }
+    service.request(method || "pronunciation", args, receive)
+  }
+  function play(subject) {
+    if (!subject)
+      return
+    var args = {subject_id: subject.id, context: view === "study" ? "study" : "details"}
+    if (view === "study") {
+      if (!session || !session.subject || session.subject.id !== subject.id || (session.phase !== "lesson" && !(session.phase === "feedback" && session.feedback && !session.feedback.retry && (session.part === "reading" || subject.type === "kana_vocabulary"))))
+        return
+      args.session_id = session.id
+      args.revision = session.revision
+    }
+    requestAudio(args)
+  }
+  function testVoice(actor) {
+    requestAudio({context: "voice_test", voice_actor_id: actor}, "pronunciation_sample")
+  }
+  function stopAudio() {
+    audioSequence++
+    if (audio)
+      audio.stop()
+    audioSubjectId = -1
+    audioContext = ""
+    audioState = ""
+    audioNotice = ""
   }
   function readSelection() {
     if (opened && view === "lookup" && !clipboard.running) {
@@ -340,6 +420,20 @@ Item {
   MediaPlayer {
     id: audio
     audioOutput: AudioOutput {}
+    onPlaybackStateChanged: {
+      if (playbackState === MediaPlayer.PlayingState)
+        root.audioState = "playing"
+      else if (root.audioState === "playing")
+        root.audioState = "ready"
+    }
+    onErrorOccurred: function (error, errorString) {
+      root.audioState = "failed"
+      root.audioNotice = "Playback failed. Check the output device and try again."
+    }
+    onMediaStatusChanged: {
+      if (mediaStatus === MediaPlayer.EndOfMedia)
+        root.audioState = "ready"
+    }
   }
   Connections {
     target: root.service
@@ -390,14 +484,15 @@ Item {
       anchors.fill: parent
       onClicked: root.dismiss()
     }
-    Rectangle {
+    Ui.BorderSurface {
       id: frame
       anchors.centerIn: parent
       width: Math.min(parent.width - Style.gapsOut * 2, Style.space(root.expanded ? 1060 : 760))
       height: Math.min(parent.height - Style.gapsOut * 2, Style.space(root.expanded ? 920 : 760))
-      color: Color.background
-      border.color: Color.popups.border
-      border.width: Math.max(1, Style.space(2))
+      color: Color.popups.background
+      readonly property color kaniSurface: Theme.composite(color, Color.background)
+      readonly property color kaniText: Color.popups.text
+      borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
       radius: Style.cornerRadius
       MouseArea {
         anchors.fill: parent
@@ -452,7 +547,7 @@ Item {
               Layout.minimumWidth: 0
               text: root.snapshot.demo ? "DEMO · Nothing is sent to WaniKani" : "Five reviews, then back to work."
               font.pixelSize: Style.font.bodySmall
-              color: root.snapshot.demo ? Color.accent : Qt.alpha(Color.foreground, 0.76)
+              textColor: root.snapshot.demo ? Color.accent : Qt.alpha(Color.foreground, 0.76)
             }
           }
           Kani.Action {
@@ -478,9 +573,19 @@ Item {
             onClicked: root.navigate("dashboard")
           }
           Kani.Action {
-            text: "Study"
-            selected: root.view === "study"
-            onClicked: root.begin("resume")
+            text: "Reviews"
+            selected: root.view === "review-overview" || (root.view === "study" && root.session && root.session.mode === "reviews")
+            onClicked: root.navigate("review-overview")
+          }
+          Kani.Action {
+            text: "Lessons"
+            selected: root.view === "lesson-overview" || (root.view === "study" && root.session && root.session.mode === "lessons")
+            onClicked: root.navigate("lesson-overview")
+          }
+          Kani.Action {
+            text: "Progress"
+            selected: root.view === "progress"
+            onClicked: root.navigate("progress")
           }
           Kani.Action {
             text: "Lookup"
@@ -513,13 +618,13 @@ Item {
         Kani.Label {
           Layout.fillWidth: true
           visible: text !== ""
-          color: Color.urgent
+          textColor: Color.urgent
           text: root.error || (root.service ? root.service.error : "")
         }
         Kani.Label {
           Layout.fillWidth: true
           visible: root.busy
-          color: Qt.alpha(Color.foreground, 0.76)
+          secondary: true
           text: root.snapshot.syncing ? "Refreshing your progress… Cached study remains saved." : "Saving…"
         }
         Controls.ScrollView {
@@ -531,7 +636,7 @@ Item {
           Loader {
             id: content
             width: scroll.availableWidth
-            sourceComponent: root.view === "study" ? studyPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "recovery" ? recoveryPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
+            sourceComponent: root.view === "study" ? studyPage : root.view === "review-overview" ? reviewOverviewPage : root.view === "lesson-overview" ? lessonOverviewPage : root.view === "progress" ? progressPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "recovery" ? recoveryPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
             onLoaded: {
               if (scroll.contentItem && scroll.contentItem.contentY !== undefined)
                 scroll.contentItem.contentY = 0
@@ -544,13 +649,13 @@ Item {
           Layout.minimumWidth: 0
           Kani.Label {
             text: root.snapshot.syncing ? "● Syncing" : "● " + (root.snapshot.status || "starting")
-            color: root.snapshot.status === "offline" ? Color.urgent : Qt.alpha(Color.foreground, 0.76)
+            textColor: root.snapshot.status === "offline" ? Color.urgent : Qt.alpha(Color.foreground, 0.76)
             font.pixelSize: Style.font.bodySmall
           }
           Kani.Label {
             text: (root.snapshot.pending || 0) + " pending"
             visible: root.snapshot.pending > 0
-            color: Color.accent
+            textColor: Color.accent
             font.pixelSize: Style.font.bodySmall
           }
           Kani.Label {
@@ -559,7 +664,7 @@ Item {
             horizontalAlignment: Text.AlignRight
             text: root.snapshot.username ? root.snapshot.username + " · Level " + root.snapshot.level : "Connect an account or explore the demo"
             font.pixelSize: Style.font.bodySmall
-            color: Qt.alpha(Color.foreground, 0.76)
+            secondary: true
           }
         }
       }
@@ -570,6 +675,18 @@ Item {
     Kani.Dashboard {
       controller: root
     }
+  }
+  Component {
+    id: reviewOverviewPage
+    Kani.StudyOverview { controller: root; mode: "reviews" }
+  }
+  Component {
+    id: lessonOverviewPage
+    Kani.StudyOverview { controller: root; mode: "lessons" }
+  }
+  Component {
+    id: progressPage
+    Kani.Progress { controller: root }
   }
   Component {
     id: studyPage

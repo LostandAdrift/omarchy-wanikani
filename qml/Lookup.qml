@@ -58,7 +58,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     text: "Search Japanese, romaji readings, meanings, or your synonyms. A selected sentence reveals matching words from your catalogue. Text stays on this computer."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
     font.pixelSize: Style.font.bodySmall
   }
   RowLayout {
@@ -155,7 +155,7 @@ ColumnLayout {
     visible: root.controller.queryTruncated === true
     text: "Showing the first 256 characters of your selection."
     font.pixelSize: Style.font.bodySmall
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   ReadingTrail {
     Layout.fillWidth: true
@@ -165,14 +165,14 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: !root.controller.detail && (root.controller.query.length > 0 || root.controller.searchType !== "all" || root.controller.searchState !== "all") && root.controller.results.length === 0
     text: root.controller.searching ? "Searching your catalogue…" : "No cached match with these filters. Try a shorter word or another filter, or refresh your account to download its accessible catalogue."
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Label {
     Layout.fillWidth: true
     visible: !root.controller.detail && root.controller.results.length > 0
     text: root.controller.results.length + (root.controller.results.length === 30 ? " matches shown · narrow your search for more" : root.controller.results.length === 1 ? " match" : " matches")
     font.pixelSize: Style.font.bodySmall
-    color: Qt.alpha(Color.foreground, 0.76)
+    secondary: true
   }
   Repeater {
     model: root.controller.detail ? [] : root.controller.results
@@ -200,7 +200,7 @@ ColumnLayout {
             Layout.fillWidth: true
             text: modelData.type.replace("_", " ") + " · Level " + modelData.level + " · " + (modelData.pending ? "Waiting to sync" : modelData.assignment.burned_at ? "Burned" : modelData.assignment.started_at ? "SRS " + modelData.assignment.srs_stage : "Not started")
             font.pixelSize: Style.font.bodySmall
-            color: Qt.alpha(Color.foreground, 0.76)
+            secondary: true
           }
         }
         Action {
@@ -229,7 +229,7 @@ ColumnLayout {
     }
     Label {
       text: root.controller.detail ? root.controller.detail.type.replace("_", " ") + " · Level " + root.controller.detail.level + " · SRS " + (root.controller.detail.assignment.srs_stage || 0) : ""
-      color: Qt.alpha(Color.foreground, 0.76)
+      secondary: true
     }
     Action {
       text: "Practice this subject"
