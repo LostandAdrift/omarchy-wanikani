@@ -50,7 +50,7 @@ def _recent_mistakes(engine):
     latest = {}
     cutoff = stamp(engine.now() - MISTAKE_DAYS * 86400)
     for row in engine.store.rows("""SELECT id,session_id,subject_id,kind,created_at,body
-        FROM events WHERE kind IN ('answer','correction')
+        FROM events INDEXED BY events_study_window WHERE kind IN ('answer','correction')
         AND julianday(created_at)>=julianday(?) ORDER BY id""", (cutoff,)):
         body = json.loads(row["body"])
         part = body.get("part")

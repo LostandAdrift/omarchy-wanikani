@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from .common import private_dir
 from .search import KINDS, fold
@@ -27,6 +28,11 @@ class Store:
           CREATE INDEX IF NOT EXISTS resource_subject_numeric ON resources(kind,CAST(json_extract(body,'$.data.subject_id') AS INTEGER));
           CREATE INDEX IF NOT EXISTS resource_numeric_id ON resources(kind,CAST(id AS INTEGER));
           CREATE INDEX IF NOT EXISTS resource_level ON resources(kind,json_extract(body,'$.data.level'));
+          CREATE INDEX IF NOT EXISTS resource_assignment_schedule ON resources(
+            CAST(json_extract(body,'$.data.subject_id') AS INTEGER),
+            json_extract(body,'$.data.started_at'),json_extract(body,'$.data.burned_at'),
+            json_extract(body,'$.data.hidden'),json_extract(body,'$.data.available_at'),
+            json_extract(body,'$.data.unlocked_at')) WHERE kind='assignment';
           DROP INDEX IF EXISTS resource_search_access;
           CREATE INDEX IF NOT EXISTS resource_search_identity ON resources(
             kind,CAST(id AS INTEGER),id,json_extract(body,'$.data.level'),json_extract(body,'$.data.hidden_at'))
@@ -46,6 +52,10 @@ class Store:
           CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY, session_id TEXT, subject_id INTEGER,
             kind TEXT NOT NULL, created_at TEXT NOT NULL, body TEXT NOT NULL);
+          CREATE INDEX IF NOT EXISTS events_study_window ON events(julianday(created_at),id)
+            WHERE kind IN ('answer','correction');
+          CREATE INDEX IF NOT EXISTS events_completion_time ON events(julianday(created_at),created_at)
+            WHERE kind IN ('subject_complete','practice_complete');
           CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS media (url TEXT PRIMARY KEY, path TEXT NOT NULL, size INTEGER NOT NULL, used_at REAL NOT NULL);
           CREATE TABLE IF NOT EXISTS search_documents (
@@ -64,6 +74,11 @@ class Store:
         # Backfill only missing documents: old installations and a missing cache
         # table migrate once, while ordinary restarts reuse existing folded text.
         with self.transaction():
+            if not self.get("session_epoch"):
+                # A deliberate personal-data deletion may recreate an account
+                # with the same username. Its old presentation revisions must
+                # not keep a deleted session alive in the running shell.
+                self.set("session_epoch", str(uuid.uuid4()))
             for row in self.rows("""SELECT r.body FROM resources r LEFT JOIN search_documents d
               ON d.kind=r.kind AND d.id=r.id
               WHERE r.kind IN ('radical','kanji','vocabulary','kana_vocabulary') AND d.id IS NULL"""):
@@ -150,10 +165,15 @@ class Store:
         return [json.loads(r[0]) for r in self.rows("SELECT body FROM resources WHERE kind=?", (kind,))]
 
     def save_session(self, session, activate=True):
-        self.execute("INSERT OR REPLACE INTO sessions VALUES (?,?)", (session["id"], json.dumps(session, ensure_ascii=False)))
-        self.set("practice_session" if session["mode"] == "practice" else "graded_session", session["id"])
-        if activate:
-            self.set("active_session", session["id"])
+        with self.transaction():
+            revision = self.get("session_revision", 0)
+            revision = revision if type(revision) is int and revision >= 0 else 0
+            session["revision"] = revision + 1
+            self.set("session_revision", session["revision"])
+            self.execute("INSERT OR REPLACE INTO sessions VALUES (?,?)", (session["id"], json.dumps(session, ensure_ascii=False)))
+            self.set("practice_session" if session["mode"] == "practice" else "graded_session", session["id"])
+            if activate:
+                self.set("active_session", session["id"])
 
     def session(self, session_id=None):
         rows = self.rows("SELECT body FROM sessions WHERE id=?", (session_id or self.get("active_session"),))

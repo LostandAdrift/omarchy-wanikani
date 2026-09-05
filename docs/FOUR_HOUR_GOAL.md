@@ -17,6 +17,10 @@ User explicitly requested persistent work for four hours, including new features
 
 Choose improvements based on inspected code and observed behavior. Keep batches reviewable. Do not add novelty that compromises study reliability or distracts from returning to work.
 
+## Performance emphasis
+
+The user additionally emphasized performance during the active window: make the plugin as fast and responsive as possible. Prioritize measured hot-path latency, unnecessary catalogue/history scans, UI refresh work, startup/warm opening, and idle overhead. Preserve transactional answer durability and synchronization safety; do not trade them for optimistic progress. New recap work must stay lazy and outside active question/typing paths.
+
 ## Constraints
 
 - Preserve the existing saved demo session, unrelated desktop settings, original theme and bar position.
@@ -36,3 +40,5 @@ Choose improvements based on inspected code and observed behavior. Keep batches 
 - 02:38 UTC: Second batch verified: strict/safe grading and cache validation, subscription access, burst-aware rate pacing, suspend/reconnect handling, paginated recovery, and privacy/setup hardening. 234 Python tests and 49 Qt checks; hosted fixture lessons, saved draft, three offline completions and recovery passed at observed 1.5 monitor scale. Preparing a committed installed checkpoint. Next: shared-shell profiling and confirmed account-level milestone UI.
 
 - 03:10 UTC: Third batch passed 303 Python tests and 61 Qt checks. Native 26-capture fixture run verified milestone preview, independent practice/graded resume, and unsaved note drafts through offline Save and reconnect. Added accessible Japanese text fitting and named cached audio voices; queue/reset scans remain bounded with large histories. Stable worker sample averaged 0.0222% of one core; shared-shell attribution remains unqualified. Next: randomized long-session soak and long-history profiling, then richer completed-session recaps.
+
+- 03:53 UTC: Fourth checkpoint: 357 Python tests, 93 Qt checks, 30 native fixture captures passed. Session/epoch/full-snapshot ordering prevents stale answers/counters and deleted-state revival; compact question events and on-demand ambient remove repeated scans. Covered schedule queries reduced the full catalogue snapshot to about36ms; bounded new-review selection measured18.8ms response median in the one-subject stdio benchmark. 5,000 randomized mock interactions passed. Next: preserve required offline media under cache pressure, bound database locks during API imports, then repeat native/performance qualification and install final checkpoints through the remaining window.

@@ -220,6 +220,10 @@ class PracticeLibraryTests(EngineFixture, unittest.TestCase):
         previous = self.store.session()
         # An ordinary practice action still resumes the earlier set.
         self.assertEqual(first["id"], self.engine.start("practice", 1, [4])["id"])
+        resumed_practice = self.store.session()
+        self.assertEqual({key: value for key, value in previous.items() if key != "revision"},
+            {key: value for key, value in resumed_practice.items() if key != "revision"})
+        previous = resumed_practice
         second = self.engine.start("practice", 1, [4], replace_practice=True)
         self.assertNotEqual(first["id"], second["id"])
         self.assertEqual(4, second["subject"]["id"])

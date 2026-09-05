@@ -32,3 +32,18 @@ export function ambientAllowed(flags) {
     flags = flags || {};
     return !(flags.locked || flags.fullscreen || flags.studying || flags.panelOpen);
 }
+
+export function ambientDemand(settings, flags) {
+    settings = settings || {};
+    flags = flags || {};
+    if (!flags.ready || flags.locked || flags.studying)
+        return false;
+    if (flags.zen && flags.panelOpen)
+        return true;
+    return !!(ambientAllowed(flags) && ((settings.desktop_card === true && flags.desktopIdle)
+        || (settings.idle_gallery === true && flags.idleEligible)));
+}
+
+export function ambientFetch(wanted, ready, inFlight, dirty, now, lastFetched) {
+    return wanted && ready && !inFlight && (dirty || now - lastFetched >= 60000);
+}

@@ -18,11 +18,17 @@ This only creates a private temporary directory and validates its generated mani
 python3 tools/native_qa.py run
 ```
 
-This uses ordinary `omarchy plugin add --enable` and captures dashboard, lessons, help, lookup, practice library, settings, and Zen. It then shows a lesson quiz, saves/closes/resumes a fixture draft, shows wrong-answer feedback, completes three authored lessons offline, inspects pending and demo-confirmed submissions, and checks a narrower settings layout and focused-control scrolling. The temporary plugin is removed in `finally`, including on ordinary failure, Ctrl+C, or SIGTERM. Native PNG captures and JSON focus/layout/session snapshots remain in its private artifact directory.
+This uses ordinary `omarchy plugin add --enable` and captures dashboard, a labeled milestone preview, lessons, help, lookup, practice library, settings, Zen, and recovery. It then exercises a lesson quiz, saves/closes/resumes a fixture answer, shows wrong-answer feedback, completes three authored lessons offline, and inspects pending and demo-confirmed submissions. It also selects and finishes ungraded practice while retaining the exact paused graded question and draft, then checks a narrower settings layout and focused-control scrolling.
+
+The editor scenario selects the authored mountain subject through lookup, types `peak,  partial,` and a note, closes/reopens and verifies the exact raw draft, then discards it. An explicit offline Save creates exactly one material operation. A newer draft remains separate while that operation waits, and survives simulated confirmation. The waits inspect native controls, durable command acknowledgments, and fixture state; changed text alone is not treated as proof of persistence.
+
+The temporary plugin is removed in `finally`, including on ordinary failure, Ctrl+C, or SIGTERM. Native PNG captures and JSON focus/layout/session/detail snapshots remain in its private artifact directory.
 
 Captures use the actual panel item's `grabToImage`; they do not capture unrelated desktop windows. A unique installation path bypasses the observed nested-QML cache issue without restarting the shell.
 
 **Evidence boundary:** automatic actions call real QML component functions or signals and operate only on authored fixtures. They are synthetic actions. They do not establish native keyboard delivery, physical focus behavior, IME composition, selection ownership, monitor switching, or fractional scaling. The narrower layout is a logical-size stress check, not a monitor-scale change.
+
+On 2026-09-04 at 03:08 UTC, run `wanikani-native-qa-g04t9mw5` completed all 26 captures, including the editor and paused-practice scenarios, and removed its temporary plugin without namespace errors. Milestone preview, newer pending editor draft, and practice selection were visually inspected. The captured frame was 1140 pixels wide at the already configured compositor scale of 1.5; no scaling configuration was edited. This is evidence for that existing display configuration and synthetic workflow, not comprehensive scale or physical-key/IME qualification. The same third-batch checkpoint passed 303 Python tests and 61 Qt checks; [verification](VERIFICATION.md) records later batches separately.
 
 ## Manual keyboard, IME, and monitor checks
 
@@ -51,3 +57,5 @@ python3 tools/native_qa.py cleanup /tmp/wanikani-native-qa-EXAMPLE/run.json
 ```
 
 Cleanup validates the private run directory, unique plugin ID, and installed QA marker before using the normal plugin manager. It refuses to remove a different plugin. It preserves the fixture source, state, screenshots, and snapshots for debugging. Remove that temporary directory separately when its evidence is no longer needed. No full shell configuration is restored, so unrelated desktop edits made during QA are preserved.
+
+The expanded smoke also checks pending/confirmed batch recaps across a hidden synchronization, practices the missed fixture item, verifies no ambient requests before explicitly opening Zen, and invokes Reset demo progress in its isolated database. Reset must change the data epoch and clear retained session/search state. These actions never reset the installed production demo.

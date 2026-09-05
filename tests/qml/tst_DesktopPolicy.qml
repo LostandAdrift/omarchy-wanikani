@@ -118,4 +118,32 @@ TestCase {
     function test_ambient_gates(data) {
         compare(Policy.ambientAllowed(data.flags), data.expected)
     }
+
+    function test_ambient_fetch_requires_a_visible_consumer_data() {
+        return [
+            {tag: "switches off", settings: {}, flags: {ready: true}, expected: false},
+            {tag: "card before idle", settings: {desktop_card: true}, flags: {ready: true}, expected: false},
+            {tag: "idle card", settings: {desktop_card: true}, flags: {ready: true, desktopIdle: true}, expected: true},
+            {tag: "gallery before interval", settings: {idle_gallery: true}, flags: {ready: true}, expected: false},
+            {tag: "idle gallery", settings: {idle_gallery: true}, flags: {ready: true, idleEligible: true}, expected: true},
+            {tag: "manual Zen with switches off", settings: {}, flags: {ready: true, zen: true, panelOpen: true}, expected: true},
+            {tag: "closed Zen", settings: {}, flags: {ready: true, zen: true}, expected: false},
+            {tag: "locked Zen", settings: {}, flags: {ready: true, zen: true, panelOpen: true, locked: true}, expected: false},
+            {tag: "studying", settings: {desktop_card: true}, flags: {ready: true, desktopIdle: true, studying: true}, expected: false},
+            {tag: "fullscreen card", settings: {desktop_card: true}, flags: {ready: true, desktopIdle: true, fullscreen: true}, expected: false},
+            {tag: "other panel", settings: {desktop_card: true}, flags: {ready: true, desktopIdle: true, panelOpen: true}, expected: false},
+            {tag: "worker unavailable", settings: {desktop_card: true}, flags: {desktopIdle: true}, expected: false}
+        ]
+    }
+    function test_ambient_fetch_requires_a_visible_consumer(data) {
+        compare(Policy.ambientDemand(data.settings, data.flags), data.expected)
+    }
+    function test_ambient_request_coalescing_and_freshness() {
+        compare(Policy.ambientFetch(false, true, false, true, 100000, 0), false)
+        compare(Policy.ambientFetch(true, true, true, true, 100000, 0), false)
+        compare(Policy.ambientFetch(true, false, false, true, 100000, 0), false)
+        compare(Policy.ambientFetch(true, true, false, true, 100000, 100000), true)
+        compare(Policy.ambientFetch(true, true, false, false, 100000, 40001), false)
+        compare(Policy.ambientFetch(true, true, false, false, 100000, 40000), true)
+    }
 }

@@ -6,9 +6,26 @@ ColumnLayout {
   id: root
   required property var controller
   property int index: 0
+  property bool ambientLease: false
+  readonly property bool wantsAmbient: controller.opened === true
   readonly property var items: controller.service ? controller.service.ambientItems : []
   readonly property var subject: items.length ? items[index % items.length] : null
   spacing: Style.space(22)
+  function updateAmbientLease() {
+    if (!controller.service || ambientLease === wantsAmbient)
+      return
+    ambientLease = wantsAmbient
+    if (ambientLease)
+      controller.service.acquireAmbient()
+    else
+      controller.service.releaseAmbient()
+  }
+  onWantsAmbientChanged: updateAmbientLease()
+  Component.onCompleted: updateAmbientLease()
+  Component.onDestruction: {
+    if (ambientLease && controller.service)
+      controller.service.releaseAmbient()
+  }
   Label {
     Layout.fillWidth: true
     text: "A MOMENT OF JAPANESE"

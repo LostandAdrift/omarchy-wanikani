@@ -8,8 +8,8 @@ Omarchy 4.0.2-1, Quickshell 0.3.1, Python 3.14.7, Qt 6.11.2, Hyprland 0.56.2. In
 
 ## Automated results
 
-- Python: **303 tests passed**, including the original **12 real subprocess crash boundaries** and four additional milestone transaction crash checks.
-- Qt: **61 checks passed**, covering kana conversion, activation-repeat protection, desktop notification/ambient policy, full Japanese prompt fitting, and image-radical accessibility labels (Qt totals include initialization and cleanup).
+- Python: **357 tests passed**, including the original **12 real subprocess crash boundaries** and four additional milestone transaction crash checks.
+- Qt: **93 checks passed**, covering kana conversion, activation-repeat protection, desktop notification/ambient policy, full Japanese prompt fitting, image-radical accessibility labels, ambient demand, and ordered state/session/epoch handling (Qt totals include initialization and cleanup).
 - Omarchy manifest validation passed.
 - Both installed desktop launcher files passed `desktop-file-validate`; Hyprland reported no configuration errors.
 - QML formatting and syntax checks completed. `qmllint` retains host-specific warnings for dynamically injected shell objects and registered Quickshell types; it is not a warning-free static build.
@@ -54,7 +54,7 @@ All measurements are local development observations, not a guarantee across mach
 | Warm study opening | 73.9 ms | One sample from IPC invocation to a visible compositor layer; does not instrument first-pixel rendering. |
 | Other warm views | Dashboard 82.3 ms; lookup 59.8 ms; Zen 64.2 ms; Settings 62.6 ms | Same method, one sample per view. All below the 200 ms target in this run. |
 | Durable answer plus advance | Median 11.36 ms; p95 12.69 ms | Latest 100-operation authored fixture run; includes both local transactions and strict cache validation. |
-| Full-catalogue snapshot | Median 88.84 ms | Latest 9,016 authored fixture catalogue run. |
+| Full-catalogue snapshot | Median 36.00 ms; p95 39.13 ms | Latest 9,016 authored fixture catalogue run with covered schedule/access queries; earlier 88.84 ms. |
 | Ranked local search | Median 15.63 ms | Full Unicode/romaji/synonym ranking across the same catalogue. |
 | Practice / offline readiness | Practice 93.79 ms; searched practice 99.54 ms; readiness 90.37 ms | Same catalogue; readiness checked 3,008 eligible items in a background pass. |
 | Large local submission history | Snapshot summary 1.47 ms / 1,964 bytes; first page 2.40 ms | 50,000 authored outbox rows plus 10,000 completed sessions. Deep open page at offset 30,000 measured 11.71 ms. |
@@ -84,3 +84,24 @@ The native fixture harness retains private PNGs and rendered-control snapshots u
 New regressions cover exact-meaning preference, numeric/negation grading, malformed cache data across all study surfaces, suspension-aware clock handling, rate-limit headers, paginated recovery, diagnostic symlink replacement and per-mode deletion, and desktop journal ownership. Diagnostics now use explicit aggregate fields in private `diagnostics-account.json` or `diagnostics-demo.json` files.
 
 The 03:08 UTC hosted run `wanikani-native-qa-g04t9mw5` passed the expanded 26-capture scenario and removed its temporary plugin. Milestones are derived only from successfully reconciled account observations; first-sync baselines, resets, duplicate observations, stale acknowledgments and transaction interruption have authored regressions. Unsaved editor drafts never affect grading or create an outbox operation. Additional tests cover bounded queue scans with 50,000 rows, reset handling amid 50,000 completed sessions, accessible cached voice metadata, and a zero-level account grant that must not issue an unfiltered subject request.
+
+### Fourth improvement checkpoint · 03:53 UTC
+
+The `wanikani-native-qa-ny1oxipk` run passed 30 captures on DP-3 at scale 1 and removed its temporary plugin. Dashboard, lessons, lookup, practice and Settings issued zero ambient-catalogue requests; opening Zen issued one. The recap showed five pending authored reviews, refreshed all five to demo-confirmed after synchronization while closed, and offered ungraded practice of the missed item. Actual Reset demo progress changed the data epoch and cleared the saved session and retained lookup cache. No errors appeared in the inspected QA namespace.
+
+The deterministic interaction soak passed 10 seeds × 500 steps: 5,000 authored interactions included 1,047 answers, 211 drafts, 233 restarts, 124 resumes, 137 duplicate commands, 54 resets, lost responses before/after mock acceptance, and other-client progress. Its independent oracle found no duplicate accepted operation/cycle, lost durable question, pending-subject reentry, or automatic uncertain replay. This is accelerated mock interaction coverage, not two weeks of real daily use.
+
+Full snapshots now have a sequence allocated before their reads, separate from durable session revisions and the data epoch. Threaded regressions reproduce a delayed old snapshot carrying the newest session but stale due/pending counts. QML checks reject those old counts, preserve newer answers, hide expired content, and prevent deleted same-name demo sessions from reappearing. Ordinary question actions emit compact session events. The batch recap stays outside the active question path and measured 0.88 ms with 50,000 historical sessions/outbox records.
+
+Real Python-worker stdio measurements use 9,016 authored subjects, blocked network/keyring access and 30 samples per operation. They include a second immediately queued command to expose work performed after the answer response. These are sequential development observations, with brief unrelated fixture work overlapping part of the first comparison; no rendered-QML latency or controlled-certification claim is made.
+
+| Worker operation | Previous response / following-command delay | Latest response / following-command delay |
+|---|---|---|
+| Check answer | 9.60 / 150.34 ms | 8.63 / 10.21 ms |
+| Resume | 9.76 / 154.85 ms | 8.37 / 9.03 ms |
+| Advance required part | 9.33 / 182.06 ms | 8.43 / 10.50 ms |
+| New cached review, one subject | 132.26 / 14.32 ms before bounded selection | 18.80 / 9.05 ms after bounded selection |
+
+Latest answer-response p95 was 11.38 ms. The new-review pair took 27.95 ms median / 39.11 ms p95. Completing a subject still triggers a full local summary/readiness update: the following-command delay was 49.63 ms median / 61.06 ms p95. A separate five-subject regression proves only the five selected assignments and their subjects are materialized. Candidate shuffling still ranges over all eligible identities and continues past unavailable cached content.
+
+Reproduce with `python3 tools/benchmark_worker.py --samples 30 --compare-ref 9d5ebc9` and `python3 tools/soak.py --seeds 10 --steps 500`. Historical full results and current timings should not be mixed as if collected under identical load.

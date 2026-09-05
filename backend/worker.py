@@ -27,6 +27,8 @@ class Worker:
         self.keyring = Keyring()
         self.request_budget = RequestBudget()
         self.job_lock = threading.Lock()
+        self.snapshot_lock = threading.Lock()
+        self.snapshot_sequence = 0
         self.last_attempt = 0
         self.last_clock = time.time()
         self.last_monotonic = time.monotonic()
@@ -59,7 +61,13 @@ class Worker:
         modefile.chmod(0o600)
 
     def snapshot(self):
+        # Allocate before reading. A concurrent newer snapshot can finish first;
+        # its catalogue counts must not be replaced by this older read later.
+        with self.snapshot_lock:
+            self.snapshot_sequence += 1
+            revision = self.snapshot_sequence
         value = self.engine.snapshot()
+        value["state_revision"] = revision
         value["readiness"] = self.readiness.get()
         value["sync_progress"] = dict(self.sync_progress)
         self.readiness.refresh()
@@ -79,6 +87,13 @@ class Worker:
             if refresh_readiness:
                 self.readiness.refresh(force=True)
             self.emit({"v": 1, "event": "state", "data": self.snapshot()})
+
+    def session_changed(self):
+        # Answer/lesson navigation changes only the durable session. Publishing
+        # a catalogue snapshot here makes the next queued keystroke wait behind
+        # unrelated forecast, difficult-item and cache scans.
+        if not self.stopping:
+            self.emit({"v": 1, "event": "session", "data": self.engine.session_state()})
 
     def configure_sync(self, token):
         self.token = token
@@ -194,6 +209,7 @@ class Worker:
         args = request.get("args", {})
         if not rid or not isinstance(args, dict):
             raise UserError("Invalid request envelope.")
+        previous_session = self.engine.store.session() if method == "advance" else None
         if method == "authenticate":
             self.job(rid, lambda: self.authenticate(args))
             return
@@ -248,6 +264,9 @@ class Worker:
         elif method == "voices":
             from wanikani.voices import catalogue
             result = catalogue(self.engine)
+        elif method == "session_report":
+            from wanikani.session_report import report
+            result = report(self.engine, args.get("session_id"))
         elif method == "details":
             result = self.engine.details(int(args["subject_id"]))
         elif method == "ambient":
@@ -318,7 +337,14 @@ class Worker:
         else:
             result = self.engine.command(rid, method, args)
         self.emit({"v": 1, "id": rid, "ok": True, "data": result})
-        if method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "practice_catalogue", "recovery", "voices", "details", "ambient", "session", "tick", "diagnostics"):
+        session_only = method in ("answer", "correct", "finish", "lesson_next", "start")
+        if method == "advance" and previous_session:
+            current = self.engine.store.session()
+            session_only = bool(current and current["id"] == previous_session["id"]
+                and current["completed"] == previous_session["completed"])
+        if session_only:
+            self.session_changed()
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "practice_catalogue", "recovery", "voices", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

@@ -55,17 +55,25 @@ Sessions contain five subjects by default. Lessons introduce the subjects before
 
 **I made a typo** is available only on the current incorrect feedback screen. Corrections are recorded locally. A finished subject enters the submission queue only after you acknowledge its last feedback screen. Already committed WaniKani progress is never retroactively overridden.
 
+After a batch, **Review this batch** shows each subject’s recorded mistakes and current local submission status. **Practice items to revisit** starts ungraded practice of missed items; guarded typo corrections are excluded. Back to work remains the primary action.
+
 Escape preserves the exact session, draft answer, and question. Expand changes the presentation without restarting. Practice is ungraded and never changes your account's schedule. You can practice independently while a graded session is paused; Resume returns to that saved graded session first.
+
+Japanese prompts fit the available space without cutting off long vocabulary. Image radicals keep their meaning hidden until the appropriate reveal.
 
 The **Practice** library groups saved difficult items, recent mistakes, and learned subjects. Choose up to twenty, or add five at a time. It shows why each subject appears and whether required content is cached. An explicitly selected practice session keeps earlier local records and the paused graded session intact. Current graded answers remain hidden on library cards.
 
 Lookup accepts romaji readings as well as Japanese, meanings, and personal synonyms. Type and progress filters narrow the accessible catalogue. Exact matches rank first; longer selections surface known words contained in the text. Lookup never sends selections to a translation service.
+
+Notes and synonym drafts survive closing, navigation, and restart, including unfinished commas. **Save notes & synonyms** applies them to study and queues synchronization; **Discard draft** restores the saved version. Unsaved synonyms never count as answers. You can keep drafting while an earlier save waits to sync, and a delayed Save or Discard cannot erase newer input.
 
 **F1** opens keyboard help. Navigation shortcuts leave text fields and IME composition alone, focused controls scroll into view, and holding Enter cannot check an answer and immediately skip its feedback.
 
 ## Offline behavior and recovery
 
 Subject text is cached for your accessible levels. Media is downloaded incrementally, with up to 40 new assets per sync and a configurable disk limit. Image-only radicals require their image before they can be quizzed. Audio availability is shown explicitly.
+
+Settings lists pronunciation voices from the accessible cached catalogue. A preferred voice uses its downloaded clip when available, falling back to another downloaded voice for that word. Missing voice metadata does not discard your preference.
 
 The dashboard and Settings show how many eligible reviews and lessons have their required text/images available offline. Optional audio is counted separately. Availability checks run in the background, and synchronization reports its current stage. Resuming saved work reads the latest durable question and draft immediately. New online study refreshes account state first and defers optional media downloads. Reconnection triggers a coalesced refresh through the shell’s shared networking service; ordinary suspend does not invalidate the offline clock.
 
@@ -81,7 +89,11 @@ Demo Settings includes **Simulate offline in demo**, **Reconnect demo & sync**, 
 
 The bar shows due items, pending work, or the next-review countdown. Notifications are coalesced, with a default two-hour minimum and quiet hours of 22:00–08:00. They respect Do Not Disturb, lock, vacation, and study. Suppressed reminders are not replayed later.
 
+The dashboard offers a small, dismissible celebration when synchronization confirms a new account level. The first connection establishes a baseline; local offline results do not invent milestones. Companion animation respects reduced motion.
+
 Desktop and idle kanji displays are optional. The desktop card appears after ten seconds without activity. They show learned subjects not due in the next day, stop on activity/fullscreen/study/lock, and give way before Omarchy's configured screensaver deadline. Automatic idle gallery display respects Omarchy's stay-awake mode and disables itself when the configured interval is too short. The plugin never owns or changes your system lock. Companion animation and reduced motion have separate controls.
+
+Manual Zen works with both automatic displays switched off. Ambient catalogue requests run only while a display or an opened Zen view needs them; study and hidden surfaces avoid that background work.
 
 ## Your data
 
@@ -113,6 +125,6 @@ python3 -m unittest discover -s tests -v
 omarchy plugin validate .
 ```
 
-See [isolated native QA](docs/NATIVE_QA.md), [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), the [contest demonstration](docs/CONTEST_DEMO.md), and the [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
+See [isolated native QA](docs/NATIVE_QA.md), [verification](docs/VERIFICATION.md), [read-only performance profiling](docs/PERFORMANCE.md), [architecture](docs/ARCHITECTURE.md), the [contest demonstration](docs/CONTEST_DEMO.md), and the [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
 
 The release gate includes two weeks of personal daily use, checks across desktop configurations, and deliberately answered live lessons/reviews. Those are not replaced by passing automated tests.

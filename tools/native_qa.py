@@ -82,6 +82,14 @@ QA_DRIVER = r'''
     return selected
   }
   function qaSnapshot() {
+    function recap(item) {
+      if (item.objectName === "wanikani-session-recap") return item.report
+      for (var i = 0; i < item.children.length; i++) {
+        var value = recap(item.children[i])
+        if (value) return value
+      }
+      return null
+    }
     var controls = qaItems().map(function(item) {
       var point = item.mapToItem(frame, 0, 0)
       var ancestor = item
@@ -98,8 +106,13 @@ QA_DRIVER = r'''
     return JSON.stringify({ready: !!(service && service.ready), opened: opened,
       view: view, busy: busy, error: error || (service ? service.error : ""),
       pageLoaded: content.status === Loader.Ready && content.item !== null,
-      session: session, state: snapshot, detail: detail,
+      session: session, state: snapshot, detail: detail, recap: recap(frame),
+      cachedResultCount: results.length,
       pendingRequests: service ? service.pendingCount : 0,
+      requestCounts: service ? service.qaRequestCounts : {},
+      ambient: {count: service ? service.ambientItems.length : 0,
+        wanted: service ? service.ambientWanted : false,
+        fetching: service ? service.ambientFetching : false},
       capture: qaCapture, controls: controls,
       frame: {width: frame.width, height: frame.height},
       screen: {name: window.screen ? window.screen.name : "", pixelRatio: frame.Screen.devicePixelRatio},
@@ -231,6 +244,11 @@ def prepare(source, destination=None):
     service = replace_once(service, 'property string stateDirectory: ""', 'property string stateDirectory: ' + json.dumps(str(state)))
     service = replace_once(service, '"backend/worker.py"', '"backend/qa_worker.py"')
     service = replace_once(service, 'target: "wanikani"', 'target: "wanikani-qa-' + tag + '"')
+    service = replace_once(service, '  function request(method, args, callback) {',
+        '  property var qaRequestCounts: ({})\n  function request(method, args, callback) {\n'
+        '    var qaCounts = Object.assign({}, qaRequestCounts)\n'
+        '    qaCounts[method] = (qaCounts[method] || 0) + 1\n'
+        '    qaRequestCounts = qaCounts')
     (repository / "Service.qml").write_text(service)
     panel = (repository / "Panel.qml").read_text().replace(PRODUCTION_ID, plugin_id)
     panel = panel.replace('"omarchy-wanikani"', '"omarchy-wanikani-qa-' + tag + '"')
@@ -422,6 +440,51 @@ def editor_smoke(run):
     editor_capture("editor-reconnected-draft")
 
 
+def recap_smoke(run):
+    """Finish only the isolated authored reviews and inspect their local recap."""
+    action(run, {"kind": "open", "view": "resume"})
+    snapshot = wait_snapshot(run, lambda s: s["view"] == "study" and s["session"]["mode"] == "reviews")
+    session_id = snapshot["session"]["id"]
+    action(run, {"kind": "backend", "method": "settings", "args": {"demo_offline": True}})
+    wait_snapshot(run, lambda s: s["state"]["settings"]["demo_offline"])
+    action(run, {"kind": "backend", "method": "answer", "args": {"text": "authored recap mistake"}})
+    wait_snapshot(run, lambda s: s["session"]["phase"] == "feedback")
+    action(run, {"kind": "backend", "method": "advance"})
+    snapshot = wait_snapshot(run)
+    for _ in range(60):
+        if snapshot["session"]["phase"] == "complete":
+            break
+        if snapshot["session"]["phase"] == "feedback":
+            action(run, {"kind": "backend", "method": "advance"})
+        else:
+            subject = snapshot["session"]["subject"]
+            answer = subject["meanings"][0] if snapshot["session"]["part"] == "meaning" else next(r["reading"] for r in subject["readings"] if r["accepted"])
+            action(run, {"kind": "backend", "method": "answer", "args": {"text": answer}})
+        snapshot = wait_snapshot(run)
+    snapshot = wait_snapshot(run, lambda s: s["session"]["phase"] == "complete"
+        and s["state"]["reviews"] == 0 and s.get("recap") and s["recap"]["id"] == session_id
+        and len(s["recap"]["mistake_ids"]) == 1 and s["pendingRequests"] == 0)
+    if not all(item["state"] == "pending" for item in snapshot["recap"]["items"]):
+        raise RuntimeError("Completed offline fixture reviews lost their pending recap status.")
+    action(run, {"kind": "activate", "selector": {"text": "Review this batch"}})
+    wait_snapshot(run, lambda s: any(c["text"] == "Hide batch recap" for c in s["controls"]))
+    capture(run, "review-recap-pending")
+    action(run, {"kind": "close"})
+    action(run, {"kind": "backend", "method": "settings", "args": {"demo_offline": False}})
+    wait_snapshot(run, lambda s: s["state"]["pending"] == 0 and s["pendingRequests"] == 0)
+    action(run, {"kind": "open", "view": "resume"})
+    snapshot = wait_snapshot(run, lambda s: s["session"]["id"] == session_id and s.get("recap")
+        and all(item["state"] == "confirmed" for item in s["recap"]["items"]) and s["pendingRequests"] == 0)
+    capture(run, "review-recap-reconnected")
+    practice_label = "Practice items to revisit · 1"
+    expected = snapshot["recap"]["mistake_ids"]
+    action(run, {"kind": "activate", "selector": {"text": practice_label}})
+    snapshot = wait_snapshot(run, lambda s: s["session"]["mode"] == "practice" and s["session"]["phase"] == "question")
+    if snapshot["session"]["subject"]["id"] not in expected or snapshot["state"]["pending"]:
+        raise RuntimeError("Recap practice did not use exactly the local missed fixture item.")
+    capture(run, "recap-practice")
+
+
 def smoke(run):
     action(run, {"kind": "open", "view": "dashboard"})
     wait_snapshot(run, lambda s: s["opened"] and s["view"] == "dashboard")
@@ -432,7 +495,12 @@ def smoke(run):
     wait_snapshot(run, lambda s: not s["state"].get("milestone"))
     for view in ("dashboard", "lessons", "help", "lookup", "practice-library", "settings", "zen", "recovery"):
         action(run, {"kind": "open", "view": view, "text": "山"})
-        wait_snapshot(run, lambda s: s["opened"] and s["view"] == ("study" if view == "lessons" else view))
+        page = wait_snapshot(run, lambda s: s["opened"] and s["view"] == ("study" if view == "lessons" else view))
+        if view in ("dashboard", "lessons", "help", "lookup", "practice-library", "settings") and page["requestCounts"].get("ambient", 0):
+            raise RuntimeError("Unused ambient surfaces performed catalogue reads.")
+        if view == "zen":
+            wait_snapshot(run, lambda s: s["ambient"]["wanted"] and s["ambient"]["count"] > 0
+                          and not s["ambient"]["fetching"] and s["pendingRequests"] == 0)
         capture(run, view)
     action(run, {"kind": "open", "view": "resume"})
     snapshot = wait_snapshot(run, lambda s: s.get("session") is not None)
@@ -506,6 +574,7 @@ def smoke(run):
         raise RuntimeError("Practice changed the saved graded question.")
     capture(run, "graded-resume-after-practice")
     editor_smoke(run)
+    recap_smoke(run)
     action(run, {"kind": "open", "view": "settings"})
     action(run, {"kind": "bounds", "width": 540, "height": 650})
     wait_snapshot(run)
@@ -519,6 +588,15 @@ def smoke(run):
                                         for c in s["controls"]), timeout=5)
         capture(run, "settings-focus-scroll")
     action(run, {"kind": "bounds"})
+    before_reset = wait_snapshot(run)
+    old_epoch = before_reset["state"]["session_epoch"]
+    action(run, {"kind": "focus", "selector": {"text": "Reset demo progress"}})
+    wait_snapshot(run, lambda s: any(c["text"] == "Reset demo progress" and c["focus"] and c["inViewport"] for c in s["controls"]))
+    action(run, {"kind": "activate", "selector": {"text": "Reset demo progress"}})
+    wait_snapshot(run, lambda s: s["state"]["session_epoch"] != old_epoch and s["state"]["demo"]
+        and s["state"]["session"] is None and s["session"] is None and s["cachedResultCount"] == 0
+        and s["state"]["reviews"] == 5 and s["pendingRequests"] == 0)
+    capture(run, "demo-reset")
 
 
 def cleanup(run):

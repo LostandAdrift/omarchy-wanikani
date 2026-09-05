@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from .common import UserError, epoch, plain, stamp
 from .grading import grade, validate_subject_answers
-from . import editor, milestones
+from . import editor, history, milestones
 
 DEFAULTS = {
     "batch_size": 5, "notifications": True, "quiet_start": 22, "quiet_end": 8,
@@ -103,14 +103,15 @@ class Engine:
         if not data.get("characters") and not self.details(subject["id"], False)["images"]:
             raise UserError("The radical image is not cached. Refresh before continuing; your saved answers are retained.", "content_unavailable")
 
-    def assignments(self, mode="reviews", count_only=False):
+    def _assignment_rows(self, mode, columns, indexed=False):
         eligibility = """json_extract(a.body,'$.data.started_at') IS NULL
           AND julianday(json_extract(a.body,'$.data.unlocked_at'))<=julianday(?)""" if mode == "lessons" else """
           json_extract(a.body,'$.data.started_at') IS NOT NULL
           AND json_extract(a.body,'$.data.burned_at') IS NULL
           AND julianday(json_extract(a.body,'$.data.available_at'))<=julianday(?)"""
-        columns = "COUNT(*)" if count_only else "a.body,s.body"
-        rows = self.store.rows(f"""SELECT {columns} FROM resources a JOIN resources s
+        assignment_index = " INDEXED BY resource_assignment_schedule" if indexed else ""
+        subject_index = " INDEXED BY resource_search_identity" if indexed else ""
+        return self.store.rows(f"""SELECT {columns} FROM resources a{assignment_index} JOIN resources s{subject_index}
           ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)
           WHERE a.kind='assignment' AND json_extract(s.body,'$.data.level')<=?
           AND json_extract(s.body,'$.data.hidden_at') IS NULL
@@ -118,6 +119,11 @@ class Engine:
           AND NOT EXISTS(SELECT 1 FROM outbox o WHERE o.subject_id=CAST(s.id AS INTEGER)
             AND o.kind IN ('review','lesson') AND o.state IN {BUSY_STATES})
           AND {eligibility}""", (self.max_level(), stamp(self.now())))
+
+    def assignments(self, mode="reviews", count_only=False):
+        # Preserve the full-body catalogue API for callers that need it. Counts
+        # and new-session selection use projected schedule/access fields.
+        rows = self._assignment_rows(mode, "COUNT(*)" if count_only else "a.body,s.body", indexed=count_only)
         if count_only:
             return rows[0][0]
         result = []
@@ -131,6 +137,42 @@ class Engine:
             elif mode == "reviews" and data.get("started_at") and due is not None and due <= self.now() and not data.get("burned_at"):
                 result.append((assignment, subject))
         return result
+
+    def _study_candidates(self, mode):
+        """Shuffle cheap identities; materialize subjects only as needed.
+
+        Engine.start owns a transaction while consuming this iterator, so the
+        eligibility projection and each selected assignment baseline agree.
+        Shuffling the entire eligible identity list preserves the old random
+        permutation, including continuation past unavailable cached content.
+        """
+        columns = "a.id AS assignment_id,s.id AS subject_id"
+        if mode == "lessons":
+            columns += """,json_extract(s.body,'$.data.level') AS level,
+              CASE WHEN json_type(s.body,'$.data.lesson_position') IS NULL THEN 0
+                ELSE json_extract(s.body,'$.data.lesson_position') END AS lesson_position,
+              json_extract(a.body,'$.data.unlocked_at') AS unlocked_at"""
+        rows = self._assignment_rows(mode, columns, indexed=True)
+        if mode == "lessons":
+            # The old full-body path rejected malformed unlock dates before
+            # lesson sorting. Preserve that order using only projected dates.
+            rows = [row for row in rows if (unlocked := epoch(row["unlocked_at"])) is not None
+                and unlocked <= self.now()]
+            rows.sort(key=lambda row: (row["level"], row["lesson_position"]))
+        else:
+            random.SystemRandom().shuffle(rows)
+        for row in rows:
+            assignment = self.store.resource("assignment", row["assignment_id"])
+            data = assignment["data"]
+            # SQLite's date parser is more permissive than epoch(). Keep the
+            # existing Python checks, including timezone handling, before load.
+            due = epoch(data.get("available_at"))
+            unlocked = epoch(data.get("unlocked_at"))
+            eligible = (mode == "lessons" and unlocked is not None and unlocked <= self.now()
+                and not data.get("started_at")) or (mode == "reviews" and data.get("started_at")
+                and due is not None and due <= self.now() and not data.get("burned_at"))
+            if eligible:
+                yield assignment, self.store.subject(row["subject_id"])
 
     def details(self, subject_id, include_relations=True):
         subject = self.store.subject(int(subject_id))
@@ -220,8 +262,8 @@ class Engine:
             # Each mode keeps its own durable session. Explicit practice can run
             # while graded work is paused (including during vacation); returning
             # to reviews/resume restores the exact graded question and draft.
-            if existing:
-                self.store.save_session(existing)
+            # Every edit already committed before its acknowledgment. Merely
+            # changing study modes must not rewrite the paused session record.
             reference = self.store.get("practice_session" if mode == "practice" else "graded_session")
             saved = self.store.session(reference) if reference else None
             if saved and saved["phase"] != "complete" and not replace_practice:
@@ -245,16 +287,11 @@ class Engine:
                     item = self.store.subject(sid)
                     self.ensure_access(item)
                     candidates.append((self.store.related("assignment", sid), item))
-            else:
-                candidates = self.assignments(mode)
-            if mode == "lessons":
-                candidates.sort(key=lambda pair: (pair[1]["data"].get("level", 0), pair[1]["data"].get("lesson_position", 0)))
-            else:
                 random.SystemRandom().shuffle(candidates)
+            else:
+                candidates = self._study_candidates(mode)
             queue = []
             for assignment, subject in candidates:
-                if len(queue) >= count:
-                    break
                 try:
                     self.ensure_study_content(subject)
                 except UserError as error:
@@ -267,6 +304,8 @@ class Engine:
                 queue.append({"subject_id": subject["id"], "assignment_id": assignment["id"] if assignment else None,
                     "baseline": baseline(assignment) if assignment else {}, "parts": parts,
                     "errors": {"meaning": 0, "reading": 0}, "done": False})
+                if len(queue) >= count:
+                    break
             if not queue:
                 raise UserError("No eligible cached items are ready for this session. Refresh or choose another activity.", "empty_queue")
             session = {"id": str(uuid.uuid4()), "mode": mode, "queue": queue, "index": 0,
@@ -401,6 +440,8 @@ class Engine:
         if not session:
             return None
         view = {key: session[key] for key in ("id", "mode", "phase", "part", "feedback", "draft", "completed", "overrides", "started_at", "ended_at", "lesson_index")}
+        view["revision"] = session.get("revision", 0)
+        view["session_epoch"] = self.store.get("session_epoch", "")
         view["total"] = min(len(session["queue"]), session.get("finish_at", len(session["queue"])))
         view["finishing"] = "finish_at" in session
         view["invalidated"] = session.get("invalidated", "")
@@ -497,6 +538,16 @@ class Engine:
           ORDER BY CAST(s.id AS INTEGER) LIMIT 60""", (self.max_level(), stamp(self.now() + 86400)))
         return [self.details(int(r[0]), False) for r in rows]
 
+    def session_state(self):
+        """Current durable session without rescanning account-wide collections."""
+        with self.store.lock:
+            session = self.session_view()
+            graded_id = self.store.get("graded_session")
+            graded = self.store.session(graded_id) if graded_id and (not session or graded_id != session["id"]) else None
+            return {"session": session, "paused_graded": bool(graded and graded["phase"] != "complete"),
+                "session_revision": self.store.get("session_revision", 0),
+                "session_epoch": self.store.get("session_epoch", "")}
+
     def snapshot(self):
         now = self.now()
         level = self.user().get("level", 0)
@@ -508,7 +559,8 @@ class Engine:
         lessons = self.assignments("lessons", count_only=True)
         forecast = [0] * 24
         next_at = None
-        for r in self.store.rows(f"""SELECT json_extract(a.body,'$.data.available_at') FROM resources a JOIN resources s
+        for r in self.store.rows(f"""SELECT json_extract(a.body,'$.data.available_at')
+          FROM resources a INDEXED BY resource_assignment_schedule JOIN resources s INDEXED BY resource_search_identity
           ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)
           WHERE a.kind='assignment' AND json_extract(a.body,'$.data.burned_at') IS NULL
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0 AND json_extract(s.body,'$.data.hidden_at') IS NULL
@@ -520,21 +572,18 @@ class Engine:
                 hour = int((value - now) // 3600)
                 if 0 <= hour < 24:
                     forecast[hour] += 1
-        activity = [dict(r) for r in self.store.rows("""SELECT date(created_at,'localtime') AS day,COUNT(*) AS count
-          FROM events WHERE kind IN ('subject_complete','practice_complete') GROUP BY day ORDER BY day DESC LIMIT 35""")]
+        activity = history.activity(self.store)
         from .recovery import snapshot_summary
         outbox_summary = snapshot_summary(self)
         media = self.store.rows("SELECT COUNT(*),COALESCE(SUM(size),0) FROM media")[0]
         cached_subjects = self.store.rows(f"SELECT COUNT(*) FROM resources WHERE kind IN {SUBJECTS} AND json_extract(body,'$.data.level')<=? AND json_extract(body,'$.data.hidden_at') IS NULL", (self.max_level(),))[0][0]
-        session = self.session_view()
-        graded_id = self.store.get("graded_session")
-        graded = self.store.session(graded_id) if graded_id and (not session or graded_id != session["id"]) else None
+        session_state = self.session_state()
         return {"demo": self.demo, "status": self.status, "message": self.message, "connected": self.connected,
             "syncing": self.syncing, "username": self.user().get("username", ""), "level": level,
             "max_level": self.max_level(), "vacation": bool(self.user().get("current_vacation_started_at")),
             "reviews": due, "lessons": lessons, "next_reviews_at": stamp(next_at) if next_at else None,
             "forecast": forecast, "level_total": counts[0], "level_passed": counts[1] or 0,
-            "activity": activity, "milestone": milestones.latest(self), "session": session, "paused_graded": bool(graded and graded["phase"] != "complete"),
+            "activity": activity, "milestone": milestones.latest(self), **session_state,
             **outbox_summary, "last_sync": self.store.get("last_sync"), "settings": self.settings(),
             "cache": {"files": media[0], "bytes": media[1], "subjects": cached_subjects}, "difficult": self.difficult(), "now": now,
             "credential_storage": self.store.get("credential_storage", "session"),

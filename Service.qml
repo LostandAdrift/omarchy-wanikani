@@ -6,6 +6,7 @@ import Quickshell.Hyprland
 import Quickshell.Networking
 import "qml" as Kani
 import "qml/DesktopPolicy.mjs" as Policy
+import "qml/SessionState.mjs" as SessionState
 
 Item {
   id: root
@@ -32,13 +33,23 @@ Item {
   property int sequence: 0
   property string epochId: String(Date.now()) + "-" + Math.random().toString(36).slice(2)
   property var callbacks: ({})
+  property var requestContexts: ({})
+  property var stateOrder: SessionState.initial()
   property int pendingCount: 0
   property int previousReviews: -1
   property double lastNotification: 0
   property int ambientIndex: 0
   property int restartAttempts: 0
-  readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0])
-  onContentAccessChanged: ambientItems = []
+  property int zenUsers: 0
+  property bool ambientDirty: true
+  property bool ambientFetching: false
+  property int ambientGeneration: 0
+  property double ambientFetchedAt: 0
+  readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0, snapshot.session_epoch || ""])
+  onContentAccessChanged: {
+    ambientItems = []
+    refreshAmbient()
+  }
   readonly property bool networkOnline: Networking.connectivity === NetworkConnectivity.Full || (Networking.connectivity === NetworkConnectivity.Unknown && Networking.devices && Networking.devices.values.some(function (device) {
       return device.connected
     }))
@@ -64,6 +75,41 @@ Item {
   readonly property int idleDeadline: idleService ? idleService.firstIdleTimeoutSeconds : Math.min(Number(idleConfig.screensaver || 150), Number(idleConfig.lock || 300))
   readonly property var idleWindow: Policy.idleWindow(idleDeadline)
   readonly property bool idleVisible: canDecorate && snapshot.settings.idle_gallery === true && idleWindow.enabled && idleStart.isIdle && !idleEnd.isIdle && ambientSubject !== null
+  readonly property bool ambientWanted: Policy.ambientDemand(snapshot.settings, {
+    ready: ready,
+    locked: locked,
+    studying: studying,
+    fullscreen: fullscreen,
+    panelOpen: panelOpen,
+    zen: zenUsers > 0,
+    desktopIdle: desktopIdle.isIdle,
+    idleEligible: idleStart.enabled && idleStart.isIdle && !idleEnd.isIdle
+  })
+  onAmbientWantedChanged: queueAmbient()
+
+  function ordering() {
+    return Object.assign({}, stateOrder, {
+      snapshot: snapshot
+    })
+  }
+  function applySnapshot(data) {
+    var next = SessionState.full(ordering(), data)
+    if (next.catalogueAccepted && next.sessionEpoch !== stateOrder.sessionEpoch)
+      ambientItems = []
+    stateOrder = next
+    if (next.catalogueAccepted || next.sessionAccepted)
+      snapshot = next.snapshot
+    if (next.catalogueAccepted) {
+      considerNotification()
+      refreshAmbient()
+    }
+  }
+  function applySession(data) {
+    var next = SessionState.partial(ordering(), data)
+    stateOrder = next
+    if (next.sessionAccepted)
+      snapshot = next.snapshot
+  }
 
   function request(method, args, callback) {
     if (!ready) {
@@ -76,6 +122,9 @@ Item {
     var next = Object.assign({}, callbacks)
     next[id] = callback || function () {}
     callbacks = next
+    var contexts = Object.assign({}, requestContexts)
+    contexts[id] = stateOrder.context
+    requestContexts = contexts
     pendingCount++
     worker.write(JSON.stringify({
       v: 1,
@@ -96,16 +145,18 @@ Item {
     if (message.v !== 1)
       return
     if (message.event === "ready") {
+      stateOrder = SessionState.workerRestart(ordering())
       ready = true
       restartAttempts = 0
       error = ""
       return
     }
     if (message.event === "state") {
-      snapshot = message.data
-      considerNotification()
-      if (ready)
-        refreshAmbient()
+      applySnapshot(message.data)
+      return
+    }
+    if (message.event === "session") {
+      applySession(message.data)
       return
     }
     if (message.event === "readiness") {
@@ -122,10 +173,25 @@ Item {
     }
     if (message.id && callbacks[message.id]) {
       var callback = callbacks[message.id]
+      var issuedContext = requestContexts[message.id]
+      var contexts = Object.assign({}, requestContexts)
+      delete contexts[message.id]
+      requestContexts = contexts
       var next = Object.assign({}, callbacks)
       delete next[message.id]
       callbacks = next
       pendingCount = Math.max(0, pendingCount - 1)
+      if (message.ok && SessionState.isSession(message.data)) {
+        var nextOrder = SessionState.reply(ordering(), message.data, issuedContext)
+        stateOrder = nextOrder
+        if (!nextOrder.replyAccepted) {
+          callback(false, null, "The saved session changed. Resume to load its latest state.")
+          return
+        }
+        if (nextOrder.sessionAccepted)
+          snapshot = nextOrder.snapshot
+        message.data = SessionState.visibleSession(message.data, snapshot.max_level)
+      }
       if (!message.ok)
         error = message.error ? message.error.message : "Something went wrong."
       else
@@ -134,10 +200,43 @@ Item {
     }
   }
   function refreshAmbient() {
+    ambientDirty = true
+    ambientGeneration++
+    queueAmbient()
+  }
+  function acquireAmbient() {
+    zenUsers++
+    queueAmbient()
+  }
+  function releaseAmbient() {
+    zenUsers = Math.max(0, zenUsers - 1)
+    queueAmbient()
+  }
+  function queueAmbient() {
+    if (!ambientRefreshTimer)
+      return
+    if (Policy.ambientFetch(ambientWanted, ready, ambientFetching, ambientDirty, Date.now(), ambientFetchedAt))
+      ambientRefreshTimer.restart()
+    else if (!ambientWanted)
+      ambientRefreshTimer.stop()
+  }
+  function fetchAmbient() {
+    if (!Policy.ambientFetch(ambientWanted, ready, ambientFetching, ambientDirty, Date.now(), ambientFetchedAt))
+      return
     var access = contentAccess
+    var generation = ambientGeneration
+    ambientFetching = true
     request("ambient", {}, function (ok, data) {
-      if (ok && root.contentAccess === access)
-        ambientItems = data
+      root.ambientFetching = false
+      if (ok && root.contentAccess === access && root.ambientGeneration === generation) {
+        root.ambientItems = data
+        root.ambientDirty = false
+        root.ambientFetchedAt = Date.now()
+      }
+      // Coalesce updates received during one fetch into at most one follow-up.
+      // A failed worker response waits for the next visible refresh opportunity.
+      if (ok)
+        root.queueAmbient()
     })
   }
   function summon(view, extra) {
@@ -188,6 +287,7 @@ Item {
       root.error = "The study service stopped. Reconnecting to your saved session…"
       var pending = root.callbacks
       root.callbacks = ({})
+      root.requestContexts = ({})
       root.pendingCount = 0
       for (var key in pending)
         pending[key](false, null, root.error)
@@ -217,18 +317,26 @@ Item {
     onTriggered: {
       root.request("tick", {})
       root.request("snapshot", {}, function (ok, data) {
-        if (ok) {
-          root.snapshot = data
-          root.considerNotification()
-          root.refreshAmbient()
-        }
+        if (ok)
+          root.applySnapshot(data)
       })
     }
   }
   Timer {
+    id: ambientRefreshTimer
+    interval: 25
+    onTriggered: root.fetchAmbient()
+  }
+  Timer {
+    interval: 60000
+    repeat: true
+    running: root.ready && root.ambientWanted
+    onTriggered: root.refreshAmbient()
+  }
+  Timer {
     interval: 30000
     repeat: true
-    running: root.canDecorate && (desktopIdle.isIdle || root.idleVisible)
+    running: root.canDecorate && root.ambientWanted && root.ambientItems.length > 1
     onTriggered: root.ambientIndex++
   }
   IdleMonitor {

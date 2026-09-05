@@ -154,7 +154,7 @@ ColumnLayout {
     }
     Label {
       Layout.fillWidth: true
-      text: root.session ? root.session.completed + " subjects completed · " + root.session.errors + " mistakes · " + root.session.overrides + " typo corrections" : ""
+      text: root.session ? root.session.completed + (root.session.completed === 1 ? " subject completed · " : " subjects completed · ") + root.session.errors + (root.session.errors === 1 ? " mistake · " : " mistakes · ") + root.session.overrides + (root.session.overrides === 1 ? " typo correction" : " typo corrections") : ""
       horizontalAlignment: Text.AlignHCenter
       color: Qt.alpha(Color.foreground, 0.76)
     }
@@ -180,6 +180,16 @@ ColumnLayout {
       Action {
         text: "Today"
         onClicked: root.controller.navigate("dashboard")
+      }
+    }
+    Loader {
+      Layout.fillWidth: true
+      active: root.session && root.session.phase === "complete"
+      sourceComponent: Component {
+        SessionRecap {
+          controller: root.controller
+          session: root.session
+        }
       }
     }
   }

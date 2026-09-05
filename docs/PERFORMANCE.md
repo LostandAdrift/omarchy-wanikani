@@ -2,6 +2,8 @@
 
 `tools/profile_native.py` reads existing Linux `/proc` counters. It never enables, disables, restarts, opens, or changes the plugin or desktop. The default measurement is 45 seconds with observations every five seconds. It does not contact WaniKani, the keyring, or desktop IPC.
 
+The [verification record](VERIFICATION.md) separates current measurements from release targets. One observed 45-second worker sample measured 0.0222% of one core, RSS 31.34 MiB, PSS 18.26 MiB, and private memory 16.60 MiB. A shared-shell baseline sequence was rejected after a shell restart; a later disabled/enabled pair remained too noisy to establish incremental QML cost. These are development observations, not certification of the combined idle target.
+
 From the repository, collect a private JSON report:
 
 ```sh
@@ -55,3 +57,9 @@ Parser, accounting, discovery, output-privacy, and restart checks use authored f
 ```sh
 python3 -m unittest discover -s tests -p test_native_profile.py -v
 ```
+
+## Avoiding unnecessary work
+
+An authored 9,016-subject fixture measured one ambient catalogue response at a 30.178 ms median and 32.795 ms p95 across eight samples, returning 60 details and 56,875 JSON bytes. These timings measure the unchanged backend query; the service optimization avoids invoking it when no surface needs the result. Desktop/idle displays request only during their eligible visible interval. Manual Zen explicitly acquires demand, including with both automatic displays disabled. Reads coalesce for 25 ms with one request in flight, and periodic ambient refreshes run only while needed. Access invalidation remains immediate. The 30-capture hosted fixture run on DP-3 confirmed zero ambient requests across ordinary views and one request for opened Zen; its temporary plugin was removed.
+
+Answer and lesson navigation can emit compact session updates, leaving catalogue summaries to full refreshes and explicit dashboard/Settings opening. Independent session and full-state revisions prevent delayed responses from undoing newer feedback or counters. Editor keystrokes use small durable acknowledgments without a full state event: 100 authored writes measured a 10.391 ms median, 10.586 ms p95, and a 96-byte acknowledgment, creating no submission operations. These measurements use fixture databases; they are separate from first-pixel latency or real-key input measurements.

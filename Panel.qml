@@ -42,7 +42,9 @@ Item {
       activity: []
     })
   readonly property string pluginId: "io.github.lostandadrift.wanikani"
-  readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0])
+  readonly property string sessionEpoch: snapshot.session_epoch || ""
+  onSessionEpochChanged: session = snapshot.session || null
+  readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0, snapshot.session_epoch || ""])
   onContentAccessChanged: {
     // Presentation caches must not outlive the account or its content grant.
     // Durable answers remain owned by the worker and are revalidated there.
@@ -147,6 +149,14 @@ Item {
     error = ""
     if (service)
       service.studying = next === "study"
+    if (service && service.ready && (next === "dashboard" || next === "settings")) {
+      // Session-only events keep the question path small. Refresh richer local
+      // account summaries when those views are actually requested.
+      service.request("snapshot", {}, function (ok, data) {
+        if (ok && root.service)
+          root.service.applySnapshot(data)
+      })
+    }
     Qt.callLater(focusContent)
   }
   function focusContent() {
@@ -190,7 +200,7 @@ Item {
   }
   function studyAction(method, args) {
     call(method, args, function (ok, data) {
-      if (ok)
+      if (ok && (!root.session || Number(data.revision || 0) >= Number(root.session.revision || 0)))
         root.session = data
       Qt.callLater(root.focusContent)
     })
