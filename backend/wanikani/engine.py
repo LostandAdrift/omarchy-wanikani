@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from .common import UserError, epoch, plain, stamp
+from .common import UserError, accessible_subject, epoch, plain, stamp
 from .grading import grade, validate_subject_answers
 from . import editor, history, milestones
 
@@ -90,7 +90,7 @@ class Engine:
         return self.settings()
 
     def ensure_access(self, subject):
-        if not subject or subject["data"].get("hidden_at") or subject["data"].get("level", 61) > self.max_level():
+        if not accessible_subject(subject, self.max_level()):
             raise UserError("This subject is outside your current WaniKani access.", "access_restricted")
 
     def ensure_study_content(self, subject):
@@ -113,7 +113,7 @@ class Engine:
         subject_index = " INDEXED BY resource_search_identity" if indexed else ""
         return self.store.rows(f"""SELECT {columns} FROM resources a{assignment_index} JOIN resources s{subject_index}
           ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)
-          WHERE a.kind='assignment' AND json_extract(s.body,'$.data.level')<=?
+          WHERE a.kind='assignment' AND json_type(s.body,'$.data.level')='integer' AND json_extract(s.body,'$.data.level') BETWEEN 1 AND ?
           AND json_extract(s.body,'$.data.hidden_at') IS NULL
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0
           AND NOT EXISTS(SELECT 1 FROM outbox o WHERE o.subject_id=CAST(s.id AS INTEGER)
@@ -205,7 +205,7 @@ class Engine:
                 if type(sid) is not int:
                     continue
                 item = self.store.subject(sid)
-                if item and type(item["data"].get("level")) is int and item["data"]["level"] <= self.max_level() and not item["data"].get("hidden_at"):
+                if accessible_subject(item, self.max_level()):
                     meanings = item["data"].get("meanings")
                     output.append({"id": sid, "characters": item["data"].get("characters") if isinstance(item["data"].get("characters"), str) else "◇",
                         "meaning": next((m["meaning"] for m in meanings if isinstance(m, dict) and m.get("primary") is True
@@ -455,7 +455,8 @@ class Engine:
                 view["subject"] = self.details(subject["id"])
             except UserError as error:
                 if error.code == "access_restricted":
-                    view["restricted"] = True
+                    from .journal import restricted_session
+                    view = restricted_session(view)
                 else:
                     view["unavailable"] = str(error)
         return view
@@ -529,7 +530,7 @@ class Engine:
     def ambient(self):
         rows = self.store.rows(f"""SELECT s.id FROM resources s JOIN resources a ON a.kind='assignment'
           AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
-          WHERE s.kind IN {SUBJECTS} AND json_extract(s.body,'$.data.level')<=?
+          WHERE s.kind IN {SUBJECTS} AND json_type(s.body,'$.data.level')='integer' AND json_extract(s.body,'$.data.level') BETWEEN 1 AND ?
           AND length(json_extract(s.body,'$.data.characters'))>0
           AND json_extract(s.body,'$.data.hidden_at') IS NULL AND json_extract(a.body,'$.data.srs_stage')>=5
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0
@@ -554,7 +555,7 @@ class Engine:
         counts = self.store.rows(f"""SELECT COUNT(*),SUM(CASE WHEN json_extract(a.body,'$.data.srs_stage')>=5 THEN 1 ELSE 0 END)
           FROM resources s LEFT JOIN resources a ON a.kind='assignment' AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
           WHERE s.kind='kanji' AND json_extract(s.body,'$.data.level')=? AND json_extract(s.body,'$.data.hidden_at') IS NULL
-          AND json_extract(s.body,'$.data.level')<=?""", (level, self.max_level()))[0]
+          AND json_type(s.body,'$.data.level')='integer' AND json_extract(s.body,'$.data.level') BETWEEN 1 AND ?""", (level, self.max_level()))[0]
         due = self.assignments("reviews", count_only=True)
         lessons = self.assignments("lessons", count_only=True)
         forecast = [0] * 24
@@ -564,7 +565,7 @@ class Engine:
           ON s.kind IN {SUBJECTS} AND CAST(s.id AS INTEGER)=CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)
           WHERE a.kind='assignment' AND json_extract(a.body,'$.data.burned_at') IS NULL
           AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0 AND json_extract(s.body,'$.data.hidden_at') IS NULL
-          AND json_extract(s.body,'$.data.level')<=? AND NOT EXISTS(SELECT 1 FROM outbox o
+          AND json_type(s.body,'$.data.level')='integer' AND json_extract(s.body,'$.data.level') BETWEEN 1 AND ? AND NOT EXISTS(SELECT 1 FROM outbox o
             WHERE o.subject_id=CAST(s.id AS INTEGER) AND o.kind IN ('review','lesson') AND o.state IN {BUSY_STATES})""", (self.max_level(),)):
             value = epoch(r[0])
             if value and value > now:
@@ -576,7 +577,7 @@ class Engine:
         from .recovery import snapshot_summary
         outbox_summary = snapshot_summary(self)
         media = self.store.rows("SELECT COUNT(*),COALESCE(SUM(size),0) FROM media")[0]
-        cached_subjects = self.store.rows(f"SELECT COUNT(*) FROM resources WHERE kind IN {SUBJECTS} AND json_extract(body,'$.data.level')<=? AND json_extract(body,'$.data.hidden_at') IS NULL", (self.max_level(),))[0][0]
+        cached_subjects = self.store.rows(f"SELECT COUNT(*) FROM resources WHERE kind IN {SUBJECTS} AND json_type(body,'$.data.level')='integer' AND json_extract(body,'$.data.level') BETWEEN 1 AND ? AND json_extract(body,'$.data.hidden_at') IS NULL", (self.max_level(),))[0][0]
         session_state = self.session_state()
         return {"demo": self.demo, "status": self.status, "message": self.message, "connected": self.connected,
             "syncing": self.syncing, "username": self.user().get("username", ""), "level": level,
@@ -604,11 +605,13 @@ class Engine:
         if method not in handlers:
             raise UserError("Unknown command.")
         # The effect and its reply commit together; replay of the same local
-        # request after a transport interruption returns its original reply.
+        # request never repeats its effect. Reproject subject presentation to
+        # current access without replacing the original outcome or revision.
         with self.store.transaction():
             rows = self.store.rows("SELECT body FROM commands WHERE id=?", (request_id,))
             if rows:
-                return json.loads(rows[0][0])
+                from .journal import replay
+                return replay(self, json.loads(rows[0][0]))
             value = handlers[method]()
             self.store.execute("INSERT INTO commands VALUES(?,?)", (request_id, json.dumps(value, ensure_ascii=False)))
             return value

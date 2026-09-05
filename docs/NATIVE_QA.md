@@ -28,9 +28,19 @@ Captures use the actual panel item's `grabToImage`; they do not capture unrelate
 
 **Evidence boundary:** automatic actions call real QML component functions or signals and operate only on authored fixtures. They are synthetic actions. They do not establish native keyboard delivery, physical focus behavior, IME composition, selection ownership, monitor switching, or fractional scaling. The narrower layout is a logical-size stress check, not a monitor-scale change.
 
-On 2026-09-04 at 03:08 UTC, run `wanikani-native-qa-g04t9mw5` completed all 26 captures, including the editor and paused-practice scenarios, and removed its temporary plugin without namespace errors. Milestone preview, newer pending editor draft, and practice selection were visually inspected. The captured frame was 1140 pixels wide at the already configured compositor scale of 1.5; no scaling configuration was edited. This is evidence for that existing display configuration and synthetic workflow, not comprehensive scale or physical-key/IME qualification. The same third-batch checkpoint passed 303 Python tests and 61 Qt checks; [verification](VERIFICATION.md) records later batches separately.
+On 2026-09-05 at 03:08 UTC, run `wanikani-native-qa-g04t9mw5` completed all 26 captures, including the editor and paused-practice scenarios, and removed its temporary plugin without namespace errors. Milestone preview, newer pending editor draft, and practice selection were visually inspected. The captured frame was 1140 pixels wide at the already configured compositor scale of 1.5; no scaling configuration was edited. This is evidence for that existing display configuration and synthetic workflow, not comprehensive scale or physical-key/IME qualification. The same third-batch checkpoint passed 303 Python tests and 61 Qt checks; [verification](VERIFICATION.md) records later batches separately.
 
 ## Manual keyboard, IME, and monitor checks
+
+For repeated native opening measurements, run:
+
+```sh
+python3 tools/native_qa.py run --scenario performance --samples 10
+```
+
+This scenario seeds 9,016 independently authored subjects and a saved five-subject review batch. It opens study, dashboard, lookup, Settings, Zen and Practice in rotating order, without answering study items. Each view is warmed once first. The private `artifacts/open-latency.json` report records source hashes, monitor/pixel ratio, per-view request counts, and individual timings; it does not retain images.
+
+The timer starts inside the synthetic QML open action. `component_ready_ms` waits for the page loader, local requests and input preparation to settle; `render_capture_ms` includes a subsequent `grabToImage` render readback. The latter includes capture overhead and is not physical-key, IPC-launch, compositor-presentation or first-pixel latency. Polling overhead is recorded separately and excluded from those QML timestamps. A changed timing clock invalidates the run. The same temporary-plugin cleanup applies.
 
 ```sh
 python3 tools/native_qa.py run --scenario none --hold

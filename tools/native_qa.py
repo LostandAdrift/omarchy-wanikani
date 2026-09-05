@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -51,12 +52,64 @@ if __name__ == "__main__":
     raise SystemExit(worker.main())
 '''
 
+QA_LARGE_CATALOGUE = r'''
+import copy
+from pathlib import Path
+import sys
+import time
+sys.path.insert(0, str(Path(sys.argv[1]) / 'backend'))
+from wanikani.store import Store
+from wanikani.common import stamp
+store = Store(Path(sys.argv[2]) / 'demo.sqlite3')
+now = time.time()
+subject, assignment = store.subject(4), store.related('assignment', 4)
+with store.transaction():
+    for sid in range(100, 9100):
+        item = copy.deepcopy(subject)
+        item['id'] = sid
+        item['data']['level'] = sid % 60 + 1
+        item['data']['meaning_mnemonic'] = 'Independently authored native performance fixture. ' * 20
+        store.put(item)
+        current = copy.deepcopy(assignment)
+        current['id'] = sid + 10000
+        current['data']['subject_id'] = sid
+        current['data']['available_at'] = stamp(now - 60 if sid % 3 == 0 else now + sid * 60)
+        store.put(current)
+store.close()
+'''
+
 # These methods are appended only to the generated Panel.qml. They invoke QML
 # component actions and inspect actual rendered controls, not keyboard events.
 QA_DRIVER = r'''
   property real qaWidth: 0
   property real qaHeight: 0
   property var qaCapture: ({})
+  property var qaTiming: ({})
+  Timer {
+    interval: 8
+    running: root.qaTiming.status === "waiting"
+    repeat: true
+    onTriggered: {
+      var measurement = root.qaTiming
+      if (Date.now() - measurement.started > 5000) {
+        root.qaTiming = Object.assign({}, measurement, {status: "timeout"})
+        return
+      }
+      if (!root.opened || root.busy || root.searching || content.status !== Loader.Ready
+          || !content.item || !root.service || root.service.pendingCount !== 0)
+        return
+      root.qaTiming = Object.assign({}, measurement, {status: "rendering"})
+      var ready = Date.now()
+      var queued = frame.grabToImage(function(result) {
+        if (root.qaTiming.started !== measurement.started) return
+        root.qaTiming = Object.assign({}, measurement, {status: "ready",
+          component_ready_ms: ready - measurement.started,
+          render_capture_ms: Date.now() - measurement.started,
+          width: frame.width, height: frame.height})
+      })
+      if (!queued) root.qaTiming = Object.assign({}, measurement, {status: "failed"})
+    }
+  }
   function qaItems() {
     var items = []
     function visit(item) {
@@ -113,7 +166,7 @@ QA_DRIVER = r'''
       ambient: {count: service ? service.ambientItems.length : 0,
         wanted: service ? service.ambientWanted : false,
         fetching: service ? service.ambientFetching : false},
-      capture: qaCapture, controls: controls,
+      capture: qaCapture, timing: qaTiming, controls: controls,
       frame: {width: frame.width, height: frame.height},
       screen: {name: window.screen ? window.screen.name : "", pixelRatio: frame.Screen.devicePixelRatio},
       scroll: {y: scroll.contentItem.contentY || 0, height: scroll.height,
@@ -123,9 +176,13 @@ QA_DRIVER = r'''
   function qaAction(encoded) {
     try {
       var action = JSON.parse(encoded)
-      if (action.kind === "open") {
+      if (action.kind === "open" || action.kind === "measure-open") {
         var views = ["dashboard", "lessons", "reviews", "resume", "lookup", "practice-library", "settings", "zen", "help", "recovery"]
         if (views.indexOf(action.view) < 0) throw new Error("Unknown QA view")
+        if (action.kind === "measure-open") {
+          if (root.opened) throw new Error("Close the QA panel before measuring its opening")
+          root.qaTiming = {status: "waiting", view: action.view, started: Date.now()}
+        }
         root.open(JSON.stringify({view: action.view, limit: action.limit || 3, text: action.text || ""}))
       } else if (action.kind === "close") {
         root.dismiss()
@@ -203,7 +260,7 @@ def replace_function(text, name, body):
     return result
 
 
-def prepare(source, destination=None):
+def prepare(source, destination=None, large_catalogue=False):
     source = source.resolve()
     root = Path(tempfile.mkdtemp(prefix="wanikani-native-qa-")) if destination is None else destination.resolve()
     if destination is not None:
@@ -275,9 +332,12 @@ def prepare(source, destination=None):
     messages = [json.loads(line) for line in seeded.stdout.splitlines()]
     if seeded.returncode or not any(m.get("id") == "seed" and m.get("data", {}).get("demo") for m in messages):
         raise RuntimeError("Could not initialize isolated demo fixtures.")
+    if large_catalogue:
+        command([sys.executable, '-B', '-c', QA_LARGE_CATALOGUE, str(repository), str(state)])
     run = {"v": 1, "id": plugin_id, "root": str(root), "repository": str(repository), "state": str(state),
            "artifacts": str(artifacts), "source_commit": command(["git", "rev-parse", "HEAD"], cwd=source),
            "source_files": copied, "source_hashes": source_hashes, "status": "prepared",
+           "catalogue_subjects": 9016 if large_catalogue else 16,
            "evidence": "Synthetic component actions; no native-key or IME claim"}
     write_json(repository / ".native-qa.json", {"id": plugin_id, "root": str(root)})
     command(["git", "init", "--quiet", "--initial-branch=qa"], cwd=repository)
@@ -614,7 +674,58 @@ def cleanup(run):
     write_json(Path(run["root"]) / "run.json", run)
 
 
-def hosted(run, scenario="smoke", hold=False):
+def latency(run, samples=10):
+    """Measure synthetic QML open through a ready scene's render readback.
+
+    This intentionally includes grabToImage readback overhead. It is neither
+    native shortcut latency nor compositor presentation/first-pixel timing.
+    Only the isolated authored plugin is opened; no answers are completed.
+    """
+    views = ("resume", "dashboard", "lookup", "settings", "zen", "practice-library")
+    results = {view: [] for view in views}
+    for view in views:
+        action(run, {"kind": "open", "view": view, "limit": 5, "text": "山"})
+        wait_snapshot(run, lambda value: value['pendingRequests'] == 0 and not value['ambient']['fetching'])
+        action(run, {"kind": "close"})
+        wait_snapshot(run, lambda value: not value['opened'])
+    for index in range(samples):
+        # Rotate view order so the first/last view is not always the same.
+        ordered = views[index % len(views):] + views[:index % len(views)]
+        for view in ordered:
+            before = wait_snapshot(run)['requestCounts']
+            started = time.monotonic()
+            action(run, {"kind": "measure-open", "view": view, "limit": 5, "text": "山"})
+            measured = wait_snapshot(run, lambda value: value.get('timing', {}).get('status') in ('ready', 'failed', 'timeout'))
+            if measured['timing']['status'] != 'ready':
+                raise RuntimeError('The hosted opening measurement did not render: ' + view)
+            result = {key: measured['timing'][key] for key in ('component_ready_ms', 'render_capture_ms', 'width', 'height')}
+            if not (0 <= result['component_ready_ms'] <= result['render_capture_ms'] <= 5000):
+                raise RuntimeError('The native timing clock changed; discard this run.')
+            result.update(screen=measured['screen'], observed_roundtrip_ms=round((time.monotonic()-started)*1000, 3))
+            result['requests'] = {key: value-before.get(key, 0) for key, value in measured['requestCounts'].items() if value != before.get(key, 0)}
+            results[view].append(result)
+            action(run, {"kind": "close"})
+            wait_snapshot(run, lambda value: not value['opened'])
+    def summary(values):
+        ordered = sorted(values)
+        return {'median_ms': statistics.median(values), 'p95_ms': ordered[max(0, (95*len(ordered)+99)//100-1)],
+            'min_ms': min(values), 'max_ms': max(values), 'samples': len(values)}
+    report = {'format': 1, 'source_commit': run['source_commit'], 'source_hashes': run['source_hashes'],
+        'catalogue_subjects': run.get('catalogue_subjects', 16),
+        'samples_per_view': samples, 'views': {view: {
+            **{metric: summary([item[metric] for item in values]) for metric in ('component_ready_ms', 'render_capture_ms')},
+            'observations': values} for view, values in results.items()},
+        'notes': ['Synthetic component call through ready content and render readback in the existing Omarchy shell.',
+            'Render capture includes grabToImage GPU/readback overhead; no images are retained by this scenario.',
+            'Not physical keyboard/IME, IPC launch, compositor presentation or first-pixel latency.',
+            'All study uses authored offline fixtures. The saved five-subject session is resumed without completing answers.',
+            'Other shell work, monitor refresh and load can affect these development observations.']}
+    destination = Path(run['artifacts']) / 'open-latency.json'
+    write_json(destination, report)
+    print(json.dumps({'latency_report': str(destination), 'samples_per_view': samples}), flush=True)
+
+
+def hosted(run, scenario="smoke", hold=False, samples=10):
     run = load_run(Path(run["root"]) / "run.json")
     installed = Path.home() / ".config/omarchy/plugins" / run["id"]
     if installed.exists() or installed.is_symlink():
@@ -629,6 +740,8 @@ def hosted(run, scenario="smoke", hold=False):
         wait_snapshot(run)
         if scenario == "smoke":
             smoke(run)
+        elif scenario == "performance":
+            latency(run, samples)
         if hold:
             print("QA remains open for manual checks. Press Enter here to remove it; captures stay private.", flush=True)
             input()
@@ -648,7 +761,8 @@ def main():
         sub.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
         sub.add_argument("--directory", type=Path)
         if name == "run":
-            sub.add_argument("--scenario", choices=("smoke", "none"), default="smoke")
+            sub.add_argument("--scenario", choices=("smoke", "performance", "none"), default="smoke")
+            sub.add_argument("--samples", type=int, choices=range(1, 51), default=10, metavar="1..50")
             sub.add_argument("--hold", action="store_true")
     for name in ("snapshot", "action", "capture", "cleanup"):
         sub = commands.add_parser(name)
@@ -660,11 +774,11 @@ def main():
     args = parser.parse_args()
     try:
         if args.command in ("prepare", "run"):
-            run = prepare(args.source, args.directory)
+            run = prepare(args.source, args.directory, args.command == 'run' and args.scenario == 'performance')
             print(json.dumps({"record": str(Path(run["root"]) / "run.json"), "id": run["id"],
                               "repository": run["repository"], "artifacts": run["artifacts"]}), flush=True)
             if args.command == "run":
-                hosted(run, args.scenario, args.hold)
+                hosted(run, args.scenario, args.hold, args.samples)
         else:
             run = load_run(args.record)
             if args.command == "snapshot":

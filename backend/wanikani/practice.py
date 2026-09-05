@@ -96,7 +96,43 @@ def _integer(value, label, minimum, maximum):
     return min(maximum, max(minimum, value))
 
 
-def catalogue(engine, group="suggested", query="", offset=0, limit=30):
+def _content(row, media):
+    images = []
+    if not row["characters"]:
+        image_data = json.loads(row["image_data"])
+        for image in image_data if isinstance(image_data, list) else []:
+            if not isinstance(image, dict) or not isinstance(image.get("url"), str):
+                continue
+            path = media.get(image.get("url"))
+            if path and Path(path).is_file():
+                images.append(Path(path).as_uri())
+    cache_note = "Ready offline"
+    meaning = ""
+    try:
+        answers = json.loads(row["answers"])
+        prepared = validate_subject_answers({"object": row["type"], "data": answers},
+            json.loads(row["material"]) if row["material"] else None)
+        meaning = next((item["meaning"] for item in answers["meanings"]
+            if item.get("primary") is True and item["accepted_answer"] is True), prepared["meanings"][0])
+    except UserError:
+        cache_note = "Refresh to cache valid accepted answers."
+    if cache_note == "Ready offline" and not row["characters"] and not images:
+        cache_note = "Refresh to download the radical image."
+    ready = cache_note == "Ready offline"
+    return images, meaning, cache_note, ready
+
+
+def catalogue(engine, group="suggested", query="", offset=0, limit=30, readiness_scope="all"):
+    # Keep page identities, access and hydrated content from one local snapshot.
+    # Native pages validate at most 60 subjects rather than every learned item.
+    with engine.store.lock:
+        return _catalogue(engine, group, query, offset, limit, readiness_scope)
+
+
+def _catalogue(engine, group, query, offset, limit, readiness_scope):
+    if readiness_scope not in ("all", "page"):
+        raise UserError("Choose all-library or current-page offline availability.")
+    page_readiness = readiness_scope == "page"
     if group not in GROUPS:
         raise UserError("Choose Suggested, Saved, Recent mistakes, or Learned.")
     if not isinstance(query, str):
@@ -112,16 +148,20 @@ def catalogue(engine, group="suggested", query="", offset=0, limit=30):
         pending.setdefault(row["subject_id"], set()).add(row["kind"])
     media = {row["url"]: row["path"] for row in engine.store.rows("SELECT url,path FROM media")}
     pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-    rows = engine.store.rows(f"""SELECT CAST(s.id AS INTEGER) AS id,s.kind AS type,
-        json_object('meanings',json_extract(s.body,'$.data.meanings'),
+    content_projection = "NULL AS answers,NULL AS material,NULL AS image_data" if page_readiness else """json_object('meanings',json_extract(s.body,'$.data.meanings'),
           'readings',json_extract(s.body,'$.data.readings'),
           'auxiliary_meanings',CASE WHEN json_type(s.body,'$.data.auxiliary_meanings') IS NULL
             THEN json('[]') ELSE json_extract(s.body,'$.data.auxiliary_meanings') END) AS answers,
         CASE WHEN d.body IS NOT NULL AND json_type(d.body)!='null'
           THEN d.body ELSE json_extract(m.body,'$.data') END AS material,
+        json_quote(json_extract(s.body,'$.data.character_images')) AS image_data"""
+    material_joins = "" if page_readiness else """LEFT JOIN resources m ON m.kind='study_material'
+        AND CAST(json_extract(m.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
+      LEFT JOIN meta d ON d.key='material_draft_'||s.id"""
+    rows = engine.store.rows(f"""SELECT CAST(s.id AS INTEGER) AS id,s.kind AS type,
+        {content_projection},
         json_extract(s.body,'$.data.characters') AS characters,
         json_extract(s.body,'$.data.level') AS level,
-        json_quote(json_extract(s.body,'$.data.character_images')) AS image_data,
         json_extract(a.body,'$.data.started_at') AS started_at,
         COALESCE(json_extract(a.body,'$.data.srs_stage'),0) AS srs_stage,
         json_extract(rs.body,'$.data.percentage_correct') AS accuracy,
@@ -138,14 +178,12 @@ def catalogue(engine, group="suggested", query="", offset=0, limit=30):
             AND instr(?,json_extract(s.body,'$.data.characters'))>0)) AS matches
       FROM resources s LEFT JOIN resources a ON a.kind='assignment'
         AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
-      LEFT JOIN resources m ON m.kind='study_material'
-        AND CAST(json_extract(m.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
-      LEFT JOIN meta d ON d.key='material_draft_'||s.id
+      {material_joins}
       LEFT JOIN resources rs ON rs.kind='review_statistic'
         AND CAST(json_extract(rs.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
         AND COALESCE(json_extract(rs.body,'$.data.hidden'),0)=0
       WHERE s.kind IN {SUBJECT_TYPES} AND json_extract(s.body,'$.data.hidden_at') IS NULL
-        AND json_extract(s.body,'$.data.level')<=?
+        AND json_type(s.body,'$.data.level')='integer' AND json_extract(s.body,'$.data.level') BETWEEN 1 AND ?
         AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0""",
         (query, pattern, pattern, pattern, query, engine.max_level()))
     counts = dict.fromkeys(GROUPS, 0)
@@ -161,28 +199,7 @@ def catalogue(engine, group="suggested", query="", offset=0, limit=30):
             "suggested": saved or recent["total"] > 0 or lower_accuracy}
         if not any(membership.values()):
             continue
-        images = []
-        if not row["characters"]:
-            image_data = json.loads(row["image_data"])
-            for image in image_data if isinstance(image_data, list) else []:
-                if not isinstance(image, dict) or not isinstance(image.get("url"), str):
-                    continue
-                path = media.get(image.get("url"))
-                if path and Path(path).is_file():
-                    images.append(Path(path).as_uri())
-        cache_note = "Ready offline"
-        meaning = ""
-        try:
-            answers = json.loads(row["answers"])
-            prepared = validate_subject_answers({"object": row["type"], "data": answers},
-                json.loads(row["material"]) if row["material"] else None)
-            meaning = next((item["meaning"] for item in answers["meanings"]
-                if item.get("primary") is True and item["accepted_answer"] is True), prepared["meanings"][0])
-        except UserError:
-            cache_note = "Refresh to cache valid accepted answers."
-        if cache_note == "Ready offline" and not row["characters"] and not images:
-            cache_note = "Refresh to download the radical image."
-        ready = cache_note == "Ready offline"
+        images, meaning, cache_note, ready = ([], "", "", False) if page_readiness else _content(row, media)
         for name, included in membership.items():
             if included:
                 counts[name] += 1
@@ -224,8 +241,22 @@ def catalogue(engine, group="suggested", query="", offset=0, limit=30):
     page = result[offset:offset + limit]
     for item in page:
         del item["_accuracy"]
-    return {"items": page, "counts": counts, "ready_counts": ready_counts, "group": group, "query": query,
-        "offset": offset, "limit": limit, "total": total, "ready_total": sum(item["ready"] for item in result),
+        if page_readiness:
+            # Only page members need answer validation and radical images.
+            subject = engine.store.subject(item["id"])
+            engine.ensure_access(subject)
+            data = subject["data"]
+            draft = engine.store.get("material_draft_" + str(item["id"]))
+            material = draft if draft is not None else (engine.store.related("study_material", item["id"]) or {}).get("data")
+            row = {"characters": data.get("characters"), "type": subject["object"],
+                "answers": json.dumps({key: data[key] for key in ("meanings", "readings", "auxiliary_meanings") if key in data}),
+                "image_data": json.dumps(data.get("character_images")),
+                "material": json.dumps(material) if material is not None else None}
+            images, meaning, note, ready = _content(row, media)
+            item.update(images=images, meaning="" if item["spoilers_hidden"] else meaning, cache_note=note, ready=ready)
+    return {"items": page, "counts": counts, "ready_counts": None if page_readiness else ready_counts, "group": group, "query": query,
+        "offset": offset, "limit": limit, "total": total, "ready_total": None if page_readiness else sum(item["ready"] for item in result),
+        "readiness_scope": readiness_scope, "page_ready": sum(item["ready"] for item in page),
         "has_more": offset + limit < total, "next_offset": offset + limit if offset + limit < total else None,
         "mistake_days": MISTAKE_DAYS, "selection_limit": SELECTION_LIMIT, "graded_paused": bool(protected),
         "saved_practice": saved_practice}

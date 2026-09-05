@@ -34,6 +34,15 @@ class UserError(Exception):
         self.code = code
 
 
+def accessible_subject(subject, maximum):
+    """Treat missing or malformed access metadata as unavailable content."""
+    if not isinstance(subject, dict) or not isinstance(subject.get("data"), dict):
+        return False
+    data = subject["data"]
+    level = data.get("level")
+    return type(level) is int and 1 <= level <= maximum and data.get("hidden_at") is None
+
+
 def plain(text):
     """API mnemonic tags are data, never executable QML/HTML."""
     return re.sub(r"<[^>]*>", "", str(text or ""))

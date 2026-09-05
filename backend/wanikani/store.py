@@ -35,7 +35,8 @@ class Store:
             json_extract(body,'$.data.unlocked_at')) WHERE kind='assignment';
           DROP INDEX IF EXISTS resource_search_access;
           CREATE INDEX IF NOT EXISTS resource_search_identity ON resources(
-            kind,CAST(id AS INTEGER),id,json_extract(body,'$.data.level'),json_extract(body,'$.data.hidden_at'))
+            kind,CAST(id AS INTEGER),id,json_extract(body,'$.data.level'),json_extract(body,'$.data.hidden_at'),
+            json_type(body,'$.data.level'))
             WHERE kind IN ('radical','kanji','vocabulary','kana_vocabulary');
           CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE INDEX IF NOT EXISTS sessions_unfinished_graded ON sessions(id)
@@ -69,6 +70,17 @@ class Store:
           END;
         """)
         self.db.create_function("wk_fold", 1, fold, deterministic=True)
+        # Keep strict level-type filtering covered by the catalogue index. An
+        # older installation upgrades this derived structure atomically once;
+        # a crash retains either complete version without touching study data.
+        index_sql = self.rows("SELECT sql FROM sqlite_master WHERE name='resource_search_identity'")[0][0]
+        if "json_type(body,'$.data.level')" not in index_sql:
+            with self.transaction():
+                self.execute("DROP INDEX resource_search_identity")
+                self.execute("""CREATE INDEX resource_search_identity ON resources(
+                  kind,CAST(id AS INTEGER),id,json_extract(body,'$.data.level'),json_extract(body,'$.data.hidden_at'),
+                  json_type(body,'$.data.level'))
+                  WHERE kind IN ('radical','kanji','vocabulary','kana_vocabulary')""")
         # Derived data contains account content too. The trigger covers bulk SQL
         # deletion, including delete_data, even outside the Store.put path.
         # Backfill only missing documents: old installations and a missing cache

@@ -1,15 +1,16 @@
 import hashlib
+import http.client
 import json
 import os
+import tempfile
 import threading
 import time
-import urllib.parse
 import urllib.request
 from pathlib import Path
 from .api import ApiError, NoRedirect, validate_user
 from .common import UserError, epoch, private_dir, stamp
 from .engine import baseline
-from . import milestones
+from . import media_plan, milestones
 
 
 COLLECTIONS = (
@@ -40,6 +41,19 @@ class Synchronizer:
     def check_cancelled(self):
         if self.cancelled.is_set():
             raise UserError("Synchronization stopped.", "cancelled")
+
+    def _store_page(self, page):
+        # Large API pages must leave room for foreground answer transactions.
+        # Each chunk is durable, while the collection cursor is advanced only
+        # after all pages finish. An interrupted refresh safely upserts again.
+        for offset in range(0, len(page), 128):
+            self.check_cancelled()
+            with self.store.transaction():
+                for resource in page[offset:offset + 128]:
+                    self.store.put(resource)
+            # Yield only after committing and releasing the Store lock.
+            time.sleep(0)
+            self.check_cancelled()
 
     def run(self, full=False, for_study=False):
         if not self.lock.acquire(blocking=False):
@@ -98,9 +112,7 @@ class Synchronizer:
                     params["levels"] = ",".join(str(n) for n in range(1, engine.max_level() + 1))
                 for page in self.api.collection(endpoint, params):
                     self.check_cancelled()
-                    with self.store.transaction():
-                        for resource in page:
-                            self.store.put(resource)
+                    self._store_page(page)
                     fetched += len(page)
                     self.report(endpoint, label, fetched)
                 self.store.set("cursor_" + key, started)
@@ -169,9 +181,7 @@ class Synchronizer:
         fetched = 0
         for index, page in enumerate(self.api.collection("assignments", {"updated_after": since} if since else {})):
             self.check_cancelled()
-            with self.store.transaction():
-                for resource in page:
-                    self.store.put(resource)
+            self._store_page(page)
             fetched += len(page)
             self.report("unlocks", "Checking newly unlocked lessons and account progress", fetched)
             # Limit this follow-up to four pages. If exceptionally many items
@@ -192,16 +202,26 @@ class Synchronizer:
         target = int(reset["data"].get("target_level", 1))
         with self.store.transaction():
             milestones.invalidate_reset(self.engine)
+            levels = {}
+            def cached_level(subject_id):
+                if subject_id not in levels:
+                    subject = self.store.subject(subject_id)
+                    data = subject.get("data") if isinstance(subject, dict) else None
+                    level = data.get("level") if isinstance(data, dict) else None
+                    levels[subject_id] = level if type(level) is int and 1 <= level <= 60 else None
+                return levels[subject_id]
             for row in self.store.rows("SELECT id,subject_id FROM outbox WHERE state IN ('pending','blocked','uncertain')"):
-                subject = self.store.subject(row["subject_id"])
-                if subject and subject["data"].get("level", 0) >= target:
+                level = cached_level(row["subject_id"])
+                if level is None:
+                    self.state(row["id"], "conflicted", "WaniKani account reset; this subject's cached level could not be verified. The local result was preserved and will not be submitted.")
+                elif level >= target:
                     self.state(row["id"], "conflicted", "WaniKani account reset; the local result was preserved but will not be submitted.")
             for session_row in self.store.rows("""SELECT body FROM sessions
                 WHERE json_extract(body,'$.phase')!='complete' AND json_extract(body,'$.mode')!='practice'"""):
                 session = json.loads(session_row["body"])
                 if session["phase"] == "complete" or session["mode"] == "practice":
                     continue
-                if any((self.store.subject(item["subject_id"]) or {"data": {}})["data"].get("level", 0) >= target for item in session["queue"]):
+                if any(cached_level(item["subject_id"]) is None or cached_level(item["subject_id"]) >= target for item in session["queue"]):
                     session["phase"] = "complete"
                     session["ended_at"] = stamp(self.engine.now())
                     session["invalidated"] = "Account reset"
@@ -209,11 +229,14 @@ class Synchronizer:
             # A collection refresh only upserts returned rows. Assignments
             # removed by a reset will never reappear in that response, so remove
             # affected cached progress before fetching the replacement state.
-            self.store.execute("""DELETE FROM resources WHERE kind IN ('assignment','review_statistic')
-              AND CAST(json_extract(body,'$.data.subject_id') AS INTEGER) IN
-              (SELECT CAST(id AS INTEGER) FROM resources WHERE kind IN
-                ('radical','kanji','vocabulary','kana_vocabulary')
-                AND json_extract(body,'$.data.level')>=?)""", (target,))
+            # Missing/malformed levels cannot establish that a subject survived
+            # the reset. Preserve local work, but require fresh remote progress.
+            self.store.execute("""DELETE FROM resources AS progress WHERE kind IN ('assignment','review_statistic')
+              AND NOT EXISTS(SELECT 1 FROM resources AS subject INDEXED BY resource_search_identity
+                WHERE subject.kind IN ('radical','kanji','vocabulary','kana_vocabulary')
+                  AND CAST(subject.id AS INTEGER)=CAST(json_extract(progress.body,'$.data.subject_id') AS INTEGER)
+                  AND json_type(subject.body,'$.data.level')='integer'
+                  AND json_extract(subject.body,'$.data.level') BETWEEN 1 AND ?)""", (min(60, target - 1),))
             self.store.execute("DELETE FROM resources WHERE kind='level_progression'")
             for _, key in COLLECTIONS:
                 self.store.set("cursor_" + key, None)
@@ -426,95 +449,152 @@ class Synchronizer:
         return {"resolved": True}
 
     def cache_media(self):
-        # Bounded incremental prefetch: eligible current/upcoming study first.
-        # Account controls wait for this worker job, so stop starting downloads
-        # after eight seconds. An already-running request keeps its 10s timeout.
         deadline = time.monotonic() + 8
         self.report("media", "Caching images and optional pronunciation audio")
-        rows = self.store.rows("""SELECT s.id FROM resources s LEFT JOIN resources a
-          ON a.kind='assignment' AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
-          WHERE s.kind IN ('radical','kanji','vocabulary','kana_vocabulary')
-          ORDER BY CASE
-            WHEN json_extract(a.body,'$.data.unlocked_at') IS NOT NULL AND json_extract(a.body,'$.data.started_at') IS NULL THEN 0
-            WHEN julianday(json_extract(a.body,'$.data.available_at'))<=julianday(?) THEN 1
-            WHEN json_extract(a.body,'$.data.started_at') IS NOT NULL THEN 2 ELSE 3 END,
-          json_extract(a.body,'$.data.available_at'),json_extract(s.body,'$.data.level')""", (stamp(self.engine.now() + 86400),))
+        plan = media_plan.build(self.engine, self.media_dir, deadline, self.cancelled.is_set, clock=time.monotonic)
+        self.check_cancelled()
+        if not plan.complete:
+            self.report("media", "Media planning will continue on the next refresh")
+            return {"downloaded": 0, "attempts": 0, "skipped_budget": 0, "complete": False}
+        hints = getattr(self, "_media_size_hints", {})
+        self._media_size_hints = {url: size for url, size in hints.items() if url in plan.candidates and url not in plan.cached}
+        self._media_plan = plan
         downloaded = attempts = 0
-        for row in rows:
-            self.check_cancelled()
-            if time.monotonic() >= deadline:
-                break
-            subject = self.store.subject(row[0])
-            try:
-                self.engine.ensure_access(subject)
-            except UserError:
-                continue
-            data = subject["data"]
-            assets = data.get("character_images", [])[:1]
-            sounds = data.get("pronunciation_audios", [])
-            preferred = self.engine.settings()["voice_actor_id"]
-            sounds = sorted(sounds, key=lambda s: s.get("metadata", {}).get("voice_actor_id") != preferred)
-            assets += sounds[:1]
-            for asset in assets:
+        skipped = 0
+        try:
+            # Recover completed or temporary files left by an interrupted old
+            # media job before this job creates any temporary file of its own.
+            if not self._remove_media(plan.orphans, plan):
+                return {"downloaded": 0, "attempts": 0, "skipped_budget": 0, "complete": False}
+            for candidate in plan.downloads:
+                self.check_cancelled()
                 if time.monotonic() >= deadline:
-                    self.trim_media()
-                    return
-                url = asset.get("url", "")
-                cached = self.store.rows("SELECT path FROM media WHERE url=?", (url,))
-                if cached and Path(cached[0][0]).is_file():
+                    break
+                url = candidate.url
+                admission = plan.admission(url, self._media_size_hints.get(url))
+                if admission.status != "ready":
+                    skipped += int(admission.status == "skipped_budget")
                     continue
                 retry_key = "media_retry_" + hashlib.sha256(url.encode()).hexdigest()
-                if self.store.get(retry_key, 0) > self.engine.now():
+                retry_at = self.store.get(retry_key, 0)
+                if type(retry_at) in (int, float) and retry_at > self.engine.now():
                     continue
                 attempts += 1
-                if self.download_media(url):
+                outcome = self.download_media(url)
+                if outcome is True or outcome == "downloaded":
                     downloaded += 1
                     self.report("media", "Caching images and optional pronunciation audio", downloaded)
-                else:
+                elif outcome is False or outcome == "failed":
                     self.store.set(retry_key, self.engine.now() + 3600)
+                elif outcome == "skipped_budget":
+                    skipped += 1
                 if downloaded >= 40 or attempts >= 60 or time.monotonic() >= deadline:
-                    self.trim_media()
-                    return
-        self.trim_media()
+                    break
+            self.check_cancelled()
+            cleaned = self.trim_media()
+            return {"downloaded": downloaded, "attempts": attempts, "skipped_budget": skipped, "complete": cleaned}
+        finally:
+            self._media_plan = None
 
     def download_media(self, url):
-        parsed = urllib.parse.urlsplit(url)
-        host = (parsed.hostname or "").lower()
-        if parsed.scheme != "https" or parsed.username or parsed.password or parsed.port not in (None, 443):
-            return False
-        if not (host == "wanikani.com" or host.endswith(".wanikani.com") or host.endswith(".cloudfront.net")):
-            return False
+        plan = getattr(self, "_media_plan", None)
+        if not plan or not plan.complete or not media_plan.valid_url(url):
+            return "failed"
+        self._media_size_hints = getattr(self, "_media_size_hints", {})
+        admission = plan.admission(url)
+        if admission.status != "ready":
+            return "skipped_budget" if admission.status == "skipped_budget" else "cached" if admission.status == "cached" else "failed"
+        temporary = None
         # No Authorization header is attached to media or redirected elsewhere.
         try:
+            self.check_cancelled()
             opener = urllib.request.build_opener(NoRedirect())
             with opener.open(urllib.request.Request(url, headers={"User-Agent": "Omarchy-WaniKani/0.1"}), timeout=10) as response:
                 mime = response.headers.get_content_type()
-                extension = {"image/svg+xml": ".svg", "image/png": ".png", "image/jpeg": ".jpg", "audio/mpeg": ".mp3", "audio/ogg": ".ogg", "audio/mp4": ".m4a", "audio/webm": ".webm"}.get(mime)
+                extension = media_plan.MIMES[plan.candidates[url].kind].get(mime)
                 if not extension:
-                    return False
-                data = response.read(8 * 1024 * 1024 + 1)
-                if len(data) > 8 * 1024 * 1024:
-                    return False
+                    return "failed"
+                hint = media_plan._length_hint(response.headers.get("Content-Length"))
+                admission = plan.admission(url, hint)
+                if admission.status == "skipped_budget":
+                    self._media_size_hints[url] = hint
+                    return "skipped_budget"
+                if admission.status != "ready":
+                    return "failed"
+                self.check_cancelled()
+                data = response.read(admission.max_bytes + 1)
+                self.check_cancelled()
+                decision = plan.placement(url, len(data))
+                if decision.status == "skipped_budget":
+                    self._media_size_hints[url] = len(data)
+                    return "skipped_budget"
+                if decision.status != "accepted" or (hint is not None and len(data) < hint):
+                    return "failed"
                 dest = self.media_dir / (hashlib.sha256(url.encode()).hexdigest() + extension)
-                temporary = dest.with_suffix(dest.suffix + ".tmp")
-                temporary.write_bytes(data)
-                temporary.chmod(0o600)
+                if any(item.path == dest for item in plan.cached.values()):
+                    # Corrupt metadata must not let a new URL overwrite a
+                    # different registered asset at its generated filename.
+                    return "failed"
+                # A unique exclusive temporary file cannot follow a stale
+                # symlink. The final atomic replace does not follow one either.
+                with tempfile.NamedTemporaryFile(dir=self.media_dir, prefix="download-", suffix=".tmp", delete=False) as stream:
+                    temporary = Path(stream.name)
+                    stream.write(data)
+                self.check_cancelled()
                 temporary.replace(dest)
-                self.store.execute("INSERT OR REPLACE INTO media VALUES(?,?,?,?)", (url, str(dest), len(data), time.time()))
-                return True
-        except (OSError, ValueError):
-            return False
+                temporary = None
+                now = time.time()
+                try:
+                    self.store.execute("INSERT OR REPLACE INTO media VALUES(?,?,?,?)", (url, str(dest), len(data), now))
+                    plan.remember(url, dest, now)
+                except BaseException:
+                    dest.unlink(missing_ok=True)
+                    self.store.execute("DELETE FROM media WHERE url=? AND path=?", (url, str(dest)))
+                    raise
+                if self.cancelled.is_set():
+                    self._remove_media((plan.cached[url],), plan)
+                    self.check_cancelled()
+                if not self._remove_media(decision.evictions, plan):
+                    # Failure to reclaim space cannot leave a new file above
+                    # the user's limit. Existing undeletable media stays intact.
+                    self._remove_media((plan.cached[url],), plan)
+                    return "failed"
+                self._media_size_hints.pop(url, None)
+                return "downloaded"
+        except (OSError, ValueError, http.client.HTTPException):
+            return "failed"
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def trim_media(self):
-        rows = self.store.rows("SELECT * FROM media ORDER BY used_at")
-        total = sum(row["size"] for row in rows)
-        limit = self.engine.settings()["cache_limit_mb"] * 1024 * 1024
-        for row in rows:
-            if total <= limit:
-                break
-            Path(row["path"]).unlink(missing_ok=True)
-            self.store.execute("DELETE FROM media WHERE url=?", (row["url"],))
-            total -= row["size"]
+        plan = getattr(self, "_media_plan", None) or media_plan.build(self.engine, self.media_dir,
+            cancelled=self.cancelled.is_set, clock=time.monotonic)
+        self.check_cancelled()
+        if not plan.complete:
+            return False
+        for url in plan.cleanup_metadata:
+            self.store.execute("DELETE FROM media WHERE url=?", (url,))
+        if not self._remove_media(plan.orphans, plan):
+            return False
+        return self._remove_media(plan.evictions(), plan)
+
+    def _remove_media(self, entries, plan):
+        removed = set()
+        for entry in entries:
+            # Recheck immediately before unlinking; never follow stored paths
+            # outside this cache or delete symlink targets.
+            current = media_plan._owned_file(plan.directory, entry.url, str(entry.path), allow_empty=not entry.registered)
+            if current and current.path not in removed:
+                try:
+                    current.path.unlink()
+                    removed.add(current.path)
+                except OSError:
+                    return False
+            if entry.registered:
+                self.store.execute("DELETE FROM media WHERE url=? AND path=?", (entry.url, str(entry.path)))
+            plan.forget(entry.url)
+        return True
 
     def clear_media(self):
         for row in self.store.rows("SELECT path FROM media"):

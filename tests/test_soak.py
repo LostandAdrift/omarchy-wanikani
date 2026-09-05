@@ -1,5 +1,6 @@
 """Checks the developer-only randomized harness, never a real service."""
 import importlib.util
+import copy
 import json
 from pathlib import Path
 import tempfile
@@ -45,6 +46,24 @@ class SoakToolTests(unittest.TestCase):
             with self.assertRaises(soak.argparse.ArgumentTypeError):
                 soak.bounded_number(5000)(value)
         self.assertEqual(500, soak.bounded_number(5000)("500"))
+
+    def test_replay_oracle_still_rejects_newer_identity_and_changed_grading_outcome(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            harness = soak.Harness(9, temporary)
+            try:
+                harness.engine.start("practice", 1, [2])
+                original = harness.engine.command("oracle-answer", "answer", {"text": "wrong"})
+                for field, value in (("id", "different-session"), ("revision", 999999), ("errors", 0)):
+                    changed = copy.deepcopy(original)
+                    changed[field] = value
+                    with self.subTest(field=field), self.assertRaises(AssertionError):
+                        harness.assert_replayed_reply(original, changed)
+                changed = copy.deepcopy(original)
+                changed["feedback"]["correct"] = True
+                with self.assertRaises(AssertionError):
+                    harness.assert_replayed_reply(original, changed)
+            finally:
+                harness.store.close()
 
 
 if __name__ == "__main__":

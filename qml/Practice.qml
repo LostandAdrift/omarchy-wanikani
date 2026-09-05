@@ -9,8 +9,10 @@ ColumnLayout {
   property string group: "suggested"
   property var selectedIds: []
   property bool loading: false
+  property bool initialized: false
   property string notice: ""
   property int requestSerial: 0
+  property int requestedOffset: 0
   property string observedSync: ""
   readonly property string contentAccess: controller.contentAccess || ""
   onContentAccessChanged: {
@@ -23,10 +25,8 @@ ColumnLayout {
       total: 0,
       ready_total: 0
     })
-    Qt.callLater(function () {
-      if (searchField)
-        root.loadPage(0)
-    })
+    if (initialized)
+      loadPage(0)
   }
   property var library: ({
       items: [],
@@ -50,14 +50,24 @@ ColumnLayout {
   function loadPage(offset) {
     if (!controller.service)
       return
-    var serial = ++requestSerial
+    requestedOffset = offset || 0
+    requestSerial++
     loading = true
     notice = ""
+    // Construction, access and sync changes can request the same page in one
+    // event-loop turn. Keep only their latest request before reading SQLite.
+    Qt.callLater(fetchPage)
+  }
+  function fetchPage() {
+    if (!controller.service)
+      return
+    var serial = requestSerial
     controller.service.request("practice_catalogue", {
       group: group,
       query: searchField.text,
-      offset: offset || 0,
-      limit: 30
+      offset: requestedOffset,
+      limit: 30,
+      readiness_scope: "page"
     }, function (ok, data, message) {
       if (!root || serial !== root.requestSerial)
         return
@@ -98,7 +108,11 @@ ColumnLayout {
     // practice action continues to resume an unfinished practice session.
     controller.begin("practice", selectedIds.length, selectedIds.slice(), true)
   }
-  Component.onCompleted: loadPage(0)
+  Component.onCompleted: {
+    initialized = true
+    observedSync = String(controller.snapshot.last_sync || "")
+    loadPage(0)
+  }
   Component.onDestruction: requestSerial++
   Connections {
     target: root.controller.service
@@ -339,7 +353,7 @@ ColumnLayout {
     Layout.fillWidth: true
     Label {
       Layout.fillWidth: true
-      text: root.library.total ? (root.library.offset + 1) + "–" + Math.min(root.library.offset + root.library.items.length, root.library.total) + " of " + root.library.total + " · " + root.library.ready_total + " ready offline" : "0 subjects"
+      text: root.library.total ? (root.library.offset + 1) + "–" + Math.min(root.library.offset + root.library.items.length, root.library.total) + " of " + root.library.total + " · " + (root.library.readiness_scope === "page" ? root.library.page_ready + " on this page ready offline" : root.library.ready_total + " ready offline") : "0 subjects"
       color: Qt.alpha(Color.foreground, 0.76)
       font.pixelSize: Style.font.bodySmall
     }

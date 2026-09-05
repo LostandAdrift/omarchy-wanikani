@@ -208,6 +208,41 @@ class Harness:
         assert pointers == [self.store.get(key) for key in ("active_session", "graded_session", "practice_session")], "Restart changed the session references"
         self.counts["restarts"] += 1
 
+    def assert_replayed_reply(self, expected, replayed):
+        if not isinstance(expected, dict) or "subject" not in expected:
+            assert replayed == expected, "Duplicate acknowledgment changed"
+            return
+        # Subject presentation and available accepted-answer hints are
+        # intentionally reprojected through current access. Session identity,
+        # revision, question, grading verdict and error totals stay historical.
+        def outcome(value):
+            result = copy.deepcopy({key: item for key, item in value.items()
+                if key not in ("subject", "restricted", "unavailable")})
+            if isinstance(result.get("feedback"), dict):
+                result["feedback"].pop("accepted", None)
+                if replayed.get("restricted"):
+                    result["feedback"]["answer"] = ""
+            if replayed.get("restricted"):
+                result["draft"] = ""
+            return result
+        assert outcome(expected) == outcome(replayed), "Duplicate changed its recorded study outcome or identity"
+        subject = replayed.get("subject")
+        if expected.get("subject") is None:
+            assert subject is None, "Duplicate selected a different current subject"
+        elif not replayed.get("restricted"):
+            assert subject is not None, "Duplicate lost its subject without an access explanation"
+        if replayed.get("restricted"):
+            assert subject is None and replayed["draft"] == "", "Restricted replay exposed subject text"
+            assert not (replayed.get("feedback") or {}).get("accepted"), "Restricted replay exposed accepted answers"
+            assert not (replayed.get("feedback") or {}).get("answer"), "Restricted replay exposed answer input"
+            self.counts["redacted_duplicate_commands"] += 1
+        elif subject:
+            assert expected["subject"]["id"] == subject["id"], "Duplicate selected a different subject"
+            source = self.store.subject(subject["id"])
+            level = source["data"].get("level") if source else None
+            assert type(level) is int and 1 <= level <= self.engine.max_level(), "Duplicate bypassed current access"
+            assert source["data"].get("hidden_at") is None, "Duplicate exposed a hidden subject"
+
     def command(self, method, args=None):
         self.sequence += 1
         request = ("soak-command-" + str(self.sequence), method, args or {})
@@ -338,7 +373,7 @@ class Harness:
             rid, method, args, expected = self.rng.choice(self.commands[-5:])
             before = self.session_bodies()
             events = self.store.rows("SELECT COUNT(*) FROM events")[0][0]
-            assert self.engine.command(rid, method, args) == expected, "Replayed request changed its durable reply"
+            self.assert_replayed_reply(expected, self.engine.command(rid, method, args))
             assert before == self.session_bodies() and events == self.store.rows("SELECT COUNT(*) FROM events")[0][0], "Duplicate request repeated its effect"
             self.counts["duplicate_commands"] += 1
         elif action == "time":

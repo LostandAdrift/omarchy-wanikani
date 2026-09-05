@@ -256,7 +256,7 @@ class Worker:
         elif method == "practice_catalogue":
             from wanikani.practice import catalogue
             result = catalogue(self.engine, group=args.get("group", "suggested"), query=args.get("query", ""),
-                offset=args.get("offset", 0), limit=args.get("limit", 30))
+                offset=args.get("offset", 0), limit=args.get("limit", 30), readiness_scope=args.get("readiness_scope", "all"))
         elif method == "recovery":
             from wanikani.recovery import catalogue
             result = catalogue(self.engine, state=args.get("state", "open"), kind=args.get("kind", "all"),

@@ -60,7 +60,7 @@ def lookup(engine, text, limit=30, filters=None, reading_query=None):
             LEFT JOIN meta d ON d.key='material_draft_' || s.id
             WHERE s.kind IN ('radical','kanji','vocabulary','kana_vocabulary')
               AND json_extract(s.body,'$.data.hidden_at') IS NULL
-              AND json_extract(s.body,'$.data.level')<=:level
+              AND json_type(s.body,'$.data.level')='integer' AND json_extract(s.body,'$.data.level') BETWEEN 1 AND :level
               AND (:type='all' OR s.kind=:type)
           ), matched AS MATERIALIZED (
             SELECT *,

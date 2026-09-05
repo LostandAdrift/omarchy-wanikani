@@ -46,7 +46,7 @@ Test graders, all types, kana inputs, correction timing, crash persistence bound
 - Installed through `omarchy plugin add` from this local Git repository. Installed origin points here; updates use the normal manager. No public Git remote or publication yet.
 - Shortcuts and Study/Lookup launchers installed with reversible helper. Existing bindings preserved; Hyprland config validation clean.
 - Authored demo only. No real token accessed, no live WaniKani writes.
-- 357 Python tests passed, including 12 original subprocess crash boundaries and four milestone transaction interruptions. 93 Qt kana/desktop-policy/activation/glyph/state-order checks passed. Manifest and both installed desktop launchers validate; Hyprland has no configuration errors.
+- 429 Python tests passed, including 12 original subprocess crash boundaries and four milestone transaction interruptions. 93 Qt kana/desktop-policy/activation/glyph/state-order checks passed. Manifest and both installed desktop launchers validate; Hyprland has no configuration errors.
 - Native dashboard, study, lookup, Settings, and Zen inspected. Screenshots in docs/screenshots show authored demo content in Tokyo Night and Flexoki Light. All four bar positions exercised across three monitors; original top bar, theme and background restored.
 - Full fixture catalogue: 9,016 subjects, latest dashboard snapshot median 36.0 ms, ranked search 15.6 ms, durable answer-and-advance 11.4 ms. Numeric JSON indexes are essential; without them SQLite chose quadratic joins. Warm study mapped in 73.9 ms. Latest valid idle worker sample averaged 0.0222% of one core over 45 seconds, RSS 31.34 MiB/PSS 18.26 MiB; shared-shell baseline noise prevents attribution of incremental QML overhead.
 - Shell hot reload retained durable demo state but left nested QML components stale; a full shell restart picked up visual changes. Document this installed-host limitation. Do not edit packaged shell code.
@@ -63,3 +63,5 @@ Test graders, all types, kana inputs, correction timing, crash persistence bound
 - https://github.com/WaniKani/WanaKana
 - https://github.com/davidsansome/tsurukame/blob/master/ios/AnswerChecker.swift
 - https://knowledge.wanikani.com/wanikani/common-mistakes/
+
+The fifth performance/reliability batch adds prioritized strict-budget media, cooperative 128-resource API imports, consistent malformed-level access/reset handling, current-access replay projection, and native page-scoped practice readiness. The final 10,000-interaction mock soak and 30-capture native workflow passed. See the latest dated evidence in VERIFICATION.md and the active four-hour continuation in FOUR_HOUR_GOAL.md.

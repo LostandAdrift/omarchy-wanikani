@@ -68,9 +68,10 @@ class ScheduleQueryTests(EngineFixture, unittest.TestCase):
                     for maximum, expired in ((0, False), (3, False), (20, False), (60, False), (60, True)):
                         with self.subTest(seed=seed, zone=zone, maximum=maximum, expired=expired):
                             user = self.store.get("user")
-                            user["data"]["subscription"].update(max_level_granted=maximum,
+                            user["data"]["subscription"].update(type="recurring", max_level_granted=maximum,
                                 period_ends_at=stamp(NOW - 1 if expired else NOW + 86400))
                             self.store.set("user", user)
+                            self.assertEqual(min(3, maximum) if expired else maximum, self.engine.max_level())
                             self.assertEqual(self.unindexed_snapshot(), self.engine.snapshot())
 
     def test_catalogue_size_fixture_uses_both_indexes_without_timing_thresholds(self):

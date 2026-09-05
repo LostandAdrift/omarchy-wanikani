@@ -57,6 +57,8 @@ Sessions contain five subjects by default. Lessons introduce the subjects before
 
 After a batch, **Review this batch** shows each subject’s recorded mistakes and current local submission status. **Practice items to revisit** starts ungraded practice of missed items; guarded typo corrections are excluded. Back to work remains the primary action.
 
+See the native [batch recap](docs/screenshots/recap-dark.png) and [practice selection](docs/screenshots/practice-dark.png), captured with authored demo subjects.
+
 Escape preserves the exact session, draft answer, and question. Expand changes the presentation without restarting. Practice is ungraded and never changes your account's schedule. You can practice independently while a graded session is paused; Resume returns to that saved graded session first.
 
 Japanese prompts fit the available space without cutting off long vocabulary. Image radicals keep their meaning hidden until the appropriate reveal.
@@ -72,6 +74,8 @@ Notes and synonym drafts survive closing, navigation, and restart, including unf
 ## Offline behavior and recovery
 
 Subject text is cached for your accessible levels. Media is downloaded incrementally, with up to 40 new assets per sync and a configurable disk limit. Image-only radicals require their image before they can be quizzed. Audio availability is shown explicitly.
+
+When the media cache is full, required images for active study and upcoming work take priority over optional audio and distant subjects. Existing usable images and voice clips stay available while replacements download. The Practice library checks the displayed page's offline availability and labels that count, keeping large learned catalogues responsive.
 
 Settings lists pronunciation voices from the accessible cached catalogue. A preferred voice uses its downloaded clip when available, falling back to another downloaded voice for that word. Missing voice metadata does not discard your preference.
 

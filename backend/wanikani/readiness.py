@@ -61,7 +61,7 @@ def calculate(engine, cancelled=lambda: False, max_items=12000, budget_seconds=5
                 AND CAST(json_extract(m.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
               LEFT JOIN meta d ON d.key='material_draft_'||s.id
               WHERE a.kind='assignment' AND CAST(a.id AS INTEGER)>?
-                AND json_extract(s.body,'$.data.level')<=?
+                AND json_type(s.body,'$.data.level')='integer' AND json_extract(s.body,'$.data.level') BETWEEN 1 AND ?
                 AND json_extract(s.body,'$.data.hidden_at') IS NULL
                 AND COALESCE(json_extract(a.body,'$.data.hidden'),0)=0
                 AND NOT EXISTS(SELECT 1 FROM outbox o WHERE o.subject_id=CAST(s.id AS INTEGER)

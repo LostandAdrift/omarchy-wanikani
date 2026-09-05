@@ -19,6 +19,7 @@ import json
 import math
 from pathlib import Path
 import queue
+import sqlite3
 import statistics
 import subprocess
 import sys
@@ -219,12 +220,14 @@ class Bridge:
             raise RuntimeError("Worker exited with code " + str(code) + ": " + "\n".join(self.stderr))
 
 
-def benchmark(source, directory, samples, label):
+def benchmark(source, directory, samples, label, batch_size=5):
     subprocess.run([sys.executable, "-c", BUILD_FIXTURE, str(source), str(directory)],
         check=True, capture_output=True, text=True, timeout=60)
     bridge = Bridge(source, directory)
     measurements = {name: [] for name in ("new_review_start", "resume", "draft", "check",
         "feedback_advance", "final_subject_advance")}
+    if batch_size > 1:
+        measurements["subject_advance"] = []
     fences = {name: "draft" for name in measurements}
     fences["final_subject_advance"] = "session"
     try:
@@ -235,8 +238,8 @@ def benchmark(source, directory, samples, label):
                 result, elapsed = bridge.pair(method, args, fences[name], {"text": "w"})
                 measurements[name].append(elapsed)
                 return result
-            view = measure("new_review_start", "start", {"mode": "reviews", "limit": 1})
-            if view["phase"] != "question" or view["subject"]["type"] != "vocabulary":
+            view = measure("new_review_start", "start", {"mode": "reviews", "limit": batch_size})
+            if view["phase"] != "question" or view["subject"]["type"] != "vocabulary" or view["total"] != batch_size:
                 raise AssertionError("Fixture requires a fresh two-part vocabulary review")
             view = measure("resume", "start", {"mode": "resume"})
             measure("draft", "draft", {"text": "wa"})
@@ -250,19 +253,46 @@ def benchmark(source, directory, samples, label):
             view = bridge.command("answer", {"text": reading})
             if not view["feedback"]["correct"]:
                 raise AssertionError("Authored reading was not accepted")
-            view = measure("final_subject_advance", "advance")
-            if view["phase"] != "complete" or view["completed"] != 1:
+            view = measure("final_subject_advance" if batch_size == 1 else "subject_advance", "advance")
+            if view["completed"] != 1 or (batch_size > 1 and view["phase"] != "question"):
                 raise AssertionError("Final feedback did not complete exactly one subject")
+            # Keep all five subjects in the same durable session. Complete the
+            # middle subjects outside the timing samples, then separately time
+            # the last subject's feedback acknowledgment and session summary.
+            for completed in range(1, batch_size):
+                if view["phase"] != "question" or view["part"] != "meaning" or view["completed"] != completed:
+                    raise AssertionError("Batch advanced to an unexpected question")
+                bridge.command("answer", {"text": view["subject"]["meanings"][0]})
+                view = bridge.command("advance")
+                if view["phase"] != "question" or view["part"] != "reading":
+                    raise AssertionError("Authored batch meaning was not accepted")
+                reading = next(item["reading"] for item in view["subject"]["readings"] if item["accepted"])
+                view = bridge.command("answer", {"text": reading})
+                if not view["feedback"]["correct"]:
+                    raise AssertionError("Authored batch reading was not accepted")
+                view = (measure("final_subject_advance", "advance") if completed + 1 == batch_size
+                    else bridge.command("advance"))
+            if view["phase"] != "complete" or view["completed"] != batch_size:
+                raise AssertionError("The entire authored batch was not completed")
             if (index + 1) % 10 == 0 or index + 1 == samples:
                 print(f"{label}: {index + 1}/{samples} samples", file=sys.stderr, flush=True)
         bridge.settle_readiness()
-        return {"source": label, "operations": {name: {"queued_command": fences[name],
+        result = {"source": label, "batch_size": batch_size, "operations": {name: {"queued_command": fences[name],
             **{field: statistics_ms([sample[field] for sample in values])
                 for field in ("response", "pipeline_drain", "total_pair")}}
             for name, values in measurements.items()}, "observed_events": dict(bridge.events),
-            "completed_authored_reviews": samples}
+            "completed_authored_reviews": samples * batch_size}
     finally:
         bridge.close()
+    # Read only our disposable fixture after the worker has closed. This makes
+    # retained response cost visible without reading any user account data.
+    with sqlite3.connect((directory / "demo.sqlite3").as_uri() + "?mode=ro", uri=True) as database:
+        count, total, maximum = database.execute("""SELECT COUNT(*),
+            COALESCE(SUM(LENGTH(CAST(body AS BLOB))),0),
+            COALESCE(MAX(LENGTH(CAST(body AS BLOB))),0) FROM commands""").fetchone()
+    result["command_journal"] = {"rows": count, "response_bytes": total,
+        "largest_response_bytes": maximum, "bytes_per_completed_subject": round(total / (samples * batch_size), 1)}
+    return result
 
 
 def archived_source(ref, directory):
@@ -279,20 +309,26 @@ def archived_source(ref, directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--samples", type=int, default=30)
+    parser.add_argument("--batch-size", type=int, default=5,
+        help="Subjects per durable review session, from 1 to 20 (default 5)")
     parser.add_argument("--compare-ref", help="Optional local git commit/ref, read with git archive")
     args = parser.parse_args()
     if not 1 <= args.samples <= 100:
         parser.error("--samples must be between 1 and 100")
+    if not 1 <= args.batch_size <= 20:
+        parser.error("--batch-size must be between 1 and 20")
     with tempfile.TemporaryDirectory(prefix="wanikani-worker-benchmark-") as temporary:
         directory = Path(temporary)
-        results = [benchmark(ROOT, directory / "current-state", args.samples, "current working tree")]
+        results = [benchmark(ROOT, directory / "current-state", args.samples, "current working tree", args.batch_size)]
         if args.compare_ref:
             archived = directory / "baseline-source"
             commit = archived_source(args.compare_ref, archived)
-            results.append(benchmark(archived, directory / "baseline-state", args.samples, commit))
+            results.append(benchmark(archived, directory / "baseline-state", args.samples, commit, args.batch_size))
         print(json.dumps({"fixture_only": True, "subjects": SUBJECT_COUNT,
-            "initial_due_reviews": 3000, "mode": "demo", "network_keyring_subprocess_blocked_in_worker": True,
+            "initial_due_reviews": 3000, "mode": "demo", "batch_size": args.batch_size,
+            "network_keyring_subprocess_blocked_in_worker": True,
             "measurement": "Complete stdout-line reception; paired commands written together. Warm preparation and readiness settling excluded.",
+            "completion_operations": "subject_advance completes the first subject and keeps studying (batch>1); final_subject_advance completes the last subject and the session.",
             "scope": "Worker protocol only; excludes QML rendering. Sequential runs remain sensitive to other host load.",
             "results": results}, indent=2))
 

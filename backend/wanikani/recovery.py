@@ -6,7 +6,7 @@ stable created_at/id ordering. Counts describe local records, not account-wide
 review history. Restricted subject content and study-material bodies are never
 included. The existing resolve/keep_remote action remains the only archive path.
 """
-from .common import UserError, plain
+from .common import UserError, accessible_subject, plain
 
 
 STATES = ("pending", "inflight", "uncertain", "conflicted", "blocked", "confirmed", "discarded")
@@ -56,11 +56,7 @@ def _totals(by_state):
 
 
 def _accessible(subject, maximum):
-    if not isinstance(subject, dict) or not isinstance(subject.get("data"), dict):
-        return False
-    data = subject.get("data", {})
-    level = data.get("level")
-    return type(level) is int and 1 <= level <= maximum and not data.get("hidden_at")
+    return accessible_subject(subject, maximum)
 
 
 def _detail(row, accessible):
