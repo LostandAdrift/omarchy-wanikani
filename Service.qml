@@ -98,6 +98,18 @@ Item {
         refreshAmbient()
       return
     }
+    if (message.event === "readiness") {
+      snapshot = Object.assign({}, snapshot, {
+        readiness: message.data
+      })
+      return
+    }
+    if (message.event === "sync_progress") {
+      snapshot = Object.assign({}, snapshot, {
+        sync_progress: message.data
+      })
+      return
+    }
     if (message.id && callbacks[message.id]) {
       var callback = callbacks[message.id]
       var next = Object.assign({}, callbacks)
@@ -241,6 +253,12 @@ Item {
       root.summon("lookup", {
         selection: true
       })
+    }
+    function practice(): void {
+      root.summon("practice-library")
+    }
+    function help(): void {
+      root.summon("help")
     }
     function zen(): void {
       root.summon("zen")

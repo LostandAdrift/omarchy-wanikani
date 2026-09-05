@@ -40,9 +40,12 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Lookup / Zen | `omarchy-shell wanikani lookup` / `omarchy-shell wanikani zen` |
 | Refresh / status | `omarchy-shell wanikani refresh` / `omarchy-shell wanikani status` |
 | Settings | `omarchy-shell wanikani settings` |
+| Practice library / help | `omarchy-shell wanikani practice` / `omarchy-shell wanikani help` |
+| Keyboard help | F1 |
+| Panel navigation outside text fields | Ctrl+1 Today, Ctrl+2 Study, Ctrl+3 Lookup, Ctrl+4 Zen, Ctrl+5 Settings, Ctrl+6 Practice |
 | Enter / leave demo | `omarchy-shell wanikani demo true` / `omarchy-shell wanikani demo false` |
 
-Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, resume, lookup, zen, settings. Practice accepts `subjects:[1,2]`. Lookup accepts `selection:true` or `text:"山"`.
+Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, practice-library, resume, lookup, zen, settings, help. Direct practice accepts `subjects:[1,2]`; practice-library opens the selection view. Lookup accepts `selection:true` or `text:"山"`.
 
 ## How study works
 
@@ -52,9 +55,17 @@ Sessions contain five subjects by default. Lessons introduce the subjects before
 
 Escape preserves the exact session, draft answer, and question. Expand changes the presentation without restarting. Practice is ungraded and never changes your account's schedule. You can practice independently while a graded session is paused; Resume returns to that saved graded session first.
 
+The **Practice** library groups saved difficult items, recent mistakes, and learned subjects. Choose up to twenty, or add five at a time. It shows why each subject appears and whether required content is cached. An explicitly selected practice session keeps earlier local records and the paused graded session intact. Current graded answers remain hidden on library cards.
+
+Lookup accepts romaji readings as well as Japanese, meanings, and personal synonyms. Type and progress filters narrow the accessible catalogue. Exact matches rank first; longer selections surface known words contained in the text. Lookup never sends selections to a translation service.
+
+**F1** opens keyboard help. Navigation shortcuts leave text fields and IME composition alone, focused controls scroll into view, and holding Enter cannot check an answer and immediately skip its feedback.
+
 ## Offline behavior and recovery
 
 Subject text is cached for your accessible levels. Media is downloaded incrementally, with up to 40 new assets per sync and a configurable disk limit. Image-only radicals require their image before they can be quizzed. Audio availability is shown explicitly.
+
+The dashboard and Settings show how many eligible reviews and lessons have their required text/images available offline. Optional audio is counted separately. Availability checks run in the background, and synchronization reports its current stage. Resuming saved work reads the latest durable question and draft immediately.
 
 Cached lessons and due reviews work offline. Completed work stays pending until confirmed. A pending subject cannot enter another graded cycle, and subsequent scheduling/unlocks wait for WaniKani's response. Subscription access and known expiry dates still apply offline.
 

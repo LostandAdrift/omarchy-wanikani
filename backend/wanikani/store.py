@@ -3,6 +3,7 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from .common import private_dir
+from .search import KINDS, fold
 
 
 class Store:
@@ -26,6 +27,10 @@ class Store:
           CREATE INDEX IF NOT EXISTS resource_subject_numeric ON resources(kind,CAST(json_extract(body,'$.data.subject_id') AS INTEGER));
           CREATE INDEX IF NOT EXISTS resource_numeric_id ON resources(kind,CAST(id AS INTEGER));
           CREATE INDEX IF NOT EXISTS resource_level ON resources(kind,json_extract(body,'$.data.level'));
+          DROP INDEX IF EXISTS resource_search_access;
+          CREATE INDEX IF NOT EXISTS resource_search_identity ON resources(
+            kind,CAST(id AS INTEGER),id,json_extract(body,'$.data.level'),json_extract(body,'$.data.hidden_at'))
+            WHERE kind IN ('radical','kanji','vocabulary','kana_vocabulary');
           CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS outbox (
             id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject_id INTEGER NOT NULL,
@@ -37,8 +42,27 @@ class Store:
             kind TEXT NOT NULL, created_at TEXT NOT NULL, body TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, body TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS media (url TEXT PRIMARY KEY, path TEXT NOT NULL, size INTEGER NOT NULL, used_at REAL NOT NULL);
-          PRAGMA user_version=1;
+          CREATE TABLE IF NOT EXISTS search_documents (
+            kind TEXT NOT NULL, id TEXT NOT NULL, characters TEXT NOT NULL,
+            meanings TEXT NOT NULL, readings TEXT NOT NULL,
+            PRIMARY KEY(kind,id));
+          CREATE INDEX IF NOT EXISTS search_characters ON search_documents(characters,kind,id);
+          CREATE TRIGGER IF NOT EXISTS resources_search_delete AFTER DELETE ON resources
+          BEGIN
+            DELETE FROM search_documents WHERE kind=OLD.kind AND id=OLD.id;
+          END;
         """)
+        self.db.create_function("wk_fold", 1, fold, deterministic=True)
+        # Derived data contains account content too. The trigger covers bulk SQL
+        # deletion, including delete_data, even outside the Store.put path.
+        # Backfill only missing documents: old installations and a missing cache
+        # table migrate once, while ordinary restarts reuse existing folded text.
+        with self.transaction():
+            for row in self.rows("""SELECT r.body FROM resources r LEFT JOIN search_documents d
+              ON d.kind=r.kind AND d.id=r.id
+              WHERE r.kind IN ('radical','kanji','vocabulary','kana_vocabulary') AND d.id IS NULL"""):
+                self._put_search_document(json.loads(row[0]))
+            self.execute("PRAGMA user_version=2")
         # A process disappearing between HTTP send and commit has an unknown outcome.
         self.execute("UPDATE outbox SET state='uncertain',detail='Interrupted while sending; check remote progress before recovery.' WHERE state='inflight'")
 
@@ -75,7 +99,25 @@ class Store:
     def put(self, resource):
         if not isinstance(resource, dict) or "id" not in resource or not isinstance(resource.get("data"), dict):
             raise ValueError("Malformed API resource")
-        self.execute("INSERT OR REPLACE INTO resources VALUES (?,?,?)", (resource["object"], str(resource["id"]), json.dumps(resource, ensure_ascii=False)))
+        values = (resource["object"], str(resource["id"]), json.dumps(resource, ensure_ascii=False))
+        if resource["object"] in KINDS:
+            with self.transaction():
+                # Subject IDs are unique across all four catalogue types. A
+                # server-side type change must replace its old searchable form.
+                self.execute("""DELETE FROM resources WHERE id=? AND kind<>?
+                  AND kind IN ('radical','kanji','vocabulary','kana_vocabulary')""", (values[1], values[0]))
+                self.execute("INSERT OR REPLACE INTO resources VALUES (?,?,?)", values)
+                self._put_search_document(resource)
+        else:
+            self.execute("INSERT OR REPLACE INTO resources VALUES (?,?,?)", values)
+
+    def _put_search_document(self, resource):
+        data = resource["data"]
+        meanings = [fold(item.get("meaning")) for item in data.get("meanings", [])]
+        readings = [fold(item.get("reading")) for item in data.get("readings", [])]
+        self.execute("INSERT OR REPLACE INTO search_documents VALUES (?,?,?,?,?)", (
+            resource["object"], str(resource["id"]), fold(data.get("characters")),
+            json.dumps(meanings, ensure_ascii=False), json.dumps(readings, ensure_ascii=False)))
 
     def resource(self, kind, rid):
         rows = self.rows("SELECT body FROM resources WHERE kind=? AND id=?", (kind, str(rid)))

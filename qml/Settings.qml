@@ -259,6 +259,10 @@ ColumnLayout {
     text: "Offline storage"
     font.bold: true
   }
+  OfflineStatus {
+    Layout.fillWidth: true
+    controller: root.controller
+  }
   Label {
     Layout.fillWidth: true
     text: root.snapshot.cache ? (root.snapshot.cache.subjects || 0) + " subjects available offline · " + root.snapshot.cache.files + " media files · " + (root.snapshot.cache.bytes / 1048576).toFixed(1) + " MB. Answers and sessions are saved separately." : "No cached media"

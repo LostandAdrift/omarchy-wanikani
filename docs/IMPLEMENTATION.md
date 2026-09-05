@@ -45,7 +45,7 @@ Test graders, all types, kana inputs, correction timing, crash persistence bound
 - Installed through `omarchy plugin add` from this local Git repository. Installed origin points here; updates use the normal manager. No public Git remote or publication yet.
 - Shortcuts and Study/Lookup launchers installed with reversible helper. Existing bindings preserved; Hyprland config validation clean.
 - Authored demo only. No real token accessed, no live WaniKani writes.
-- 89 Python tests passed, including 12 actual subprocess crash boundaries. 44 Qt kana/desktop-policy checks passed. Manifest and both installed desktop launchers validate; Hyprland has no configuration errors.
+- 140 Python tests passed, including 12 actual subprocess crash boundaries. 49 Qt kana/desktop-policy/activation checks passed. Manifest and both installed desktop launchers validate; Hyprland has no configuration errors.
 - Native dashboard, study, lookup, Settings, and Zen inspected. Screenshots in docs/screenshots show authored demo content in Tokyo Night and Flexoki Light. All four bar positions exercised across three monitors; original top bar, theme and background restored.
 - Full fixture catalogue: 9,016 subjects, latest dashboard snapshot median 91.4 ms, search 2.3 ms, durable answer-and-advance 11.3 ms. Numeric JSON indexes are essential; without them SQLite chose quadratic joins. Warm study mapped in 73.9 ms. Idle worker measured 0% at process-tick resolution over 45 seconds, RSS 30.2 MiB/PSS 17.7 MiB; incremental QML overhead is not isolated.
 - Shell hot reload retained durable demo state but left nested QML components stale; a full shell restart picked up visual changes. Document this installed-host limitation. Do not edit packaged shell code.

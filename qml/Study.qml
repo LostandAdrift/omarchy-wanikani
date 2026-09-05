@@ -16,7 +16,11 @@ ColumnLayout {
   spacing: Style.space(16)
 
   function focusInput() {
-    if (root.session && root.session.phase !== "lesson" && root.session.phase !== "complete")
+    if (root.session && root.session.phase === "lesson")
+      subjectCard.forceActiveFocus(Qt.OtherFocusReason)
+    else if (root.session && root.session.phase === "complete")
+      returnToWork.forceActiveFocus(Qt.TabFocusReason)
+    else if (root.session)
       input.forceActiveFocus()
   }
   function restoreInput() {
@@ -164,6 +168,7 @@ ColumnLayout {
       Layout.fillWidth: true
       spacing: Style.space(8)
       Action {
+        id: returnToWork
         text: "Back to work →"
         selected: true
         onClicked: root.controller.dismiss()
@@ -183,8 +188,21 @@ ColumnLayout {
     visible: root.subject !== null && root.session && root.session.phase !== "complete"
     spacing: Style.space(14)
     Card {
+      id: subjectCard
       Layout.fillWidth: true
       Layout.preferredHeight: Style.space(220)
+      activeFocusOnTab: root.session && root.session.phase === "lesson"
+      border.color: activeFocus ? Color.accent : Qt.alpha(Color.foreground, 0.14)
+      Accessible.role: Accessible.Grouping
+      Accessible.name: "Study subject"
+      Keys.onReturnPressed: function (event) {
+        if (root.session && root.session.phase === "lesson" && !event.isAutoRepeat && !root.controller.busy)
+          root.controller.studyAction("lesson_next", {})
+      }
+      Keys.onEnterPressed: function (event) {
+        if (root.session && root.session.phase === "lesson" && !event.isAutoRepeat && !root.controller.busy)
+          root.controller.studyAction("lesson_next", {})
+      }
       Rectangle {
         anchors.top: parent.top
         anchors.left: parent.left
@@ -228,6 +246,11 @@ ColumnLayout {
       font.family: root.session && root.session.part === "reading" ? "Noto Sans CJK JP" : Style.font.family
       placeholderText: root.session && root.session.part === "reading" ? "Type romaji or kana" : "Type the English meaning"
       Accessible.name: root.session && root.session.part === "reading" ? "Reading answer" : "Meaning answer"
+      Keys.priority: Keys.BeforeItem
+      Keys.onPressed: function (event) {
+        if (event.isAutoRepeat && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter))
+          event.accepted = true
+      }
       onTextEdited: root.convertInput()
       onInputMethodComposingChanged: if (!inputMethodComposing)
         root.convertInput()
@@ -294,6 +317,7 @@ ColumnLayout {
         })
       }
       Action {
+        id: lessonNext
         text: root.session && root.session.lesson_index + 1 >= root.session.total ? "Start the quiz →" : "Next subject →"
         selected: true
         enabled: !root.controller.busy

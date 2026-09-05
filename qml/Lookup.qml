@@ -17,7 +17,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "Search characters, readings, or meanings in your WaniKani material. Selected text stays on this computer."
+    text: "Search Japanese, romaji readings, meanings, or your synonyms. A selected sentence reveals matching words from your catalogue. Text stays on this computer."
     color: Qt.alpha(Color.foreground, 0.76)
     font.pixelSize: Style.font.bodySmall
   }
@@ -27,7 +27,7 @@ ColumnLayout {
       id: searchField
       Layout.fillWidth: true
       text: root.controller.query
-      placeholderText: "Japanese, reading, or meaning…"
+      placeholderText: "Japanese, romaji, or meaning…"
       Accessible.name: "Search WaniKani material"
       onTextEdited: {
         root.controller.detail = null
@@ -40,6 +40,74 @@ ColumnLayout {
       onClicked: root.controller.readSelection()
     }
   }
+  Flow {
+    Layout.fillWidth: true
+    spacing: Style.space(6)
+    visible: !root.controller.detail
+    Repeater {
+      model: [
+        {
+          value: "all",
+          label: "All types"
+        },
+        {
+          value: "radical",
+          label: "Radicals"
+        },
+        {
+          value: "kanji",
+          label: "Kanji"
+        },
+        {
+          value: "vocabulary",
+          label: "Vocabulary"
+        },
+        {
+          value: "kana_vocabulary",
+          label: "Kana vocabulary"
+        }
+      ]
+      Action {
+        required property var modelData
+        text: modelData.label
+        selected: root.controller.searchType === modelData.value
+        accessibleHint: "Filter catalogue by subject type"
+        onClicked: root.controller.setSearchFilter(modelData.value, root.controller.searchState)
+      }
+    }
+  }
+  Flow {
+    Layout.fillWidth: true
+    spacing: Style.space(6)
+    visible: !root.controller.detail
+    Repeater {
+      model: [
+        {
+          value: "all",
+          label: "Any progress"
+        },
+        {
+          value: "learned",
+          label: "Learned"
+        },
+        {
+          value: "due",
+          label: "Due reviews"
+        },
+        {
+          value: "saved",
+          label: "Saved difficult items"
+        }
+      ]
+      Action {
+        required property var modelData
+        text: modelData.label
+        selected: root.controller.searchState === modelData.value
+        accessibleHint: "Filter catalogue by your learning progress"
+        onClicked: root.controller.setSearchFilter(root.controller.searchType, modelData.value)
+      }
+    }
+  }
   Timer {
     id: searchDelay
     interval: 140
@@ -47,8 +115,15 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    visible: !root.controller.detail && root.controller.query.length > 0 && root.controller.results.length === 0
-    text: "No cached match. Try a shorter word, or refresh your account to download its accessible catalogue."
+    visible: !root.controller.detail && (root.controller.query.length > 0 || root.controller.searchType !== "all" || root.controller.searchState !== "all") && root.controller.results.length === 0
+    text: root.controller.searching ? "Searching your catalogue…" : "No cached match with these filters. Try a shorter word or another filter, or refresh your account to download its accessible catalogue."
+    color: Qt.alpha(Color.foreground, 0.76)
+  }
+  Label {
+    Layout.fillWidth: true
+    visible: !root.controller.detail && root.controller.results.length > 0
+    text: root.controller.results.length + (root.controller.results.length === 30 ? " matches shown · narrow your search for more" : root.controller.results.length === 1 ? " match" : " matches")
+    font.pixelSize: Style.font.bodySmall
     color: Qt.alpha(Color.foreground, 0.76)
   }
   Repeater {
@@ -61,13 +136,11 @@ ColumnLayout {
         id: row
         anchors.fill: parent
         anchors.margins: Style.space(12)
-        Label {
-          text: modelData.characters || "◇"
-          font.family: "Noto Sans CJK JP"
-          font.pixelSize: Style.space(30)
+        SubjectGlyph {
+          subject: modelData
+          pixelSize: Style.space(30)
           Layout.preferredWidth: Style.space(120)
-          elide: Text.ElideRight
-          maximumLineCount: 1
+          Layout.preferredHeight: Style.space(50)
         }
         ColumnLayout {
           Layout.fillWidth: true
@@ -77,13 +150,14 @@ ColumnLayout {
           }
           Label {
             Layout.fillWidth: true
-            text: modelData.type.replace("_", " ") + " · Level " + modelData.level + " · " + (modelData.assignment.started_at ? "SRS " + modelData.assignment.srs_stage : "Not started")
+            text: modelData.type.replace("_", " ") + " · Level " + modelData.level + " · " + (modelData.pending ? "Waiting to sync" : modelData.assignment.burned_at ? "Burned" : modelData.assignment.started_at ? "SRS " + modelData.assignment.srs_stage : "Not started")
             font.pixelSize: Style.font.bodySmall
             color: Qt.alpha(Color.foreground, 0.76)
           }
         }
         Action {
           text: "Open"
+          accessibleName: "Open " + (modelData.characters || modelData.slug) + ", " + modelData.meanings.join(", ")
           onClicked: root.controller.showSubject(modelData.id)
         }
       }
@@ -93,6 +167,13 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.controller.detail !== null
     spacing: Style.space(14)
+    Action {
+      text: "← Back to results"
+      onClicked: {
+        root.controller.detail = null
+        root.focusInput()
+      }
+    }
     SubjectGlyph {
       Layout.fillWidth: true
       subject: root.controller.detail

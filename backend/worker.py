@@ -14,6 +14,7 @@ from wanikani.api import Api, ApiError, validate_user
 from wanikani.common import UserError, private_dir, stamp, state_home
 from wanikani.credentials import Keyring
 from wanikani.engine import Engine
+from wanikani.readiness import OfflineReadiness
 from wanikani.store import Store
 from wanikani.sync import Synchronizer
 
@@ -40,22 +41,47 @@ class Worker:
     def select_mode(self, demo):
         self.sync = None
         self.token = None
+        self.sync_progress = {"stage": "idle", "message": "", "completed": 0, "total": None, "active": False}
+        if hasattr(self, "readiness"):
+            self.readiness.stop()
         if hasattr(self, "engine"):
             self.engine.store.close()
         store = Store(self.directory / ("demo.sqlite3" if demo else "account.sqlite3"))
         self.engine = Engine(store, demo=demo)
+        readiness = OfflineReadiness(self.engine)
+        readiness.changed = lambda value: self.readiness_changed(readiness, value)
+        self.readiness = readiness
         modefile = self.directory / "mode.json"
         modefile.write_text(json.dumps({"mode": "demo" if demo else "account"}))
         modefile.chmod(0o600)
 
-    def changed(self):
+    def snapshot(self):
+        value = self.engine.snapshot()
+        value["readiness"] = self.readiness.get()
+        value["sync_progress"] = dict(self.sync_progress)
+        self.readiness.refresh()
+        return value
+
+    def readiness_changed(self, source, value):
+        if not self.stopping and source is self.readiness:
+            self.emit({"v": 1, "event": "readiness", "data": value})
+
+    def report_progress(self, value):
+        self.sync_progress = dict(value)
         if not self.stopping:
-            self.emit({"v": 1, "event": "state", "data": self.engine.snapshot()})
+            self.emit({"v": 1, "event": "sync_progress", "data": value})
+
+    def changed(self, refresh_readiness=False):
+        if not self.stopping:
+            if refresh_readiness:
+                self.readiness.refresh(force=True)
+            self.emit({"v": 1, "event": "state", "data": self.snapshot()})
 
     def configure_sync(self, token):
         self.token = token
         self.engine.connected = True
-        self.sync = Synchronizer(self.engine, Api(token), self.directory / "media", self.changed)
+        self.sync = Synchronizer(self.engine, Api(token), self.directory / "media",
+            lambda: self.changed(refresh_readiness=True), self.report_progress)
 
     def startup(self):
         if self.engine.demo:
@@ -75,6 +101,18 @@ class Worker:
         # Migrate prior storage modes conservatively when they refer to a saved
         # credential. Fresh session-only accounts never require Secret Service.
         return self.engine.store.get("credential_storage") in ("keyring", "disconnected")
+
+    def resumable_start(self, args):
+        mode = args.get("mode", "reviews")
+        if mode == "practice":
+            return True  # Ungraded local study never needs a network preflight.
+        active = self.engine.store.session()
+        reference = self.engine.store.get("graded_session")
+        graded = self.engine.store.session(reference) if reference else None
+        if graded and graded["phase"] != "complete":
+            return True
+        return bool(active and active["phase"] != "complete"
+            and (mode == "resume" or active["mode"] != "practice"))
 
     def job(self, request_id, fn):
         if not self.job_lock.acquire(blocking=False):
@@ -98,7 +136,7 @@ class Worker:
                     self.reply_error(request_id, UserError("The operation could not be completed. Your saved work was retained.", "internal_error"))
             finally:
                 self.job_lock.release()
-                self.changed()
+                self.changed(refresh_readiness=True)
         threading.Thread(target=run, daemon=True, name="wanikani-network").start()
 
     def reply_error(self, rid, error):
@@ -166,7 +204,7 @@ class Worker:
             else:
                 raise UserError("Connect your account in Settings.", "disconnected")
             result = {"synced": True}
-        elif method == "start" and self.sync and not self.job_lock.locked() and time.time() - self.last_attempt > 60:
+        elif method == "start" and self.sync and not self.resumable_start(args) and not self.job_lock.locked() and time.time() - self.last_attempt > 60:
             def prepare():
                 self.last_attempt = time.time()
                 self.sync.run()
@@ -187,9 +225,16 @@ class Worker:
                 self.job(None, lambda: self.sync.run())
             result = {"alive": True}
         elif method == "snapshot":
-            result = self.engine.snapshot()
+            result = self.snapshot()
+        elif method == "readiness":
+            self.readiness.refresh(force=bool(args.get("refresh")))
+            result = self.readiness.get()
         elif method == "search":
-            result = self.engine.search(args.get("text", ""))
+            result = self.engine.search(args.get("text", ""), args.get("limit", 30), args.get("filters"), args.get("reading_query"))
+        elif method == "practice_catalogue":
+            from wanikani.practice import catalogue
+            result = catalogue(self.engine, group=args.get("group", "suggested"), query=args.get("query", ""),
+                offset=args.get("offset", 0), limit=args.get("limit", 30))
         elif method == "details":
             result = self.engine.details(int(args["subject_id"]))
         elif method == "ambient":
@@ -265,8 +310,8 @@ class Worker:
         else:
             result = self.engine.command(rid, method, args)
         self.emit({"v": 1, "id": rid, "ok": True, "data": result})
-        if method not in ("snapshot", "draft", "search", "details", "ambient", "session", "tick", "diagnostics"):
-            self.changed()
+        if method not in ("snapshot", "readiness", "draft", "search", "practice_catalogue", "details", "ambient", "session", "tick", "diagnostics"):
+            self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if method in ("advance", "set_material") and self.sync and not self.job_lock.locked():
             self.last_attempt = time.time()
             self.job(None, lambda: self.sync.run())
@@ -315,6 +360,7 @@ def main():
                 worker.reply_error(str(request.get("id", "")) if isinstance(request, dict) else "", UserError("An internal operation failed; saved work was retained.", "internal_error"))
     finally:
         worker.stopping = True
+        worker.readiness.stop()
         if worker.sync:
             worker.sync.cancelled.set()
     return 0

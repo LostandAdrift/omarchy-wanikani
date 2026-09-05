@@ -29,4 +29,6 @@ Choose improvements based on inspected code and observed behavior. Keep batches 
 
 - 01:43 UTC: Goal started. Original development implementation already installed at commit 19a9e31; 83 Python tests and 44 Qt checks passed. Final audit found session-only cleanup and lesson relationship issues, now being fixed. Native screenshots and factual verification documentation are being added.
 
-- 01:53 UTC: Credential cleanup supports missing keyring/session-only mode and explicit deletion; retry UI remains available. Lessons show related subjects. All 89 Python tests pass. Next parallel work: practice library, accessible keyboard help, offline readiness; parent improving lookup and native integration.
+- 01:46 UTC: Credential cleanup supports missing keyring/session-only mode and explicit deletion; retry UI remains available. Lessons show related subjects. All 89 Python tests pass. Next parallel work: practice library, accessible keyboard help, offline readiness; parent improving lookup and native integration.
+
+- 02:06 UTC: First improvement batch implemented: native practice library, ranked Unicode/romaji/synonym lookup with filters, asynchronous offline readiness and sync stages, F1/navigation help, focus scrolling, held-activation guard, and authoritative immediate resume. 140 Python tests/49 Qt checks pass. Search16ms median across9016subjects, answer+advance11ms. Hosted QA is next; a disposable fixture harness is being prepared. Further audits found numeric-grading/malformed-answer risks and avoidable rate-pacing/media delays, queued for the next batch.

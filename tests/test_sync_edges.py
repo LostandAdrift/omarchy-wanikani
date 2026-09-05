@@ -5,6 +5,7 @@ import io
 import json
 import subprocess
 import tempfile
+import threading
 import unittest
 import urllib.error
 from pathlib import Path
@@ -312,6 +313,8 @@ class CredentialStateTests(unittest.TestCase):
         self.worker.keyring = Mock()
 
     def tearDown(self):
+        self.worker.stopping = True
+        self.worker.readiness.stop()
         self.worker.engine.store.close()
         self.temp.cleanup()
 
@@ -418,6 +421,53 @@ class CredentialStateTests(unittest.TestCase):
         worker.keyring.delete.assert_not_called()
         worker.handle({"v": 1, "id": "delete-agreed", "method": "delete_data", "args": {"confirmation": "DELETE", "discard_pending": True}})
         self.assertIsNone(worker.engine.store.get("account_id"))
+
+    def test_resume_returns_authoritative_draft_without_waiting_for_sync(self):
+        worker = self.worker
+        worker.engine.clock = lambda: NOW
+        worker.engine.start("reviews", 1)
+        worker.engine.draft("authoritative saved draft")
+        worker.engine.start("practice", 1, [3])
+        worker.sync = Mock()
+        worker.sync.run.side_effect = AssertionError("resume must not wait for network")
+        worker.changed = Mock()
+        worker.handle({"v": 1, "id": "resume", "method": "start", "args": {"mode": "resume"}})
+        response = next(message["data"] for message in self.messages if message.get("id") == "resume")
+        self.assertEqual("authoritative saved draft", response["draft"])
+        self.assertEqual("reviews", response["mode"])
+        worker.sync.run.assert_not_called()
+
+    def test_resume_falls_back_to_active_practice_without_network(self):
+        worker = self.worker
+        worker.engine.clock = lambda: NOW
+        worker.engine.start("practice", 1, [3])
+        worker.engine.draft("practice saved draft")
+        worker.sync = Mock()
+        worker.changed = Mock()
+        worker.handle({"v": 1, "id": "resume", "method": "start", "args": {"mode": "resume"}})
+        response = next(message["data"] for message in self.messages if message.get("id") == "resume")
+        self.assertEqual("practice saved draft", response["draft"])
+        worker.sync.run.assert_not_called()
+
+    def test_new_graded_work_still_refreshes_before_start(self):
+        worker = self.worker
+        worker.engine.clock = lambda: NOW
+        order = []
+        arrived = threading.Event()
+        def emit(value):
+            self.messages.append(value)
+            if value.get("id") == "new":
+                order.append("reply")
+                arrived.set()
+        worker.emit = emit
+        worker.changed = Mock()
+        worker.sync = Mock()
+        worker.sync.run.side_effect = lambda: order.append("sync") or True
+        worker.handle({"v": 1, "id": "new", "method": "start", "args": {"mode": "reviews", "limit": 1}})
+        self.assertTrue(arrived.wait(2))
+        self.assertTrue(worker.job_lock.acquire(timeout=2))
+        worker.job_lock.release()
+        self.assertEqual(["sync", "reply"], order)
 
     def test_explicit_deletion_removes_recoverable_sqlite_pages(self):
         worker = self.worker

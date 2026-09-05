@@ -165,29 +165,19 @@ class Engine:
             "assignment": (assignment or {}).get("data", {}), "statistics": (statistic or {}).get("data", {}),
         }
 
-    def search(self, text, limit=30):
-        query = str(text).strip()[:256]
-        if not query:
-            return []
-        # Match literal characters, meanings, or readings. Long selections also
-        # surface contained Japanese subjects, without exporting the selection.
-        pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        rows = self.store.rows(f"""SELECT id,body FROM resources WHERE kind IN {SUBJECTS}
-          AND json_extract(body,'$.data.level')<=? AND json_extract(body,'$.data.hidden_at') IS NULL
-          AND (json_extract(body,'$.data.characters') LIKE ? ESCAPE '\\'
-            OR EXISTS(SELECT 1 FROM json_each(json_extract(resources.body,'$.data.meanings')) m
-              WHERE json_extract(m.value,'$.meaning') LIKE ? ESCAPE '\\')
-            OR EXISTS(SELECT 1 FROM json_each(json_extract(resources.body,'$.data.readings')) r
-              WHERE json_extract(r.value,'$.reading') LIKE ? ESCAPE '\\')
-            OR (length(json_extract(body,'$.data.characters'))>0 AND instr(?,json_extract(body,'$.data.characters'))>0))
-          LIMIT 150""", (self.max_level(), pattern, pattern, pattern, query))
-        rows = sorted(rows, key=lambda r: (json.loads(r[1])["data"].get("characters") != query, -len(json.loads(r[1])["data"].get("characters") or "")))
-        return [self.details(int(row[0]), False) for row in rows[:limit]]
+    def search(self, text, limit=30, filters=None, reading_query=None):
+        from .search import lookup
+        return lookup(self, text, limit, filters, reading_query)
 
-    def start(self, mode="reviews", limit=None, subjects=None):
+    def start(self, mode="reviews", limit=None, subjects=None, replace_practice=False):
         if mode not in ("reviews", "lessons", "practice", "resume"):
             raise UserError("Unknown study mode.")
+        if not isinstance(replace_practice, bool) or (replace_practice and mode != "practice"):
+            raise UserError("Only ungraded practice can start a new selection.")
         with self.store.transaction():
+            if replace_practice:
+                from .practice import validate_selection
+                subjects = validate_selection(self, subjects)
             existing = self.store.session()
             # Each mode keeps its own durable session. Explicit practice can run
             # while graded work is paused (including during vacation); returning
@@ -196,7 +186,7 @@ class Engine:
                 self.store.save_session(existing)
             reference = self.store.get("practice_session" if mode == "practice" else "graded_session")
             saved = self.store.session(reference) if reference else None
-            if saved and saved["phase"] != "complete":
+            if saved and saved["phase"] != "complete" and not replace_practice:
                 self.store.save_session(saved)
                 return self.session_view(saved)
             if mode == "resume":
@@ -510,7 +500,7 @@ class Engine:
             "credential_cleanup_needed": bool(self.store.get("credential_may_exist", False)) and self.store.get("credential_storage") in ("session", "disconnected")}
 
     def command(self, request_id, method, args):
-        handlers = {"start": lambda: self.start(args.get("mode", "reviews"), args.get("limit"), args.get("subjects")),
+        handlers = {"start": lambda: self.start(args.get("mode", "reviews"), args.get("limit"), args.get("subjects"), args.get("replace_practice", False)),
             "draft": lambda: self.draft(args.get("text", "")), "answer": lambda: self.answer(args.get("text", "")),
             "advance": self.advance, "correct": self.correct, "finish": self.finish,
             "lesson_next": lambda: self.lesson_next(args.get("back", False)),

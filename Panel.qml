@@ -8,6 +8,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs.Commons
 import "qml" as Kani
+import "vendor/WanaKana.mjs" as Kana
 
 Item {
   id: root
@@ -23,6 +24,12 @@ Item {
   property var results: []
   property var detail: null
   property string query: ""
+  property string searchType: "all"
+  property string searchState: "all"
+  property int searchSequence: 0
+  property bool searching: false
+  property string helpReturnView: "dashboard"
+  property var helpReturnDetail: null
   property var chosenScreen: null
   property bool focusPrimed: false
   property string integrationNotice: ""
@@ -34,6 +41,49 @@ Item {
       activity: []
     })
   readonly property string pluginId: "io.github.lostandadrift.wanikani"
+  readonly property var focusedItem: frame.Window.activeFocusItem
+  readonly property bool editingText: isTextEditor(focusedItem)
+  readonly property bool composingText: focusedItem && focusedItem.inputMethodComposing === true
+  onFocusedItemChanged: Qt.callLater(revealFocus)
+
+  function isTextEditor(item) {
+    var candidate = item
+    while (candidate && candidate !== frame) {
+      if ((candidate as TextInput) || (candidate as TextEdit))
+        return true
+      candidate = candidate.parent
+    }
+    return false
+  }
+  function revealFocus() {
+    var item = focusedItem
+    var ancestor = item
+    while (ancestor && ancestor !== content.item)
+      ancestor = ancestor.parent
+    var flickable = scroll.contentItem as Flickable
+    if (!root.opened || !ancestor || !flickable)
+      return
+    var point = item.mapToItem(flickable.contentItem, 0, 0)
+    var maximum = Math.max(0, flickable.contentHeight - flickable.height)
+    if (point.y < flickable.contentY + 8)
+      flickable.contentY = Math.max(0, point.y - 8)
+    else if (point.y + item.height > flickable.contentY + flickable.height - 8)
+      flickable.contentY = Math.min(maximum, point.y + item.height - flickable.height + 8)
+  }
+  function showHelp() {
+    if (view === "help") {
+      closeHelp()
+      return
+    }
+    helpReturnView = view
+    helpReturnDetail = detail
+    navigate("help")
+  }
+  function closeHelp() {
+    navigate(helpReturnView)
+    detail = helpReturnDetail
+    helpReturnDetail = null
+  }
 
   function open(payloadJson) {
     var payload = ({})
@@ -54,7 +104,7 @@ Item {
     if (["reviews", "lessons", "practice", "resume"].indexOf(requested) >= 0)
       begin(requested, payload.limit, payload.subjects)
     else
-      navigate(["dashboard", "lookup", "zen", "settings"].indexOf(requested) >= 0 ? requested : "dashboard")
+      navigate(["dashboard", "lookup", "zen", "settings", "help", "practice-library"].indexOf(requested) >= 0 ? requested : "dashboard")
     if (requested === "lookup" && payload.selection)
       readSelection()
     else if (requested === "lookup" && typeof payload.text === "string")
@@ -84,6 +134,8 @@ Item {
   function focusContent() {
     if (content.item && typeof content.item.focusInput === "function")
       content.item.focusInput()
+    else
+      todayTab.forceActiveFocus(Qt.TabFocusReason)
   }
   function call(method, args, callback) {
     if (!service)
@@ -98,15 +150,10 @@ Item {
         callback(ok, data)
     })
   }
-  function begin(mode, limit, subjects) {
+  function begin(mode, limit, subjects, replacePractice) {
     navigate("study")
     var saved = snapshot.session
     if (mode === "resume" && saved && saved.phase === "complete" && !snapshot.paused_graded && snapshot.reviews === 0) {
-      session = saved
-      Qt.callLater(focusContent)
-      return
-    }
-    if (mode === "resume" && saved && saved.mode !== "practice" && saved.phase !== "complete") {
       session = saved
       Qt.callLater(focusContent)
       return
@@ -115,7 +162,8 @@ Item {
     call("start", {
       mode: mode,
       limit: limit || snapshot.settings.batch_size || 5,
-      subjects: subjects
+      subjects: subjects,
+      replace_practice: replacePractice === true
     }, function (ok, data) {
       if (ok)
         root.session = data
@@ -130,16 +178,33 @@ Item {
     })
   }
   function search(text) {
-    query = text
+    query = String(text || "").slice(0, 256)
+    detail = null
     if (!service)
       return
-    var expected = query
+    var expected = ++searchSequence
+    searching = true
     service.request("search", {
-      text: text
+      text: query,
+      filters: {
+        type: searchType,
+        state: searchState
+      },
+      reading_query: Kana.isRomaji(query) ? Kana.toHiragana(query, {
+        convertLongVowelMark: false
+      }) : ""
     }, function (ok, data) {
-      if (ok && root.query === expected)
-        root.results = data
+      if (root.searchSequence === expected) {
+        root.searching = false
+        if (ok)
+          root.results = data
+      }
     })
+  }
+  function setSearchFilter(type, state) {
+    searchType = type
+    searchState = state
+    search(query)
   }
   function showSubject(id) {
     call("details", {
@@ -268,6 +333,26 @@ Item {
         anchors.fill: parent
       } // consume clicks inside the card
       Keys.onEscapePressed: root.dismiss()
+      Shortcut {
+        sequence: "F1"
+        enabled: root.opened && !root.composingText
+        autoRepeat: false
+        onActivated: root.showHelp()
+      }
+      Repeater {
+        model: ["dashboard", "study", "lookup", "zen", "settings", "practice-library"]
+        Item {
+          id: navigationShortcut
+          required property string modelData
+          required property int index
+          Shortcut {
+            sequence: "Ctrl+" + (navigationShortcut.index + 1)
+            enabled: root.opened && !root.editingText
+            autoRepeat: false
+            onActivated: navigationShortcut.modelData === "study" ? root.begin("resume") : root.navigate(navigationShortcut.modelData)
+          }
+        }
+      }
       ColumnLayout {
         anchors.fill: parent
         anchors.margins: Style.space(22)
@@ -308,6 +393,7 @@ Item {
           Layout.fillWidth: true
           spacing: Style.space(6)
           Kani.Action {
+            id: todayTab
             text: "Today"
             selected: root.view === "dashboard"
             onClicked: root.navigate("dashboard")
@@ -323,6 +409,11 @@ Item {
             onClicked: root.navigate("lookup")
           }
           Kani.Action {
+            text: "Practice"
+            selected: root.view === "practice-library"
+            onClicked: root.navigate("practice-library")
+          }
+          Kani.Action {
             text: "Zen"
             selected: root.view === "zen"
             onClicked: root.navigate("zen")
@@ -331,6 +422,13 @@ Item {
             text: "Settings"
             selected: root.view === "settings"
             onClicked: root.navigate("settings")
+          }
+          Kani.Action {
+            text: "?"
+            accessibleName: "Keyboard shortcuts"
+            accessibleHint: "Show keyboard help, also available with F1"
+            selected: root.view === "help"
+            onClicked: root.showHelp()
           }
         }
         Kani.Label {
@@ -354,7 +452,7 @@ Item {
           Loader {
             id: content
             width: scroll.availableWidth
-            sourceComponent: root.view === "study" ? studyPage : root.view === "lookup" ? lookupPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : dashboardPage
+            sourceComponent: root.view === "study" ? studyPage : root.view === "lookup" ? lookupPage : root.view === "practice-library" ? practicePage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : root.view === "help" ? helpPage : dashboardPage
             onLoaded: {
               if (scroll.contentItem && scroll.contentItem.contentY !== undefined)
                 scroll.contentItem.contentY = 0
@@ -415,6 +513,21 @@ Item {
     id: zenPage
     Kani.Zen {
       controller: root
+    }
+  }
+  Component {
+    id: practicePage
+    Kani.Practice {
+      controller: root
+    }
+  }
+  Component {
+    id: helpPage
+    Kani.ShortcutHelp {
+      controller: root
+      returnView: root.helpReturnView
+      helpShortcutEnabled: true
+      navigationShortcutsEnabled: true
     }
   }
 }

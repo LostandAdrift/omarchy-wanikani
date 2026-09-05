@@ -8,8 +8,8 @@ Omarchy 4.0.2-1, Quickshell 0.3.1, Python 3.14.7, Qt 6.11.2, Hyprland 0.56.2. Th
 
 ## Automated results
 
-- Python: **89 tests passed**, including **12 real subprocess crash boundaries**.
-- Qt: **44 checks passed**, covering kana conversion and desktop notification/ambient policy (Qt totals include initialization and cleanup).
+- Python: **140 tests passed**, including **12 real subprocess crash boundaries**.
+- Qt: **49 checks passed**, covering kana conversion, activation-repeat protection, and desktop notification/ambient policy (Qt totals include initialization and cleanup).
 - Omarchy manifest validation passed.
 - Both installed desktop launcher files passed `desktop-file-validate`; Hyprland reported no configuration errors.
 - QML formatting and syntax checks completed. `qmllint` retains host-specific warnings for dynamically injected shell objects and registered Quickshell types; it is not a warning-free static build.

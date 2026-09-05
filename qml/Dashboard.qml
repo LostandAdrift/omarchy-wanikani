@@ -116,6 +116,12 @@ ColumnLayout {
     text: s.message || ""
     color: Color.urgent
   }
+  OfflineStatus {
+    Layout.fillWidth: true
+    visible: !!root.s.username
+    controller: root.controller
+    compact: true
+  }
   ColumnLayout {
     Layout.fillWidth: true
     visible: !!s.username

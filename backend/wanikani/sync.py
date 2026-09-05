@@ -19,12 +19,22 @@ COLLECTIONS = (
 
 
 class Synchronizer:
-    def __init__(self, engine, api, media_dir, changed=lambda: None):
+    def __init__(self, engine, api, media_dir, changed=lambda: None, progress=lambda value: None):
         self.engine, self.api, self.store = engine, api, engine.store
         self.media_dir = private_dir(media_dir)
         self.lock = threading.Lock()
         self.changed = changed
+        self.progress_changed = progress
+        self.progress = {"stage": "idle", "message": "", "completed": 0, "total": None, "active": False}
         self.cancelled = threading.Event()
+
+    def report(self, stage, message, completed=0, total=None, active=True):
+        self.progress = {"stage": stage, "message": message, "completed": completed, "total": total, "active": active}
+        # Presentation callbacks must never alter the submission outcome.
+        try:
+            self.progress_changed(dict(self.progress))
+        except Exception:
+            pass
 
     def check_cancelled(self):
         if self.cancelled.is_set():
@@ -35,6 +45,8 @@ class Synchronizer:
             return False
         engine = self.engine
         engine.syncing = True
+        succeeded = False
+        self.report("account", "Checking account access")
         self.changed()
         try:
             self.check_cancelled()
@@ -49,6 +61,7 @@ class Synchronizer:
             reset_before = self.store.get("reset_cursor")
             reset_now = stamp(engine.now() - 2)
             reset_params = {"updated_after": reset_before} if reset_before else {}
+            self.report("resets", "Checking account resets")
             for page in self.api.collection("resets", reset_params):
                 for reset in page:
                     with self.store.transaction():
@@ -65,6 +78,11 @@ class Synchronizer:
             self.store.set("reset_cursor", reset_now)
             for endpoint, key in COLLECTIONS:
                 self.check_cancelled()
+                label = {"subjects": "Caching subject catalogue", "assignments": "Refreshing lessons and reviews",
+                    "study_materials": "Refreshing personal study material", "review_statistics": "Refreshing learning statistics",
+                    "level_progressions": "Refreshing level progress", "spaced_repetition_systems": "Refreshing review schedules"}[endpoint]
+                fetched = 0
+                self.report(endpoint, label)
                 since = None if full else self.store.get("cursor_" + key)
                 if endpoint == "subjects" and engine.max_level() > self.store.get("cached_max_level", 0):
                     since = None
@@ -77,9 +95,12 @@ class Synchronizer:
                     with self.store.transaction():
                         for resource in page:
                             self.store.put(resource)
+                    fetched += len(page)
+                    self.report(endpoint, label, fetched)
                 self.store.set("cursor_" + key, started)
                 if endpoint == "subjects":
                     self.store.set("cached_max_level", engine.max_level())
+            self.report("summary", "Refreshing the review forecast")
             summary, etag = self.api.request("summary", etag=self.store.get("summary_etag"))
             if summary is not None:
                 self.store.set("summary", summary)
@@ -97,6 +118,7 @@ class Synchronizer:
             self.store.set("last_sync", stamp(engine.now()))
             self.changed()
             self.cache_media()
+            succeeded = True
             return True
         except ApiError as error:
             engine.status = "offline" if error.status == 0 else error.code
@@ -114,12 +136,15 @@ class Synchronizer:
             return False
         finally:
             engine.syncing = False
+            self.report("complete" if succeeded else engine.status,
+                engine.message or ("Account refreshed" if succeeded else "Synchronization paused"), active=False)
             self.lock.release()
             self.changed()
 
     def refresh_after_writes(self):
         """Fetch unlocks once after confirmed writes, without replaying work."""
         self.check_cancelled()
+        self.report("unlocks", "Checking newly unlocked lessons and account progress")
         user, _ = self.api.request("user")
         validate_user(user)
         if user.get("id") != self.store.get("account_id"):
@@ -130,11 +155,14 @@ class Synchronizer:
         since = self.store.get("cursor_assignments")
         started = stamp(self.engine.now() - 2)
         complete = False
+        fetched = 0
         for index, page in enumerate(self.api.collection("assignments", {"updated_after": since} if since else {})):
             self.check_cancelled()
             with self.store.transaction():
                 for resource in page:
                     self.store.put(resource)
+            fetched += len(page)
+            self.report("unlocks", "Checking newly unlocked lessons and account progress", fetched)
             # Limit this follow-up to four pages. If exceptionally many items
             # changed, keep the old cursor so the next regular sync catches all.
             if index >= 3:
@@ -191,8 +219,11 @@ class Synchronizer:
         return resource
 
     def reconcile_uncertain(self):
-        for row in self.store.rows("SELECT * FROM outbox WHERE state='uncertain'"):
+        rows = self.store.rows("SELECT * FROM outbox WHERE state='uncertain'")
+        self.report("reconcile", "Checking interrupted submissions", 0, len(rows))
+        for index, row in enumerate(rows):
             self.check_cancelled()
+            self.report("reconcile", "Checking interrupted submissions", index, len(rows))
             body = json.loads(row["body"])
             if row["kind"] == "material":
                 material = self.fetch_material(row["subject_id"])
@@ -231,8 +262,11 @@ class Synchronizer:
         if self.engine.clock_untrusted or abs(self.engine.clock_offset) > 300:
             raise UserError("Refresh to verify the system clock before submitting saved work.", "clock_changed")
         confirmed = 0
-        for row in self.store.rows("SELECT * FROM outbox WHERE state='pending' ORDER BY created_at,id"):
+        rows = self.store.rows("SELECT * FROM outbox WHERE state='pending' ORDER BY created_at,id")
+        self.report("submitting", "Checking and sending saved work", 0, len(rows))
+        for index, row in enumerate(rows):
             self.check_cancelled()
+            self.report("submitting", "Checking and sending saved work", index, len(rows))
             body = json.loads(row["body"])
             if body.get("account_id") != self.store.get("account_id"):
                 self.state(row["id"], "conflicted", "Account mismatch. This result will not be submitted.")
@@ -293,6 +327,7 @@ class Synchronizer:
             except Exception:
                 self.state(row["id"], "uncertain", "Confirmation was interrupted. Refresh to reconcile; automatic retry is disabled.")
                 raise
+        self.report("submitting", "Saved work checked", len(rows), len(rows))
         return confirmed
 
     def apply_result(self, row, response):
@@ -353,6 +388,7 @@ class Synchronizer:
         # Account controls wait for this worker job, so stop starting downloads
         # after eight seconds. An already-running request keeps its 10s timeout.
         deadline = time.monotonic() + 8
+        self.report("media", "Caching images and optional pronunciation audio")
         rows = self.store.rows("""SELECT s.id FROM resources s LEFT JOIN resources a
           ON a.kind='assignment' AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
           WHERE s.kind IN ('radical','kanji','vocabulary','kana_vocabulary')
@@ -391,6 +427,7 @@ class Synchronizer:
                 attempts += 1
                 if self.download_media(url):
                     downloaded += 1
+                    self.report("media", "Caching images and optional pronunciation audio", downloaded)
                 else:
                     self.store.set(retry_key, self.engine.now() + 3600)
                 if downloaded >= 40 or attempts >= 60 or time.monotonic() >= deadline:
