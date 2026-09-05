@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from test_backend import EngineFixture, NOW, UserError, stamp
+from wanikani.command_codec import decode_text
 
 
 class CommandReplayTests(EngineFixture, unittest.TestCase):
@@ -50,7 +51,7 @@ class CommandReplayTests(EngineFixture, unittest.TestCase):
         for field in ("kind", "correct", "retry", "corrected"):
             self.assertEqual(original["feedback"][field], replayed["feedback"][field])
         self.assertEqual(before, list(self.store.db.iterdump()))
-        self.assertIn("AUTHORED_OLD_NOTE", self.cached_body())
+        self.assertIn("AUTHORED_OLD_NOTE", decode_text(self.cached_body()))
         self.assertEqual("wrong fixture", self.store.session()["draft"])
 
     def test_hidden_missing_and_malformed_access_metadata_all_restrict_replay(self):
@@ -144,7 +145,8 @@ class CommandReplayTests(EngineFixture, unittest.TestCase):
         subject = self.store.subject(2)
         subject["data"]["pronunciation_audios"] = [{"url": "https://fixture.invalid/audio", "metadata": {}}]
         self.store.put(subject)
-        audio = self.path.parent / "authored-audio"
+        audio = self.path.parent / "media" / "authored-audio"
+        audio.parent.mkdir(exist_ok=True)
         audio.write_bytes(b"authored cached fixture")
         self.store.execute("INSERT INTO media VALUES(?,?,?,?)", ("https://fixture.invalid/audio", str(audio), audio.stat().st_size, NOW))
         old = self.start_answer()

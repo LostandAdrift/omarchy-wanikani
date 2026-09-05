@@ -63,6 +63,12 @@ Escape preserves the exact session, draft answer, and question. Expand changes t
 
 Japanese prompts fit the available space without cutting off long vocabulary. Image radicals keep their meaning hidden until the appropriate reveal.
 
+Lessons group the meaning, reading, and example sentences clearly. Saved personal notes appear beside the relevant mnemonic, including after a mistake. Feedback shows only the part you just answered.
+
+**Tell them apart** opens a side-by-side comparison of similar kanji, with large characters and the relevant meanings or readings. It uses WaniKani’s [visual-similarity links](https://docs.api.wanikani.com/20170710/#kanji); inaccessible content and subjects in unfinished graded work stay out of the comparison. This is a study aid and never changes your grades.
+
+See the native [lesson comparison](docs/screenshots/comparison-dark.png) and [quiet recall](docs/screenshots/quiet-recall-dark.png), captured with independently authored fixtures.
+
 The **Practice** library groups saved difficult items, recent mistakes, and learned subjects. Choose up to twenty, or add five at a time. It shows why each subject appears and whether required content is cached. An explicitly selected practice session keeps earlier local records and the paused graded session intact. Current graded answers remain hidden on library cards.
 
 Lookup accepts romaji readings as well as Japanese, meanings, and personal synonyms. Type and progress filters narrow the accessible catalogue. Exact matches rank first; longer selections surface known words contained in the text. Lookup never sends selections to a translation service.
@@ -79,7 +85,7 @@ When the media cache is full, required images for active study and upcoming work
 
 Settings lists pronunciation voices from the accessible cached catalogue. A preferred voice uses its downloaded clip when available, falling back to another downloaded voice for that word. Missing voice metadata does not discard your preference.
 
-The dashboard and Settings show how many eligible reviews and lessons have their required text/images available offline. Optional audio is counted separately. Availability checks run in the background, and synchronization reports its current stage. Resuming saved work reads the latest durable question and draft immediately. New online study refreshes account state first and defers optional media downloads. Reconnection triggers a coalesced refresh through the shell’s shared networking service; ordinary suspend does not invalidate the offline clock.
+The dashboard and Settings show offline readiness for reviews due now, lessons, and reviews scheduled in the next 24 hours. Required text/images are checked separately from optional audio, including whether subscription access will cover each scheduled review. Availability checks run in the background, and synchronization reports its current stage. Resuming saved work reads the latest durable question and draft immediately. New online study refreshes account state first and defers optional media downloads. Reconnection triggers a coalesced refresh through the shell’s shared networking service; ordinary suspend does not invalidate the offline clock.
 
 Cached lessons and due reviews work offline. Completed work stays pending until confirmed. A pending subject cannot enter another graded cycle, and subsequent scheduling/unlocks wait for WaniKani's response. Subscription access and known expiry dates still apply offline.
 
@@ -95,9 +101,13 @@ The bar shows due items, pending work, or the next-review countdown. Notificatio
 
 The dashboard offers a small, dismissible celebration when synchronization confirms a new account level. The first connection establishes a baseline; local offline results do not invent milestones. Companion animation respects reduced motion.
 
+**Plan your next break** lets you inspect each hour of the next day’s cached review schedule. Hover, tap, or use the arrow keys to see the local time, reviews arriving in that hour, and the cumulative upcoming total. Reviews already due remain separate.
+
 Desktop and idle kanji displays are optional. The desktop card appears after ten seconds without activity. They show learned subjects not due in the next day, stop on activity/fullscreen/study/lock, and give way before Omarchy's configured screensaver deadline. Automatic idle gallery display respects Omarchy's stay-awake mode and disables itself when the configured interval is too short. The plugin never owns or changes your system lock. Companion animation and reduced motion have separate controls.
 
 Manual Zen works with both automatic displays switched off. Ambient catalogue requests run only while a display or an opened Zen view needs them; study and hidden surfaces avoid that background work.
+
+Zen’s optional **Quiet recall** hides the meaning and reading until you reveal them. Take as long as you like, then move to another learned word. There are no scores or submissions, and automatic advance pauses while recalling.
 
 ## Your data
 
@@ -132,3 +142,5 @@ omarchy plugin validate .
 See [isolated native QA](docs/NATIVE_QA.md), [verification](docs/VERIFICATION.md), [read-only performance profiling](docs/PERFORMANCE.md), [architecture](docs/ARCHITECTURE.md), the [contest demonstration](docs/CONTEST_DEMO.md), and the [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
 
 The release gate includes two weeks of personal daily use, checks across desktop configurations, and deliberately answered live lessons/reviews. Those are not replaced by passing automated tests.
+
+Planned extensions include a local reading trail from selected text, contrast practice, and a visual lesson path. Their scope and acceptance criteria are in [next feature proposals](docs/NEXT_FEATURES.md).

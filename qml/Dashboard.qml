@@ -166,59 +166,12 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: !!s.username
     spacing: Style.space(9)
-    Label {
-      text: "Coming up"
-      font.bold: true
-    }
-    Label {
-      text: s.next_reviews_at ? "Next reviews at " + Qt.formatDateTime(new Date(s.next_reviews_at), "ddd HH:mm") : "No upcoming reviews in the cached schedule"
-      color: Qt.alpha(Color.foreground, 0.76)
-      font.pixelSize: Style.font.bodySmall
-    }
-    Row {
+    Forecast {
       Layout.fillWidth: true
-      height: Style.space(85)
-      spacing: Style.space(3)
-      Repeater {
-        model: root.s.forecast || []
-        Item {
-          required property int modelData
-          required property int index
-          width: (parent.width - 23 * Style.space(3)) / 24
-          height: parent.height
-          Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: Math.max(Style.space(3), (parent.height - Style.space(22)) * modelData / Math.max(1, Math.max.apply(null, root.s.forecast || [1])))
-            radius: Math.min(Style.cornerRadius, 3)
-            color: modelData ? Color.accent : Qt.alpha(Color.foreground, 0.1)
-          }
-          Label {
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Math.max(Style.space(7), (parent.height - Style.space(22)) * modelData / Math.max(1, Math.max.apply(null, root.s.forecast || [1])) + 4)
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: modelData > 0 ? String(modelData) : ""
-            font.pixelSize: Style.font.bodySmall
-          }
-          Accessible.name: "In " + index + " hours: " + modelData + " reviews"
-        }
-      }
-    }
-    RowLayout {
-      Layout.fillWidth: true
-      Label {
-        text: "Now"
-        color: Qt.alpha(Color.foreground, 0.76)
-        font.pixelSize: Style.font.bodySmall
-      }
-      Item {
-        Layout.fillWidth: true
-      }
-      Label {
-        text: "Next 24 hours · cached schedule"
-        color: Qt.alpha(Color.foreground, 0.76)
-        font.pixelSize: Style.font.bodySmall
-      }
+      forecast: root.s.forecast || []
+      snapshotTime: root.s.now || 0
+      nextReviewsAt: root.s.next_reviews_at || ""
+      active: root.controller.opened && root.visible
     }
     Label {
       text: "Level " + (s.level || 0) + " kanji · " + (s.level_passed || 0) + " / " + (s.level_total || 0) + " at Guru or above"

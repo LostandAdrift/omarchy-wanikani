@@ -8,9 +8,23 @@ ColumnLayout {
   property string stateFilter: "open"
   property string kindFilter: "all"
   property bool loading: false
+  property bool initialized: false
+  property bool dirty: true
+  property bool fetching: false
   property string notice: ""
   property string confirmId: ""
   property int requestSerial: 0
+  property int requestedOffset: 0
+  property string observedState: ""
+  readonly property bool active: controller.opened && controller.service && controller.service.ready && !controller.service.locked
+  onActiveChanged: {
+    requestSerial++
+    dirty = true
+    loading = false
+    refreshDelay.stop()
+    if (active && initialized)
+      Qt.callLater(fetchPage)
+  }
   readonly property string contentAccess: controller.contentAccess || ""
   onContentAccessChanged: {
     requestSerial++
@@ -19,7 +33,10 @@ ColumnLayout {
       items: [],
       total: 0
     })
-    refreshDelay.restart()
+    requestedOffset = 0
+    dirty = true
+    if (active && initialized)
+      Qt.callLater(fetchPage)
   }
   property var page: ({
       items: [],
@@ -38,24 +55,44 @@ ColumnLayout {
     refreshButton.forceActiveFocus(Qt.TabFocusReason)
   }
   function loadPage(offset) {
-    if (!controller.service)
+    requestedOffset = offset || 0
+    requestSerial++
+    dirty = true
+    refreshDelay.stop()
+    if (active && initialized)
+      Qt.callLater(fetchPage)
+  }
+  function stateKey() {
+    var state = controller.snapshot
+    return JSON.stringify([state.state_revision, state.last_sync, state.pending, state.attention, state.outbox_counts])
+  }
+  function fetchPage() {
+    if (!active || !dirty || fetching)
       return
-    var serial = ++requestSerial
+    var serial = requestSerial
+    dirty = false
+    fetching = true
     loading = true
+    refreshDelay.stop()
     controller.service.request("recovery", {
       state: stateFilter,
       kind: kindFilter,
-      offset: offset || 0,
+      offset: requestedOffset,
       limit: 15
     }, function (ok, data, message) {
-      if (!root || serial !== root.requestSerial)
+      if (!root)
         return
-      root.loading = false
-      if (ok) {
-        root.page = data
-        root.notice = ""
-      } else
-        root.notice = message || "Saved submissions could not be loaded. Try again."
+      root.fetching = false
+      if (serial === root.requestSerial && root.active) {
+        root.loading = false
+        if (ok) {
+          root.page = data
+          root.notice = ""
+        } else
+          root.notice = message || "Saved submissions could not be loaded. Try again."
+      }
+      if (root.active && root.dirty)
+        Qt.callLater(root.fetchPage)
     })
   }
   function chooseState(value) {
@@ -96,18 +133,29 @@ ColumnLayout {
     var date = new Date(value)
     return isNaN(date.getTime()) ? "Time unavailable" : Qt.formatDateTime(date, "MMM d, yyyy · h:mm AP")
   }
-  Component.onCompleted: loadPage(0)
+  Component.onCompleted: {
+    initialized = true
+    observedState = stateKey()
+    loadPage(0)
+  }
   Component.onDestruction: requestSerial++
   Connections {
     target: root.controller.service
     function onSnapshotChanged() {
-      refreshDelay.restart()
+      var key = root.stateKey()
+      if (key === root.observedState)
+        return
+      root.observedState = key
+      root.requestSerial++
+      root.dirty = true
+      if (root.active)
+        refreshDelay.restart()
     }
   }
   Timer {
     id: refreshDelay
     interval: 250
-    onTriggered: root.loadPage(root.page.offset)
+    onTriggered: root.fetchPage()
   }
 
   Label {

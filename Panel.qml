@@ -211,7 +211,7 @@ Item {
     refreshSearch()
   }
   function refreshSearch() {
-    if (!service)
+    if (!service || !service.ready || service.locked || !opened || view !== "lookup")
       return
     var expected = ++searchSequence
     searching = true
@@ -225,7 +225,7 @@ Item {
         convertLongVowelMark: false
       }) : ""
     }, function (ok, data) {
-      if (root.searchSequence === expected) {
+      if (root.searchSequence === expected && root.opened && root.view === "lookup") {
         root.searching = false
         if (ok)
           root.results = data
@@ -250,7 +250,7 @@ Item {
     })
   }
   function play(subject) {
-    if (subject && subject.audio && subject.audio.length) {
+    if (opened && service && service.ready && !service.locked && subject && subject.audio && subject.audio.length) {
       audio.source = subject.audio[0].url
       audio.play()
     }
@@ -291,6 +291,10 @@ Item {
       onStreamFinished: clipboard.captured = text.slice(0, 4096)
     }
     onExited: {
+      if (!root.opened || root.view !== "lookup") {
+        captured = ""
+        return
+      }
       if (!captured.trim() && primary) {
         primary = false
         Qt.callLater(function () {
@@ -396,38 +400,47 @@ Item {
         spacing: Style.space(14)
         RowLayout {
           Layout.fillWidth: true
+          Layout.minimumWidth: 0
           Kani.Crab {
-            Layout.preferredWidth: Style.space(52)
-            Layout.preferredHeight: Style.space(44)
+            Layout.preferredWidth: Style.space(frame.width < Style.space(520) ? 40 : 52)
+            Layout.preferredHeight: Style.space(frame.width < Style.space(520) ? 34 : 44)
             animate: root.opened && root.service && root.service.animations
           }
           ColumnLayout {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: 1
             spacing: 1
             Kani.Label {
+              Layout.fillWidth: true
+              Layout.minimumWidth: 0
               text: "WaniKani"
               font.pixelSize: Style.font.title
               font.bold: true
             }
             Kani.Label {
+              Layout.fillWidth: true
+              Layout.minimumWidth: 0
               text: root.snapshot.demo ? "DEMO · Nothing is sent to WaniKani" : "Five reviews, then back to work."
               font.pixelSize: Style.font.bodySmall
               color: root.snapshot.demo ? Color.accent : Qt.alpha(Color.foreground, 0.76)
             }
-          }
-          Item {
-            Layout.fillWidth: true
           }
           Kani.Action {
             text: root.expanded ? "Compact" : "Expand"
             onClicked: root.expanded = !root.expanded
           }
           Kani.Action {
-            text: "Close · Esc"
+            text: frame.width < Style.space(520) ? "Close" : "Close · Esc"
+            accessibleName: "Close and keep your saved session"
+            accessibleHint: "Also available with Escape"
             onClicked: root.dismiss()
           }
         }
         Flow {
           Layout.fillWidth: true
+          Layout.minimumWidth: 0
+          Layout.preferredWidth: 1
           spacing: Style.space(6)
           Kani.Action {
             id: todayTab
@@ -499,6 +512,7 @@ Item {
         }
         RowLayout {
           Layout.fillWidth: true
+          Layout.minimumWidth: 0
           Kani.Label {
             text: root.snapshot.syncing ? "● Syncing" : "● " + (root.snapshot.status || "starting")
             color: root.snapshot.status === "offline" ? Color.urgent : Qt.alpha(Color.foreground, 0.76)
@@ -510,10 +524,10 @@ Item {
             color: Color.accent
             font.pixelSize: Style.font.bodySmall
           }
-          Item {
-            Layout.fillWidth: true
-          }
           Kani.Label {
+            Layout.fillWidth: true
+            Layout.minimumWidth: 0
+            horizontalAlignment: Text.AlignRight
             text: root.snapshot.username ? root.snapshot.username + " · Level " + root.snapshot.level : "Connect an account or explore the demo"
             font.pixelSize: Style.font.bodySmall
             color: Qt.alpha(Color.foreground, 0.76)

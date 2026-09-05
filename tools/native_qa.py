@@ -78,6 +78,31 @@ with store.transaction():
 store.close()
 '''
 
+QA_LEARNING_FIXTURES = r'''
+import copy
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(sys.argv[1]) / 'backend'))
+from wanikani.store import Store
+store = Store(Path(sys.argv[2]) / 'demo.sqlite3')
+with store.transaction():
+    original = store.subject(6)
+    eye = copy.deepcopy(original)
+    eye['id'] = 990201
+    eye['data'].update(characters='目', slug='目',
+        meanings=[{'meaning': 'eye', 'primary': True, 'accepted_answer': True}],
+        readings=[{'reading': 'もく', 'primary': True, 'accepted_answer': True, 'type': 'onyomi'}],
+        meaning_mnemonic='Two lines inside this window make room for an eye.',
+        visually_similar_subject_ids=[6])
+    store.put(eye)
+    original['data']['visually_similar_subject_ids'] = [990201]
+    store.put(original)
+    store.put({'id': 990206, 'object': 'study_material', 'data': {'subject_id': 6,
+        'meaning_synonyms': [], 'meaning_note': 'My reminder: sunlight through the kitchen window.',
+        'reading_note': 'My sound cue: say にち with the morning calendar.'}})
+store.close()
+'''
+
 # These methods are appended only to the generated Panel.qml. They invoke QML
 # component actions and inspect actual rendered controls, not keyboard events.
 QA_DRIVER = r'''
@@ -135,6 +160,14 @@ QA_DRIVER = r'''
     return selected
   }
   function qaSnapshot() {
+    var labels = []
+    function visibleText(item) {
+      if (!item.visible) return
+      if (typeof item.text === "string" && typeof item.inputMethodComposing !== "boolean" && item.text)
+        labels.push(item.text)
+      for (var i = 0; i < item.children.length; i++) visibleText(item.children[i])
+    }
+    visibleText(frame)
     function recap(item) {
       if (item.objectName === "wanikani-session-recap") return item.report
       for (var i = 0; i < item.children.length; i++) {
@@ -160,13 +193,15 @@ QA_DRIVER = r'''
       view: view, busy: busy, error: error || (service ? service.error : ""),
       pageLoaded: content.status === Loader.Ready && content.item !== null,
       session: session, state: snapshot, detail: detail, recap: recap(frame),
+      zen: view === "zen" && content.item ? {quietRecall: content.item.quietRecall,
+        answerRevealed: content.item.answerRevealed, subject: content.item.subject} : null,
       cachedResultCount: results.length,
       pendingRequests: service ? service.pendingCount : 0,
       requestCounts: service ? service.qaRequestCounts : {},
       ambient: {count: service ? service.ambientItems.length : 0,
         wanted: service ? service.ambientWanted : false,
         fetching: service ? service.ambientFetching : false},
-      capture: qaCapture, timing: qaTiming, controls: controls,
+      capture: qaCapture, timing: qaTiming, controls: controls, labels: labels,
       frame: {width: frame.width, height: frame.height},
       screen: {name: window.screen ? window.screen.name : "", pixelRatio: frame.Screen.devicePixelRatio},
       scroll: {y: scroll.contentItem.contentY || 0, height: scroll.height,
@@ -334,10 +369,12 @@ def prepare(source, destination=None, large_catalogue=False):
         raise RuntimeError("Could not initialize isolated demo fixtures.")
     if large_catalogue:
         command([sys.executable, '-B', '-c', QA_LARGE_CATALOGUE, str(repository), str(state)])
+    else:
+        command([sys.executable, '-B', '-c', QA_LEARNING_FIXTURES, str(repository), str(state)])
     run = {"v": 1, "id": plugin_id, "root": str(root), "repository": str(repository), "state": str(state),
            "artifacts": str(artifacts), "source_commit": command(["git", "rev-parse", "HEAD"], cwd=source),
            "source_files": copied, "source_hashes": source_hashes, "status": "prepared",
-           "catalogue_subjects": 9016 if large_catalogue else 16,
+           "catalogue_subjects": 9016 if large_catalogue else 17,
            "evidence": "Synthetic component actions; no native-key or IME claim"}
     write_json(repository / ".native-qa.json", {"id": plugin_id, "root": str(root)})
     command(["git", "init", "--quiet", "--initial-branch=qa"], cwd=repository)
@@ -546,6 +583,10 @@ def recap_smoke(run):
 
 
 def smoke(run):
+    def button(snapshot, label):
+        return any(control["text"] == label and control["enabled"] for control in snapshot["controls"])
+    def settled(snapshot):
+        return not snapshot["busy"] and snapshot["pendingRequests"] == 0
     action(run, {"kind": "open", "view": "dashboard"})
     wait_snapshot(run, lambda s: s["opened"] and s["view"] == "dashboard")
     action(run, {"kind": "milestone-preview"})
@@ -562,6 +603,42 @@ def smoke(run):
             wait_snapshot(run, lambda s: s["ambient"]["wanted"] and s["ambient"]["count"] > 0
                           and not s["ambient"]["fetching"] and s["pendingRequests"] == 0)
         capture(run, view)
+        if view == "lessons":
+            page = wait_snapshot(run, lambda s: button(s, "Tell them apart · 1") and settled(s))
+            for note in ("My reminder: sunlight through the kitchen window.", "My sound cue: say にち with the morning calendar."):
+                if note not in page["labels"]:
+                    raise RuntimeError("Personal study notes are missing from lesson discovery.")
+            action(run, {"kind": "activate", "selector": {"text": "Tell them apart · 1"}})
+            page = wait_snapshot(run, lambda s: "eye" in s["labels"] and button(s, "Close comparison"))
+            control = next(c for c in page["controls"] if c["text"] == "Close comparison")
+            action(run, {"kind": "scroll", "y": control["y"] + page["scroll"]["y"] - 160})
+            capture(run, "lesson-comparison")
+            action(run, {"kind": "bounds", "width": 460, "height": 900})
+            narrow = wait_snapshot(run, lambda s: s["frame"]["width"] == 460)
+            if any(c["x"] < -1 or c["x"] + c["width"] > narrow["frame"]["width"] + 1 for c in narrow["controls"]):
+                raise RuntimeError("The narrow lesson panel clips a control horizontally.")
+            if "eye" not in narrow["labels"] or "sun" not in narrow["labels"]:
+                raise RuntimeError("The comparison lost valid answer labels at a narrow width.")
+            capture(run, "lesson-comparison-narrow")
+            action(run, {"kind": "activate", "selector": {"text": "Close comparison"}})
+            action(run, {"kind": "bounds"})
+            action(run, {"kind": "scroll", "y": 0})
+        if view == "zen":
+            action(run, {"kind": "activate", "selector": {"text": "Quiet recall"}})
+            page = wait_snapshot(run, lambda s: s.get("zen") and s["zen"]["quietRecall"] and not s["zen"]["answerRevealed"])
+            if any(meaning in page["labels"] for meaning in page["zen"]["subject"]["meanings"]):
+                raise RuntimeError("Quiet recall revealed the meaning before its explicit action.")
+            capture(run, "zen-quiet-recall")
+            action(run, {"kind": "activate", "selector": {"text": "Reveal"}})
+            page = wait_snapshot(run, lambda s: s["zen"]["answerRevealed"])
+            capture(run, "zen-quiet-reveal")
+            previous = page["zen"]["subject"]["id"]
+            action(run, {"kind": "activate", "selector": {"text": "Next word"}})
+            wait_snapshot(run, lambda s: not s["zen"]["answerRevealed"] and s["zen"]["subject"]["id"] != previous)
+            action(run, {"kind": "close"})
+            action(run, {"kind": "open", "view": "zen"})
+            wait_snapshot(run, lambda s: s.get("zen") and s["zen"]["quietRecall"] and not s["zen"]["answerRevealed"])
+            action(run, {"kind": "activate", "selector": {"text": "Return to gallery"}})
     action(run, {"kind": "open", "view": "resume"})
     snapshot = wait_snapshot(run, lambda s: s.get("session") is not None)
     while snapshot["session"]["phase"] == "lesson":

@@ -31,7 +31,7 @@ separate Resume button before allowing an explicitly selected replacement.
 Never use this flag to abandon, replace, or mutate graded sessions.
 """
 import json
-from pathlib import Path
+from .media_files import available_file
 
 from .common import UserError, epoch, stamp
 from .grading import validate_subject_answers
@@ -96,16 +96,16 @@ def _integer(value, label, minimum, maximum):
     return min(maximum, max(minimum, value))
 
 
-def _content(row, media):
+def _content(row, media, directory):
     images = []
     if not row["characters"]:
         image_data = json.loads(row["image_data"])
         for image in image_data if isinstance(image_data, list) else []:
             if not isinstance(image, dict) or not isinstance(image.get("url"), str):
                 continue
-            path = media.get(image.get("url"))
-            if path and Path(path).is_file():
-                images.append(Path(path).as_uri())
+            path = available_file(directory, media.get(image.get("url")))
+            if path:
+                images.append(path.as_uri())
     cache_note = "Ready offline"
     meaning = ""
     try:
@@ -199,7 +199,7 @@ def _catalogue(engine, group, query, offset, limit, readiness_scope):
             "suggested": saved or recent["total"] > 0 or lower_accuracy}
         if not any(membership.values()):
             continue
-        images, meaning, cache_note, ready = ([], "", "", False) if page_readiness else _content(row, media)
+        images, meaning, cache_note, ready = ([], "", "", False) if page_readiness else _content(row, media, engine.store.path.parent / "media")
         for name, included in membership.items():
             if included:
                 counts[name] += 1
@@ -252,7 +252,7 @@ def _catalogue(engine, group, query, offset, limit, readiness_scope):
                 "answers": json.dumps({key: data[key] for key in ("meanings", "readings", "auxiliary_meanings") if key in data}),
                 "image_data": json.dumps(data.get("character_images")),
                 "material": json.dumps(material) if material is not None else None}
-            images, meaning, note, ready = _content(row, media)
+            images, meaning, note, ready = _content(row, media, engine.store.path.parent / "media")
             item.update(images=images, meaning="" if item["spoilers_hidden"] else meaning, cache_note=note, ready=ready)
     return {"items": page, "counts": counts, "ready_counts": None if page_readiness else ready_counts, "group": group, "query": query,
         "offset": offset, "limit": limit, "total": total, "ready_total": None if page_readiness else sum(item["ready"] for item in result),

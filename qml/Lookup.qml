@@ -6,9 +6,46 @@ import qs.Ui as Ui
 ColumnLayout {
   id: root
   required property var controller
+  property bool initialized: false
+  readonly property bool active: controller.opened && controller.service && controller.service.ready && !controller.service.locked
+  onActiveChanged: {
+    searchDelay.stop()
+    if (initialized) {
+      controller.searchSequence++
+      controller.searching = false
+      if (active)
+        refreshWhenActive()
+    }
+  }
   spacing: Style.space(14)
   function focusInput() {
     searchField.forceActiveFocus()
+  }
+  function refreshWhenActive() {
+    var expected = controller.searchSequence
+    Qt.callLater(function () {
+      // A route payload or account-change handler may already have searched.
+      if (root && root.active && !root.controller.detail && root.controller.searchSequence === expected)
+        root.searchNow(searchField.text)
+    })
+  }
+  function editSearch() {
+    controller.detail = null
+    controller.query = String(searchField.text || "").slice(0, 256)
+    controller.searchSequence++
+    controller.searching = false
+    if (active)
+      searchDelay.restart()
+  }
+  function searchNow(text) {
+    searchDelay.stop()
+    if (active)
+      controller.search(text)
+  }
+  Component.onCompleted: {
+    initialized = true
+    if (active)
+      refreshWhenActive()
   }
   Label {
     text: "A word from your world."
@@ -29,11 +66,8 @@ ColumnLayout {
       text: root.controller.query
       placeholderText: "Japanese, romaji, or meaning…"
       Accessible.name: "Search WaniKani material"
-      onTextEdited: {
-        root.controller.detail = null
-        searchDelay.restart()
-      }
-      onAccepted: root.controller.search(text)
+      onTextEdited: root.editSearch()
+      onAccepted: root.searchNow(text)
     }
     Action {
       text: "Use selection"
@@ -111,7 +145,7 @@ ColumnLayout {
   Timer {
     id: searchDelay
     interval: 140
-    onTriggered: root.controller.search(searchField.text)
+    onTriggered: root.searchNow(searchField.text)
   }
   Label {
     Layout.fillWidth: true

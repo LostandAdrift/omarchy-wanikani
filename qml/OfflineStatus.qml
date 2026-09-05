@@ -8,8 +8,19 @@ ColumnLayout {
   property bool compact: false
   readonly property var snapshot: controller.snapshot
   readonly property var readiness: snapshot.readiness || null
+  readonly property var upcoming: readiness ? readiness.upcoming_reviews || null : null
   readonly property var progress: snapshot.sync_progress || null
   spacing: Style.space(8)
+
+  function availability(group) {
+    return group.ready + " / " + (group.total_complete === false ? "?" : group.total)
+  }
+
+  function audioCount(field) {
+    if (!readiness)
+      return 0
+    return readiness.reviews[field] + readiness.lessons[field] + (upcoming ? upcoming[field] : 0)
+  }
 
   Label {
     text: "Offline readiness"
@@ -17,12 +28,20 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: root.readiness && root.readiness.checked_at ? root.readiness.reviews.ready + " / " + root.readiness.reviews.total + " reviews · " + root.readiness.lessons.ready + " / " + root.readiness.lessons.total + " lessons cached for offline study" : "Checking cached study material…"
+    text: root.readiness && root.readiness.checked_at ? root.availability(root.readiness.reviews) + " reviews due now · " + root.availability(root.readiness.lessons) + " lessons ready offline" : "Checking cached study material…"
+    color: root.readiness && root.readiness.complete ? Color.accent : Qt.alpha(Color.foreground, 0.76)
+  }
+  Label {
+    objectName: "upcomingOfflineReadiness"
+    Layout.fillWidth: true
+    visible: root.upcoming !== null && root.readiness.checked_at !== null
+    text: root.upcoming ? "Next 24 hours: " + root.availability(root.upcoming) + " scheduled reviews ready offline" : ""
+    font.pixelSize: Style.font.bodySmall
     color: root.readiness && root.readiness.complete ? Color.accent : Qt.alpha(Color.foreground, 0.76)
   }
   Label {
     Layout.fillWidth: true
-    visible: !root.compact || (root.readiness && (!root.readiness.complete || root.readiness.reviews.ready < root.readiness.reviews.total || root.readiness.lessons.ready < root.readiness.lessons.total))
+    visible: !root.compact || (root.readiness && (!root.readiness.complete || root.readiness.reviews.ready < root.readiness.reviews.total || root.readiness.lessons.ready < root.readiness.lessons.total || (root.upcoming && root.upcoming.ready < root.upcoming.total)))
     text: root.readiness ? root.readiness.message : "Text and required radical images are checked separately from optional pronunciation audio."
     font.pixelSize: Style.font.bodySmall
     color: Qt.alpha(Color.foreground, 0.76)
@@ -30,7 +49,7 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     visible: !root.compact && root.readiness !== null
-    text: root.readiness ? "Pronunciation cached for " + (root.readiness.reviews.audio_cached + root.readiness.lessons.audio_cached) + " / " + (root.readiness.reviews.audio_total + root.readiness.lessons.audio_total) + " eligible subjects with audio. Missing audio does not block study." : ""
+    text: root.readiness ? "Pronunciation cached for " + root.audioCount("audio_cached") + " / " + root.audioCount("audio_total") + " current and scheduled subjects with audio. Missing audio does not block study." : ""
     font.pixelSize: Style.font.bodySmall
     color: Qt.alpha(Color.foreground, 0.76)
   }

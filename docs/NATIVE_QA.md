@@ -22,6 +22,8 @@ This uses ordinary `omarchy plugin add --enable` and captures dashboard, a label
 
 The editor scenario selects the authored mountain subject through lookup, types `peak,  partial,` and a note, closes/reopens and verifies the exact raw draft, then discards it. An explicit offline Save creates exactly one material operation. A newer draft remains separate while that operation waits, and survives simulated confirmation. The waits inspect native controls, durable command acknowledgments, and fixture state; changed text alone is not treated as proof of persistence.
 
+The current smoke fixture also adds one authored comparison kanji and personal notes to the sun lesson (17 subjects total). It checks that both notes appear during discovery, opens the sun/eye comparison, validates visible answer text and control bounds at a 460-pixel logical panel width, and captures the result. Zen exercises hidden quiet recall, explicit reveal, the next word, and closing/reopening without an old revealed answer. These fixtures remain separate from the installed production demo. The performance scenario retains its existing 9,016-subject fixture.
+
 The temporary plugin is removed in `finally`, including on ordinary failure, Ctrl+C, or SIGTERM. Native PNG captures and JSON focus/layout/session/detail snapshots remain in its private artifact directory.
 
 Captures use the actual panel item's `grabToImage`; they do not capture unrelated desktop windows. A unique installation path bypasses the observed nested-QML cache issue without restarting the shell.

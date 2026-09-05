@@ -4,10 +4,10 @@ import re
 import time
 import uuid
 from datetime import datetime
-from pathlib import Path
 from .common import UserError, accessible_subject, epoch, plain, stamp
+from .media_files import available_file
 from .grading import grade, validate_subject_answers
-from . import editor, history, milestones
+from . import comparisons, editor, history, milestones
 
 DEFAULTS = {
     "batch_size": 5, "notifications": True, "quiet_start": 22, "quiet_end": 8,
@@ -49,7 +49,7 @@ class Engine:
     def user(self):
         return (self.store.get("user") or {}).get("data", {})
 
-    def max_level(self):
+    def max_level(self, at=None):
         sub = self.user().get("subscription", {})
         granted = sub.get("max_level_granted", 0)
         if type(granted) is not int or not 0 <= granted <= 60:
@@ -60,7 +60,7 @@ class Engine:
         if kind not in ("recurring", "lifetime"):
             return min(3, granted)
         end = epoch(sub.get("period_ends_at"))
-        if kind == "recurring" and (end is None or self.now() >= end):
+        if kind == "recurring" and (end is None or (self.now() if at is None else at) >= end):
             return min(3, granted)
         return granted
 
@@ -212,22 +212,25 @@ class Engine:
                           and m.get("accepted_answer") is True and isinstance(m.get("meaning"), str)), "") if isinstance(meanings, list) else ""})
             return output
         audio = []
+        media_dir = self.store.path.parent / "media"
         audio_items = [item for item in objects("pronunciation_audios") if isinstance(item.get("url"), str)]
         for item in audio_items:
             url = item["url"]
             rows = self.store.rows("SELECT path FROM media WHERE url=?", (url,))
-            if rows and Path(rows[0][0]).is_file():
+            path = available_file(media_dir, rows[0][0]) if rows else None
+            if path:
                 metadata = item.get("metadata")
                 actor = metadata.get("voice_actor_id") if isinstance(metadata, dict) else None
-                audio.append({"url": Path(rows[0][0]).as_uri(), "actor": actor if type(actor) is int else 1})
+                audio.append({"url": path.as_uri(), "actor": actor if type(actor) is int else 1})
         audio.sort(key=lambda x: x["actor"] != self.settings()["voice_actor_id"])
         images = []
         for image in objects("character_images"):
             if not isinstance(image.get("url"), str):
                 continue
             rows = self.store.rows("SELECT path FROM media WHERE url=?", (image["url"],))
-            if rows and Path(rows[0][0]).is_file():
-                images.append(Path(rows[0][0]).as_uri())
+            path = available_file(media_dir, rows[0][0]) if rows else None
+            if path:
+                images.append(path.as_uri())
         return {
             "id": subject["id"], "type": subject["object"], "characters": data.get("characters") if isinstance(data.get("characters"), str) else "",
             "slug": data.get("slug") if isinstance(data.get("slug"), str) else "", "level": data.get("level"), "images": images,
@@ -238,6 +241,7 @@ class Engine:
             "sentences": [{"ja": plain(s.get("ja")), "en": plain(s.get("en"))} for s in objects("context_sentences")],
             "components": relatives(data.get("component_subject_ids", [])) if include_relations else [],
             "related": relatives(data.get("amalgamation_subject_ids", [])) if include_relations else [],
+            "visually_similar": comparisons.for_subject(self, subject) if include_relations else [],
             "audio": audio, "audio_available": bool(audio_items), "content_error": content_error,
             "material": visible_material, "material_pending": draft is not None,
             **editor.view(self, int(subject_id), visible_material),
@@ -607,11 +611,16 @@ class Engine:
         # The effect and its reply commit together; replay of the same local
         # request never repeats its effect. Reproject subject presentation to
         # current access without replacing the original outcome or revision.
+        from .command_codec import UnreadableReply, decode, encode
         with self.store.transaction():
             rows = self.store.rows("SELECT body FROM commands WHERE id=?", (request_id,))
             if rows:
                 from .journal import replay
-                return replay(self, json.loads(rows[0][0]))
+                try:
+                    value = decode(rows[0][0])
+                except UnreadableReply:
+                    raise UserError("This request is already recorded, but its saved reply cannot be read. Your work was retained. Close and resume study to load the saved session; restore a backup or reinstall the current plugin if the problem continues.", "reply_unavailable") from None
+                return replay(self, value)
             value = handlers[method]()
-            self.store.execute("INSERT INTO commands VALUES(?,?)", (request_id, json.dumps(value, ensure_ascii=False)))
+            self.store.execute("INSERT INTO commands VALUES(?,?)", (request_id, encode(value)))
             return value

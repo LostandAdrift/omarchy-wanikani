@@ -30,6 +30,8 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+from wanikani.command_codec import decode_text
 SUBJECT_COUNT = 9016
 TIMEOUT = 30
 
@@ -287,11 +289,18 @@ def benchmark(source, directory, samples, label, batch_size=5):
     # Read only our disposable fixture after the worker has closed. This makes
     # retained response cost visible without reading any user account data.
     with sqlite3.connect((directory / "demo.sqlite3").as_uri() + "?mode=ro", uri=True) as database:
-        count, total, maximum = database.execute("""SELECT COUNT(*),
-            COALESCE(SUM(LENGTH(CAST(body AS BLOB))),0),
-            COALESCE(MAX(LENGTH(CAST(body AS BLOB))),0) FROM commands""").fetchone()
+        count = total = maximum = stored = compressed = 0
+        for body, in database.execute("SELECT body FROM commands"):
+            logical = len(decode_text(body).encode("utf-8"))
+            count += 1
+            total += logical
+            maximum = max(maximum, logical)
+            stored += len(body.encode("utf-8")) if isinstance(body, str) else len(body)
+            compressed += isinstance(body, bytes)
     result["command_journal"] = {"rows": count, "response_bytes": total,
-        "largest_response_bytes": maximum, "bytes_per_completed_subject": round(total / (samples * batch_size), 1)}
+        "stored_bytes": stored, "compressed_rows": compressed,
+        "largest_response_bytes": maximum, "bytes_per_completed_subject": round(total / (samples * batch_size), 1),
+        "stored_bytes_per_completed_subject": round(stored / (samples * batch_size), 1)}
     return result
 
 

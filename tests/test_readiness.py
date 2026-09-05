@@ -13,7 +13,8 @@ from wanikani.sync import Synchronizer
 
 class ReadinessTests(EngineFixture, unittest.TestCase):
     def cache(self, url, filename):
-        path = Path(self.temp.name) / filename
+        path = Path(self.temp.name) / "media" / filename
+        path.parent.mkdir(exist_ok=True)
         path.write_bytes(b"independently authored test fixture")
         self.store.execute("INSERT INTO media VALUES(?,?,?,?)", (url, str(path), path.stat().st_size, NOW))
         return path
@@ -94,7 +95,7 @@ class ReadinessTests(EngineFixture, unittest.TestCase):
         cache = OfflineReadiness(self.engine)
         cache.value = calculate(self.engine)
         with patch.object(self.store, "rows", side_effect=AssertionError("unexpected database scan")), \
-                patch("wanikani.readiness.Path.is_file", side_effect=AssertionError("unexpected file scan")):
+                patch("wanikani.readiness.available_file", side_effect=AssertionError("unexpected file scan")):
             value = cache.get()
         self.assertEqual(5, value["reviews"]["ready"])
         value["reviews"]["ready"] = 999

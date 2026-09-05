@@ -21,8 +21,15 @@ function sessionFields(snapshot) {
 }
 
 export function visibleSession(session, maximum) {
-    if (session && session.subject && Number(session.subject.level) > Number(maximum || 0))
-        return Object.assign({}, session, {subject: null, restricted: true});
+    if (!session) return session;
+    const grant = Number.isInteger(maximum) && maximum >= 0 && maximum <= 60 ? maximum : 0;
+    const level = session.subject && session.subject.level;
+    if (session.restricted === true || (session.subject && (!Number.isInteger(level) || level < 1 || level > grant))) {
+        const result = Object.assign({}, session, {subject: null, restricted: true, draft: ""});
+        if (session.feedback && typeof session.feedback === "object")
+            result.feedback = Object.assign({}, session.feedback, {accepted: [], answer: ""});
+        return result;
+    }
     return session;
 }
 

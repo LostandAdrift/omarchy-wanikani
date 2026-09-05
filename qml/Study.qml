@@ -9,6 +9,8 @@ ColumnLayout {
   required property var controller
   readonly property var session: controller.session
   readonly property var subject: session ? session.subject : null
+  readonly property bool promptReady: !subject || subjectGlyph.displayReady
+  readonly property bool interactive: controller.opened && controller.service && controller.service.ready && !controller.service.locked
   readonly property bool feedback: session && session.phase === "feedback"
   readonly property color subjectColor: !subject ? Color.accent : subject.type === "radical" ? "#48a9de" : subject.type === "kanji" ? "#e56cb0" : "#a68be8"
   property bool converting: false
@@ -16,6 +18,8 @@ ColumnLayout {
   spacing: Style.space(16)
 
   function focusInput() {
+    if (!interactive)
+      return
     if (root.session && root.session.phase === "lesson")
       subjectCard.forceActiveFocus(Qt.OtherFocusReason)
     else if (root.session && root.session.phase === "complete")
@@ -33,7 +37,7 @@ ColumnLayout {
       input.text = session.draft || ""
       converting = false
       Qt.callLater(focusInput)
-      if (session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
+      if (interactive && session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
         controller.play(subject)
     }
   }
@@ -63,7 +67,7 @@ ColumnLayout {
       })
   }
   function submit() {
-    if (controller.busy || !session || input.inputMethodComposing)
+    if (!interactive || controller.busy || !session || !subject || !promptReady || input.inputMethodComposing)
       return
     if (session.phase === "feedback")
       controller.studyAction("advance", {})
@@ -74,6 +78,13 @@ ColumnLayout {
           convertLongVowelMark: false
         }) : input.text
       })
+  }
+  function nextLesson(back) {
+    if (!interactive || controller.busy || !session || session.phase !== "lesson" || !subject || (back !== true && !promptReady))
+      return
+    controller.studyAction("lesson_next", {
+      back: back === true
+    })
   }
   onSessionChanged: Qt.callLater(restoreInput)
   onSubjectChanged: Qt.callLater(restoreInput)
@@ -206,12 +217,12 @@ ColumnLayout {
       Accessible.role: Accessible.Grouping
       Accessible.name: "Study subject"
       Keys.onReturnPressed: function (event) {
-        if (root.session && root.session.phase === "lesson" && !event.isAutoRepeat && !root.controller.busy)
-          root.controller.studyAction("lesson_next", {})
+        if (!event.isAutoRepeat)
+          root.nextLesson(false)
       }
       Keys.onEnterPressed: function (event) {
-        if (root.session && root.session.phase === "lesson" && !event.isAutoRepeat && !root.controller.busy)
-          root.controller.studyAction("lesson_next", {})
+        if (!event.isAutoRepeat)
+          root.nextLesson(false)
       }
       Rectangle {
         anchors.top: parent.top
@@ -234,6 +245,7 @@ ColumnLayout {
           font.letterSpacing: 2
         }
         SubjectGlyph {
+          id: subjectGlyph
           width: parent.width
           subject: root.subject
           pixelSize: Style.space(94)
@@ -247,6 +259,12 @@ ColumnLayout {
           font.pixelSize: Style.font.title
         }
       }
+    }
+    Label {
+      Layout.fillWidth: true
+      visible: !!root.subject && !root.promptReady
+      text: subjectGlyph.displayLoading ? "Loading this subject image…" : "This subject image could not be shown. Refresh your account to try again."
+      color: subjectGlyph.displayLoading ? Qt.alpha(Color.foreground, 0.76) : Color.urgent
     }
     Ui.TextField {
       id: input
@@ -289,7 +307,7 @@ ColumnLayout {
       Action {
         text: root.feedback ? "Continue · Enter" : "Check answer · Enter"
         selected: true
-        enabled: !root.controller.busy
+        enabled: root.interactive && !root.controller.busy && root.promptReady
         onClicked: root.submit()
       }
       Action {
@@ -323,17 +341,15 @@ ColumnLayout {
       visible: root.session && root.session.phase === "lesson"
       Action {
         text: "Previous"
-        enabled: root.session && root.session.lesson_index > 0 && !root.controller.busy
-        onClicked: root.controller.studyAction("lesson_next", {
-          back: true
-        })
+        enabled: root.interactive && root.session && root.session.lesson_index > 0 && !root.controller.busy
+        onClicked: root.nextLesson(true)
       }
       Action {
         id: lessonNext
         text: root.session && root.session.lesson_index + 1 >= root.session.total ? "Start the quiz →" : "Next subject →"
         selected: true
-        enabled: !root.controller.busy
-        onClicked: root.controller.studyAction("lesson_next", {})
+        enabled: root.interactive && !root.controller.busy && root.promptReady
+        onClicked: root.nextLesson(false)
       }
       Action {
         text: "Save & return to work"

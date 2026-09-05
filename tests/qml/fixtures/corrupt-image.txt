@@ -1,0 +1,1 @@
+This independently authored fixture is deliberately not a decodable image.

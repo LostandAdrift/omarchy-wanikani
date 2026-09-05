@@ -74,7 +74,7 @@ TestCase {
         compare(state.sessionRevision, 5)
         compare(state.snapshot.session.subject, null)
         compare(state.snapshot.session.restricted, true)
-        compare(state.snapshot.session.draft, "fixture draft")
+        compare(state.snapshot.session.draft, "")
     }
     function test_old_equal_revision_cannot_restore_hidden_or_expired_subject() {
         var restricted = session(5)
@@ -164,5 +164,53 @@ TestCase {
         compare(state.replyAccepted, true)
         compare(state.sessionAccepted, false)
         compare(state.sessionRevision, 5)
+    }
+    function test_restricted_feedback_is_redacted_without_mutating_saved_presentation() {
+        var original = session(9, "feedback")
+        original.feedback = {answer: "authored answer", accepted: ["authored alias"],
+            kind: "incorrect", correct: false, corrected: false, retry: false}
+        original.errors = 1
+        var serialized = JSON.stringify(original)
+        var result = State.visibleSession(original, 1)
+        compare(result.subject, null)
+        compare(result.draft, "")
+        compare(result.feedback.answer, "")
+        compare(result.feedback.accepted.length, 0)
+        compare(result.feedback.kind, "incorrect")
+        compare(result.errors, 1)
+        compare(result.revision, 9)
+        compare(JSON.stringify(original), serialized)
+        original.restricted = true
+        original.subject = null
+        compare(State.visibleSession(original, 60).feedback.answer, "")
+    }
+    function test_invalid_level_and_grant_never_expand_visible_access() {
+        var invalid = [null, undefined, true, false, "2", 0, -1, 1.5, 61, {}, [], NaN, Infinity]
+        for (var i = 0; i < invalid.length; i++) {
+            var original = session(1)
+            original.subject.level = invalid[i]
+            var result = State.visibleSession(original, 60)
+            compare(result.subject, null)
+            compare(result.draft, "")
+        }
+        for (var j = 0; j < invalid.length; j++)
+            compare(State.visibleSession(session(1), invalid[j]).subject, null)
+        var valid = session(1)
+        compare(State.visibleSession(valid, 60), valid)
+    }
+    function test_fresh_grant_redacts_retained_newer_feedback_on_every_update_path() {
+        var newest = session(10, "feedback")
+        newest.feedback = {answer: "authored answer", accepted: ["authored alias"], kind: "incorrect"}
+        var state = State.full(State.initial(), snapshot(1, 10, {session: newest}))
+        state = State.full(state, snapshot(2, 9, {max_level: 1}))
+        compare(state.snapshot.session.revision, 10)
+        compare(state.snapshot.session.feedback.answer, "")
+        newest.revision = 11
+        state = State.partial(state, {session: newest, session_revision: 11})
+        compare(state.snapshot.session.feedback.accepted.length, 0)
+        newest.revision = 12
+        state = State.reply(state, newest, state.context)
+        compare(state.snapshot.session.feedback.answer, "")
+        compare(newest.feedback.answer, "authored answer")
     }
 }

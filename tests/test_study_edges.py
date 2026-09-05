@@ -49,7 +49,8 @@ class StudyEdgesTests(EngineFixture, unittest.TestCase):
         return item
 
     def cache_image(self, item):
-        image = Path(self.temp.name) / "authored-radical.svg"
+        image = Path(self.temp.name) / "media" / "authored-radical.svg"
+        image.parent.mkdir(exist_ok=True)
         image.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path d="M4 16H28" stroke="black"/></svg>')
         self.store.execute("INSERT INTO media VALUES(?,?,?,?)", (item["data"]["character_images"][0]["url"], str(image), image.stat().st_size, NOW))
         return image

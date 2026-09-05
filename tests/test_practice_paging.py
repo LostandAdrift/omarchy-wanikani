@@ -54,7 +54,8 @@ class PracticePagingTests(EngineFixture, unittest.TestCase):
         self.store.put(item)
         self.engine.pin(1, True)
         self.assertFalse(self.compare(group='saved')['items'][0]['ready'])
-        image = self.path.parent / 'authored.svg'
+        image = self.path.parent / 'media' / 'authored.svg'
+        image.parent.mkdir(exist_ok=True)
         image.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
         self.store.execute('INSERT INTO media VALUES(?,?,?,?)', ('https://assets.wanikani.com/authored.svg', str(image), image.stat().st_size, NOW))
         self.assertTrue(self.compare(group='saved')['items'][0]['ready'])

@@ -27,6 +27,8 @@ ColumnLayout {
     })
   readonly property bool composingEditor: synonyms.inputMethodComposing || meaningNote.inputMethodComposing || readingNote.inputMethodComposing
   readonly property bool editorAvailable: !!(controller.service && controller.service.ready)
+  readonly property string meaningNoteText: subject && subject.material ? subject.material.meaning_note || "" : ""
+  readonly property string readingNoteText: subject && subject.material ? subject.material.reading_note || "" : ""
   spacing: Style.space(12)
 
   function rawEditor() {
@@ -188,19 +190,19 @@ ColumnLayout {
     color: Color.urgent
   }
   Label {
+    objectName: "subject-meaning-heading"
+    Layout.fillWidth: true
+    visible: root.showMeaning
+    text: "Meaning"
+    font.bold: true
+    color: Qt.alpha(Color.foreground, 0.76)
+  }
+  Label {
     Layout.fillWidth: true
     visible: root.showMeaning
     text: root.subject ? root.subject.meanings.join(" · ") : ""
     font.pixelSize: Style.font.title
     color: Color.accent
-  }
-  Label {
-    Layout.fillWidth: true
-    visible: root.showReading
-    text: root.subject ? root.subject.readings.map(function (r) {
-      return r.reading + (r.type ? " (" + r.type + ")" : "")
-    }).join(" · ") : ""
-    font.family: "Noto Sans CJK JP"
   }
   Label {
     Layout.fillWidth: true
@@ -213,9 +215,42 @@ ColumnLayout {
     text: root.subject ? root.subject.meaning_hint : ""
     color: Qt.alpha(Color.foreground, 0.76)
   }
+  ColumnLayout {
+    objectName: "subject-meaning-note"
+    Layout.fillWidth: true
+    visible: !root.editable && root.showMeaning && root.meaningNoteText.trim() !== ""
+    spacing: Style.space(4)
+    Label {
+      text: "Your meaning note"
+      font.bold: true
+      font.pixelSize: Style.font.bodySmall
+      color: Color.accent
+    }
+    Label {
+      objectName: "subject-meaning-note-text"
+      Layout.fillWidth: true
+      text: root.meaningNoteText
+    }
+  }
+  Label {
+    objectName: "subject-reading-heading"
+    Layout.fillWidth: true
+    visible: root.showReading && root.subject && root.subject.readings.length > 0
+    text: "Reading"
+    font.bold: true
+    color: Qt.alpha(Color.foreground, 0.76)
+  }
   Label {
     Layout.fillWidth: true
-    visible: root.showReading
+    visible: root.showReading && text !== ""
+    text: root.subject ? root.subject.readings.map(function (r) {
+      return r.reading + (r.type ? " (" + r.type + ")" : "")
+    }).join(" · ") : ""
+    font.family: "Noto Sans CJK JP"
+  }
+  Label {
+    Layout.fillWidth: true
+    visible: root.showReading && text !== ""
     text: root.subject ? root.subject.reading_mnemonic : ""
   }
   Label {
@@ -223,6 +258,23 @@ ColumnLayout {
     visible: root.showReading && text !== ""
     text: root.subject ? root.subject.reading_hint : ""
     color: Qt.alpha(Color.foreground, 0.76)
+  }
+  ColumnLayout {
+    objectName: "subject-reading-note"
+    Layout.fillWidth: true
+    visible: !root.editable && root.showReading && root.readingNoteText.trim() !== ""
+    spacing: Style.space(4)
+    Label {
+      text: "Your reading note"
+      font.bold: true
+      font.pixelSize: Style.font.bodySmall
+      color: Color.accent
+    }
+    Label {
+      objectName: "subject-reading-note-text"
+      Layout.fillWidth: true
+      text: root.readingNoteText
+    }
   }
   RowLayout {
     visible: root.showReading && root.subject && root.subject.audio_available
@@ -236,6 +288,14 @@ ColumnLayout {
       color: Qt.alpha(Color.foreground, 0.76)
       font.pixelSize: Style.font.bodySmall
     }
+  }
+  Label {
+    objectName: "subject-context-heading"
+    Layout.fillWidth: true
+    visible: root.showMeaning && root.showReading && root.subject && root.subject.sentences.length > 0
+    text: "In context"
+    font.bold: true
+    color: Qt.alpha(Color.foreground, 0.76)
   }
   Repeater {
     model: root.showMeaning && root.showReading && root.subject ? root.subject.sentences : []
@@ -254,6 +314,12 @@ ColumnLayout {
         font.pixelSize: Style.font.bodySmall
       }
     }
+  }
+  Lookalikes {
+    Layout.fillWidth: true
+    subject: root.subject
+    showMeaning: root.showMeaning
+    showReading: root.showReading
   }
   Label {
     text: "Made from"

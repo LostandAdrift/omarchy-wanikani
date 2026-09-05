@@ -123,7 +123,8 @@ class VoiceTests(EngineFixture, unittest.TestCase):
         self.assertTrue(catalogue(self.engine)["preferred_available"])
         self.assertEqual([], self.engine.details(4)["audio"])
         for index in (1, 0):
-            path = self.path.parent / (str(index) + ".mp3")
+            path = self.path.parent / "media" / (str(index) + ".mp3")
+            path.parent.mkdir(exist_ok=True)
             path.write_bytes(b"authored placeholder; playback is not invoked")
             self.store.execute("INSERT INTO media VALUES (?,?,?,?)", (entries[index]["url"], str(path), path.stat().st_size, NOW))
             sounds = self.engine.details(4)["audio"]

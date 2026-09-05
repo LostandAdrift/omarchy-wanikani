@@ -33,6 +33,11 @@ Rectangle {
       glyph.font.pixelSize = 94
       glyph.minimumPixelSize = 22
       radical.revealLabel = true
+      radical.subject = {
+        id: 990001,
+        slug: "authored secret meaning",
+        images: [Qt.resolvedUrl("fixtures/radical.svg")]
+      }
     }
     function test_complete_prompt_data() {
       return [
@@ -140,6 +145,66 @@ Rectangle {
       verify(image.Accessible.name.indexOf("secret meaning") < 0)
       radical.revealLabel = true
       compare(image.Accessible.name, "Radical authored secret meaning")
+    }
+    function test_corrupt_radical_uses_alternate_cached_format() {
+      ignoreWarning(/.*Error decoding.*corrupt-image.txt.*Unsupported image format/)
+      radical.revealLabel = false
+      radical.subject = {
+        id: 990002,
+        slug: "never reveal this meaning",
+        images: [Qt.resolvedUrl("fixtures/corrupt-image.txt"), Qt.resolvedUrl("fixtures/radical.svg")]
+      }
+      tryCompare(radical, "displayReady", true)
+      compare(radical.sourceIndex, 1)
+      compare(radical.displayLoading, false)
+      compare(radical.displayFailed, false)
+      var image = findChild(radical, "radicalImage")
+      verify(image.asynchronous)
+      compare(image.Accessible.name, "Radical image, subject 990002")
+      // Updated answer feedback objects must not restart failed alternatives.
+      radical.subject = {
+        id: 990002,
+        slug: "still secret",
+        images: [Qt.resolvedUrl("fixtures/corrupt-image.txt"), Qt.resolvedUrl("fixtures/radical.svg")]
+      }
+      compare(radical.sourceIndex, 1)
+      compare(radical.displayReady, true)
+    }
+    function test_all_formats_fail_without_automatic_retry() {
+      ignoreWarning(/.*Cannot open.*missing-radical.svg/)
+      ignoreWarning(/.*Error decoding.*corrupt-image.txt.*Unsupported image format/)
+      radical.subject = {
+        id: 990003,
+        images: [Qt.resolvedUrl("fixtures/missing-radical.svg"), Qt.resolvedUrl("fixtures/corrupt-image.txt")]
+      }
+      tryCompare(radical, "displayFailed", true)
+      compare(radical.displayReady, false)
+      compare(radical.displayLoading, false)
+      compare(radical.sourceIndex, 1)
+      wait(30)
+      compare(radical.sourceIndex, 1)
+      radical.subject = {
+        id: 990004,
+        images: [Qt.resolvedUrl("fixtures/radical.svg")]
+      }
+      tryCompare(radical, "displayReady", true)
+      compare(radical.sourceIndex, 0)
+      compare(radical.displayFailed, false)
+    }
+    function test_empty_image_list_is_unavailable() {
+      radical.subject = {
+        id: 990005,
+        images: []
+      }
+      compare(radical.displayReady, false)
+      compare(radical.displayLoading, false)
+      compare(radical.displayFailed, true)
+      radical.subject = {
+        id: 990006
+      }
+      compare(radical.displayFailed, true)
+      radical.subject = null
+      compare(radical.displayReady, false)
     }
   }
 }

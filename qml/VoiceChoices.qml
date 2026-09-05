@@ -12,7 +12,19 @@ ColumnLayout {
   property var voices: []
   property string notice: ""
   property bool loading: false
+  property bool initialized: false
+  property bool dirty: true
+  property bool fetching: false
   property int requestSerial: 0
+  readonly property bool active: controller.opened && controller.service && controller.service.ready && !controller.service.locked
+  onActiveChanged: {
+    requestSerial++
+    dirty = true
+    loading = false
+    refreshDelay.stop()
+    if (active && initialized)
+      Qt.callLater(loadVoices)
+  }
   readonly property bool preferenceAvailable: voices.some(function (voice) {
     return voice.id === root.preferred
   })
@@ -26,26 +38,37 @@ ColumnLayout {
   spacing: Style.space(8)
 
   function loadVoices() {
-    if (!controller.service)
+    if (!active || !dirty || fetching)
       return
-    var serial = ++requestSerial
+    var serial = requestSerial
+    dirty = false
+    fetching = true
     loading = true
+    refreshDelay.stop()
     controller.service.request("voices", {}, function (ok, data, message) {
-      if (!root || serial !== root.requestSerial)
+      if (!root)
         return
-      root.loading = false
-      root.voices = ok ? data.items : []
-      root.notice = ok ? data.message || "" : message || "Cached voices could not be loaded."
+      root.fetching = false
+      if (serial === root.requestSerial && root.active) {
+        root.loading = false
+        root.voices = ok ? data.items : []
+        root.notice = ok ? data.message || "" : message || "Cached voices could not be loaded."
+      }
+      if (root.active && root.dirty)
+        Qt.callLater(root.loadVoices)
     })
   }
   onCacheIdentityChanged: {
     requestSerial++
+    dirty = true
     voices = []
-    refreshDelay.restart()
+    if (active && initialized)
+      refreshDelay.restart()
   }
   Component.onCompleted: {
+    initialized = true
     refreshDelay.stop()
-    loadVoices()
+    Qt.callLater(loadVoices)
   }
   Component.onDestruction: requestSerial++
   Timer {

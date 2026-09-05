@@ -33,6 +33,7 @@ def populate(store, now):
                 "readings": [{"reading": r, "primary": True, "accepted_answer": True, "type": "onyomi"} for r in readings],
                 "meaning_mnemonic": mnemonic, "reading_mnemonic": "Say the reading aloud, then picture the word in a familiar place.",
                 "component_subject_ids": [2] if sid == 8 else [], "amalgamation_subject_ids": [8] if sid == 2 else [],
+                "visually_similar_subject_ids": [3] if sid == 2 else [2] if sid == 3 else [],
                 "context_sentences": [{"ja": "山が見えます。", "en": "I can see a mountain."}] if sid == 2 else [],
                 "pronunciation_audios": [], "character_images": [], "auxiliary_meanings": [], "lesson_position": sid,
             }})

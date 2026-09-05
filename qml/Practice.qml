@@ -10,10 +10,21 @@ ColumnLayout {
   property var selectedIds: []
   property bool loading: false
   property bool initialized: false
+  property bool dirty: true
+  property bool fetching: false
   property string notice: ""
   property int requestSerial: 0
   property int requestedOffset: 0
   property string observedSync: ""
+  readonly property bool active: controller.opened && controller.service && controller.service.ready && !controller.service.locked
+  onActiveChanged: {
+    requestSerial++
+    dirty = true
+    loading = false
+    searchDelay.stop()
+    if (active && initialized)
+      Qt.callLater(fetchPage)
+  }
   readonly property string contentAccess: controller.contentAccess || ""
   onContentAccessChanged: {
     requestSerial++
@@ -25,6 +36,8 @@ ColumnLayout {
       total: 0,
       ready_total: 0
     })
+    requestedOffset = 0
+    dirty = true
     if (initialized)
       loadPage(0)
   }
@@ -48,20 +61,30 @@ ColumnLayout {
     searchField.forceActiveFocus()
   }
   function loadPage(offset) {
-    if (!controller.service)
-      return
     requestedOffset = offset || 0
     requestSerial++
-    loading = true
+    dirty = true
     notice = ""
+    searchDelay.stop()
     // Construction, access and sync changes can request the same page in one
     // event-loop turn. Keep only their latest request before reading SQLite.
-    Qt.callLater(fetchPage)
+    if (active && initialized)
+      Qt.callLater(fetchPage)
+  }
+  function editSearch() {
+    requestedOffset = 0
+    requestSerial++
+    dirty = true
+    if (active)
+      searchDelay.restart()
   }
   function fetchPage() {
-    if (!controller.service)
+    if (!active || !dirty || fetching || searchDelay.running)
       return
     var serial = requestSerial
+    dirty = false
+    fetching = true
+    loading = true
     controller.service.request("practice_catalogue", {
       group: group,
       query: searchField.text,
@@ -69,13 +92,18 @@ ColumnLayout {
       limit: 30,
       readiness_scope: "page"
     }, function (ok, data, message) {
-      if (!root || serial !== root.requestSerial)
+      if (!root)
         return
-      root.loading = false
-      if (ok)
-        root.library = data
-      else
-        root.notice = message || "The practice library could not be loaded. Refresh and try again."
+      root.fetching = false
+      if (serial === root.requestSerial && root.active) {
+        root.loading = false
+        if (ok)
+          root.library = data
+        else
+          root.notice = message || "The practice library could not be loaded. Refresh and try again."
+      }
+      if (root.active && root.dirty && !searchDelay.running)
+        Qt.callLater(root.fetchPage)
     })
   }
   function chooseGroup(value) {
@@ -120,7 +148,7 @@ ColumnLayout {
       var refreshed = String(root.controller.snapshot.last_sync || "")
       if (refreshed !== root.observedSync) {
         root.observedSync = refreshed
-        root.loadPage(root.library.offset)
+        root.loadPage(root.requestedOffset)
       }
     }
   }
@@ -216,7 +244,7 @@ ColumnLayout {
       Layout.fillWidth: true
       placeholderText: "Characters, reading, or meaning…"
       Accessible.name: "Search the practice library"
-      onTextEdited: searchDelay.restart()
+      onTextEdited: root.editSearch()
       onAccepted: {
         searchDelay.stop()
         root.loadPage(0)

@@ -155,7 +155,8 @@ class PracticeLibraryTests(EngineFixture, unittest.TestCase):
         self.assertEqual(12, result["ready_counts"]["learned"])
         with self.assertRaises(UserError):
             validate_selection(self.engine, [1])
-        image = Path(self.temp.name) / "radical.svg"
+        image = Path(self.temp.name) / "media" / "radical.svg"
+        image.parent.mkdir(exist_ok=True)
         image.write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
         self.store.execute("INSERT INTO media VALUES(?,?,?,?)", (subject["data"]["character_images"][0]["url"], str(image), image.stat().st_size, NOW))
         item = self.item(catalogue(self.engine, "learned"), 1)
