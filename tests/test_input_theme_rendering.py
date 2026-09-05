@@ -206,7 +206,7 @@ class InputThemeRenderingTests(unittest.TestCase):
     def test_actual_inputs_under_alternate_popup_palettes(self):
         with tempfile.TemporaryDirectory(prefix='wanikani-input-theme-') as temporary:
             directory=Path(temporary);qml=directory/'qml';qml.mkdir()
-            for name in ('Study','Lookup','SubjectDetails','Settings','StudyRhythm','Label','Card','Action','ActivationGuard','SubjectGlyph','JapaneseText','RadicalImage'):
+            for name in ('Study','Lookup','SubjectDetails','SubjectPath','Settings','StudyRhythm','Label','Card','Action','ActivationGuard','SubjectGlyph','JapaneseText','RadicalImage'):
                 content=(ROOT/'qml'/(name+'.qml')).read_text().replace('import Quickshell\n','')
                 (qml/(name+'.qml')).write_text(content)
             for name in ('Theme.mjs','UnicodeText.mjs'):

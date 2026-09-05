@@ -134,15 +134,18 @@ Rectangle {
       make();verify(item("subject-meaning-heading").visible);verify(item("subject-meaning-note").visible)
       verify(!item("subject-reading-heading").visible);verify(!item("subject-context-heading").visible)
       verify(text("Authored meaning mnemonic."));verify(!text("Authored reading mnemonic."));verify(!text("Play pronunciation"))
-      verify(!text("Made from"));verify(!text("Related subjects"));compare(backend.writes.length,0)
+      verify(!text("How this subject connects"));compare(backend.writes.length,0)
       setStep("reading");verify(!item("subject-meaning-heading").visible);verify(item("subject-reading-heading").visible)
       verify(item("subject-reading-note").visible);verify(!item("subject-meaning-note").visible)
       verify(text("Authored reading mnemonic."));verify(text("Play pronunciation"));verify(!text("There is a volcano."))
       setStep("context");verify(!item("subject-meaning-heading").visible);verify(!item("subject-reading-heading").visible)
-      verify(item("subject-context-heading").visible);verify(text("There is a volcano."));verify(text("Made from"));verify(text("Related subjects"))
-      verify(text("火 · Fire"));verify(text("火山島 · Volcanic island"))
-      for(var relation of texts().filter(function(item){return item.text==="火 · Fire"||item.text==="火山島 · Volcanic island"}))
-        if(relation.accessibleName!==undefined)verify(!relation.enabled)
+      verify(item("subject-context-heading").visible);verify(text("There is a volcano."))
+      var path=item("wanikani-subject-path");verify(path.visible);verify(!path.expanded)
+      var disclosure=texts().find(function(item){return item.accessibleName!==undefined && item.text==="How this subject connects"})
+      disclosure.forceActiveFocus();keyClick(Qt.Key_Space);tryCompare(path,"expanded",true)
+      verify(text("Kanji in this word"));verify(text("Related subjects"))
+      verify(text("Fire"));verify(text("Volcanic island"))
+      verify(!texts().some(function(item){return item.accessibleName!==undefined && item.text==="Open"}))
       verify(!text("Play pronunciation"));compare(owner.plays.length,0);compare(backend.writes.length,0)
     }
     function test_empty_comparison_is_absent_from_context() {
@@ -287,7 +290,7 @@ Rectangle {
 def build(directory):
     qml = directory / "qml"
     qml.mkdir()
-    for name in ("Study", "SubjectDetails", "Pronunciation", "KanjiExamples", "Lookalikes", "Label", "Card", "Action",
+    for name in ("Study", "SubjectDetails", "SubjectPath", "Pronunciation", "KanjiExamples", "Lookalikes", "Label", "Card", "Action",
                  "ActivationGuard", "SubjectGlyph", "JapaneseText", "RadicalImage"):
         shutil.copyfile(ROOT / "qml" / (name + ".qml"), qml / (name + ".qml"))
     for name in ("Theme.mjs", "UnicodeText.mjs"):

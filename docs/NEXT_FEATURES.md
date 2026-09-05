@@ -1,10 +1,10 @@
 # What comes next
 
-The daily-use feedback reprioritized the next iteration around audible pronunciation, explicit reviews versus lessons, meaningful level progress, audio-led listening practice, periodic study reminders, and live support for every Omarchy theme. Follow [the learning upgrade plan](LEARNING_UPGRADE_PLAN.md) first. Listening, kana dictation, study rhythm, guided lessons, progress history and the SRS explorer now have source-verified implementations. Installed and live-use qualification remain separate; see [the current checkpoint](IMPLEMENTATION.md#current-handoff-state--september-5-1334-utc).
+The daily-use feedback reprioritized the next iteration around audible pronunciation, explicit reviews versus lessons, meaningful level progress, audio-led listening practice, periodic study reminders, and live support for every Omarchy theme. Follow [the learning upgrade plan](LEARNING_UPGRADE_PLAN.md) first. Listening, kana dictation, study rhythm, guided lessons, progress history and the SRS explorer now have source-verified implementations. Installed and live-use qualification remain separate; see [the current checkpoint](IMPLEMENTATION.md).
 
 The current implementation covers the original native study workflow and adds a practice library, batch recaps, kanji comparisons, personal notes in lessons and feedback, a selectable review forecast, quiet recall, and a local reading trail. The next iteration should deepen the learning experience while preserving the short-session habit.
 
-Reading-trail lookup and explicit passage-to-practice selection are implemented in source. The contrast-session and visual-path directions below remain proposals. Live-account qualification and the two-week daily-use log remain the immediate release work.
+Reading-trail lookup and explicit passage-to-practice selection are implemented in source. A read-only visual subject path is now integrated in source; its optional temporary lesson inspector and the contrast-session direction below remain proposals. Live-account qualification and the two-week daily-use log remain the immediate release work.
 
 ## 1. A reading trail from your desktop
 
@@ -26,7 +26,7 @@ Extend **Tell them apart** into an optional ungraded contrast session. Start wit
 
 ## 3. A lesson path you can see
 
-Make subject relationships easier to understand through a small visual path: components → the current kanji → vocabulary that uses it. Keep large Japanese glyphs and a readable text alternative. Expand only the branch the learner chooses so a lesson remains focused.
+Version 0.2.11 implements an expandable path through the components, current subject and related words already projected from the cache. Read-only lesson Context uses readable cards; Lookup retains its existing guarded Open action. Large Japanese glyphs, keyboard disclosure and missing-glyph labels work at narrow widths. See [the implemented contract](SUBJECT_PATH.md). A temporary inspector inside a lesson remains a later extension:
 
 - Use the cached component and amalgamation links already returned by WaniKani, applying current account access at every step.
 - Open related content in a temporary inspector that returns to the same lesson position. A relationship must not replace or finish the study session.

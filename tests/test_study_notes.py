@@ -28,6 +28,7 @@ Rectangle {
   QtObject {
     id: service
     property bool ready: true
+    property bool locked: false
     property bool allowEditorWrites: false
     property var savedDraft: null
     signal snapshotChanged()
@@ -183,7 +184,7 @@ class StudyNotesRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("SubjectDetails.qml", "Label.qml", "UnicodeText.mjs", "Theme.mjs", "Pronunciation.qml"):
+            for name in ("SubjectDetails.qml", "SubjectPath.qml", "Card.qml", "JapaneseText.qml", "Label.qml", "UnicodeText.mjs", "Theme.mjs", "Pronunciation.qml"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
             # Expose the existing private inputs for interaction; their actual
             # text handlers/limit behavior remain unchanged from production.
@@ -191,7 +192,7 @@ class StudyNotesRenderingTests(unittest.TestCase):
             details.write_text(details.read_text().replace("  id: root\n", "  id: root\n"
                 "  property alias authoredMeaningEditor: meaningNote\n"
                 "  property alias authoredReadingEditor: readingNote\n", 1))
-            (qml / "Action.qml").write_text("import QtQuick.Controls\nButton { property string accessibleName: text }\n")
+            (qml / "Action.qml").write_text("import QtQuick.Controls\nButton { property string accessibleName: text; property bool selected: false }\n")
             (qml / "Lookalikes.qml").write_text("import QtQuick\nItem { property var subject; property bool showMeaning; property bool showReading }\n")
             (qml / "KanjiExamples.qml").write_text("import QtQuick\nItem { property var controller; property var subject }\n")
             common = directory / "qs" / "Commons"

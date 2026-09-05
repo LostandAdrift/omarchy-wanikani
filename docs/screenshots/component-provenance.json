@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-05",
+  "images": [
+    {
+      "file": "today-component-dark.png",
+      "sha256": "703778fa3e2fc028bd732e68544c9f8744a0cfd63641ee75b410eecb609feac0",
+      "source_version": "0.2.10",
+      "source_tree": "be5890416b6bf599f403e714c5a6249cee251a03",
+      "scope": "authored offscreen component preview with inert IO and shell adapters"
+    },
+    {
+      "file": "today-component-light.png",
+      "sha256": "1a35ba9b20c72be12a3330d2656512fb3a03942ba32d2904c9977fe92bf64b36",
+      "source_version": "0.2.10",
+      "source_tree": "be5890416b6bf599f403e714c5a6249cee251a03",
+      "scope": "authored offscreen component preview with inert IO and shell adapters"
+    },
+    {
+      "file": "settings-audio-component-dark.png",
+      "sha256": "6d3a08bd1148c9997c7790028389ee2917b936713fafcc764027af2657be3abd",
+      "source_version": "0.2.10",
+      "source_tree": "be5890416b6bf599f403e714c5a6249cee251a03",
+      "scope": "authored offscreen component preview with inert IO and shell adapters"
+    },
+    {
+      "file": "settings-reminders-component-light.png",
+      "sha256": "0ec64feab5e45cb506131de94348949562f5ccb2de5bd9e209777f46a78c796a",
+      "source_version": "0.2.10",
+      "source_tree": "be5890416b6bf599f403e714c5a6249cee251a03",
+      "scope": "authored offscreen component preview with inert IO and shell adapters"
+    },
+    {
+      "file": "dictation-question-component-light.png",
+      "sha256": "59831aaac3f85b5f7f0770cfc3a54ab778746df7b187f4e63e0b1e647a9b8b89",
+      "source_version": "0.2.10",
+      "source_tree": "be5890416b6bf599f403e714c5a6249cee251a03",
+      "scope": "authored offscreen component preview with inert IO and shell adapters"
+    },
+    {
+      "file": "dictation-feedback-component-dark.png",
+      "sha256": "e189a82b48a1fc015fbe45bd078f0fc9e112e7f4167c9e051945b36ed76a12d5",
+      "source_version": "0.2.10",
+      "source_tree": "be5890416b6bf599f403e714c5a6249cee251a03",
+      "scope": "authored offscreen component preview with inert IO and shell adapters"
+    },
+    {
+      "file": "activity-component-light.png",
+      "sha256": "b4bd2129f90ee1fc16b0642b9e0f3f0bbc6d55908da7e1a6a9acf7002c170a5b",
+      "source_version": "0.2.10",
+      "source_tree": "be5890416b6bf599f403e714c5a6249cee251a03",
+      "scope": "authored offscreen component preview with inert IO and shell adapters"
+    },
+    {
+      "file": "subject-path-component-light.png",
+      "sha256": "e4f118fa274b12d80f9c3c48237e2ab46394442fa1680af960b0cd91b88826c3",
+      "source_version": "0.2.11",
+      "runtime_sources": {
+        "qml/Action.qml": "c04dcd2ed4a66ffd889d677f1f2782cf869074dc71342756a18dc738977eadb4",
+        "qml/ActivationGuard.qml": "cb959cb1413ecc66626ddb0a66b39a0587382fd04b911244558ad99015f8438d",
+        "qml/Card.qml": "4f766b8110f91331a2918342846392e02d4664b9fd3af5cb8e21506ef4ad1bfd",
+        "qml/JapaneseText.qml": "ed6b0c2a8c8e3b1677a2df266bd2cbb952a4b4e5f63892a41126edef3c208557",
+        "qml/KanjiExamples.qml": "6e36cd34da987a602620fe6b96a95ffc08e05401917f8f33e3d2f4982a8c3822",
+        "qml/Label.qml": "b1947e9af54ac061961bccba1016cfbaa345b3d2927cf54c5be1f0eae2855679",
+        "qml/Lookalikes.qml": "21848263919afed472a7450610aa62aa23b9ae06d1dfdba76c11e9d00ba83807",
+        "qml/Pronunciation.qml": "90f710ab2413d6af46457691e9ad1e10fea6fbf6b3f0d3e3968df6455e2580b7",
+        "qml/RadicalImage.qml": "e776dc74b20a8e31d0742ff2dbdb7d0f11cf0ee12cb29569be45996428889718",
+        "qml/Study.qml": "a77d5dd7500e05e8910568df2a03bdd29afc68a04e4c692ab2ac62b7a68dbfe7",
+        "qml/SubjectDetails.qml": "50cd2978f764187b1e3c9066473f455752133e50d036005f0cf979ae4cfde328",
+        "qml/SubjectGlyph.qml": "e7871a67cc48fecaae457652c1b7f45dea8d60795d38edaba298d8786f03a817",
+        "qml/SubjectPath.qml": "e079dc2e7f17be5447a3fecb004c1381884272a7e3b2406feb1f13dd1a489c13",
+        "qml/Theme.mjs": "294b9882a70bfbc509a12b1b296f68f7aba25743a764a027fc088f3c440137d5",
+        "qml/UnicodeText.mjs": "e7566632909383358c9993b0b685219d818bc517965f2081162fc9e06772b8b0"
+      },
+      "scope": "Actual integrated production Study/SubjectDetails/SubjectPath; authored data and inert IO/theme adapters; offscreen Qt; not hosted shell.",
+      "native_controls": {
+        "/usr/share/omarchy/shell/Ui/Button.qml": "fda48672cc11dba109acea1cc98eb4b29746e5ce09f90a47f487b776ff99e799",
+        "/usr/share/omarchy/shell/Ui/TextField.qml": "b3ad72f56f86c2df164e347d64205c099f77c5fb90933fabea3b0f2a9e2b3778"
+      }
+    },
+    {
+      "file": "subject-path-component-dark.png",
+      "sha256": "0ebe06764e64befa5dd79debca1983c7dff2a42f5a58249407ca153e30539fc4",
+      "source_version": "0.2.11",
+      "runtime_sources": {
+        "qml/Action.qml": "c04dcd2ed4a66ffd889d677f1f2782cf869074dc71342756a18dc738977eadb4",
+        "qml/ActivationGuard.qml": "cb959cb1413ecc66626ddb0a66b39a0587382fd04b911244558ad99015f8438d",
+        "qml/Card.qml": "4f766b8110f91331a2918342846392e02d4664b9fd3af5cb8e21506ef4ad1bfd",
+        "qml/JapaneseText.qml": "ed6b0c2a8c8e3b1677a2df266bd2cbb952a4b4e5f63892a41126edef3c208557",
+        "qml/KanjiExamples.qml": "6e36cd34da987a602620fe6b96a95ffc08e05401917f8f33e3d2f4982a8c3822",
+        "qml/Label.qml": "b1947e9af54ac061961bccba1016cfbaa345b3d2927cf54c5be1f0eae2855679",
+        "qml/Lookalikes.qml": "21848263919afed472a7450610aa62aa23b9ae06d1dfdba76c11e9d00ba83807",
+        "qml/Pronunciation.qml": "90f710ab2413d6af46457691e9ad1e10fea6fbf6b3f0d3e3968df6455e2580b7",
+        "qml/RadicalImage.qml": "e776dc74b20a8e31d0742ff2dbdb7d0f11cf0ee12cb29569be45996428889718",
+        "qml/Study.qml": "a77d5dd7500e05e8910568df2a03bdd29afc68a04e4c692ab2ac62b7a68dbfe7",
+        "qml/SubjectDetails.qml": "50cd2978f764187b1e3c9066473f455752133e50d036005f0cf979ae4cfde328",
+        "qml/SubjectGlyph.qml": "e7871a67cc48fecaae457652c1b7f45dea8d60795d38edaba298d8786f03a817",
+        "qml/SubjectPath.qml": "e079dc2e7f17be5447a3fecb004c1381884272a7e3b2406feb1f13dd1a489c13",
+        "qml/Theme.mjs": "294b9882a70bfbc509a12b1b296f68f7aba25743a764a027fc088f3c440137d5",
+        "qml/UnicodeText.mjs": "e7566632909383358c9993b0b685219d818bc517965f2081162fc9e06772b8b0"
+      },
+      "scope": "Actual integrated production Study/SubjectDetails/SubjectPath; authored data and inert IO/theme adapters; offscreen Qt; not hosted shell.",
+      "native_controls": {
+        "/usr/share/omarchy/shell/Ui/Button.qml": "fda48672cc11dba109acea1cc98eb4b29746e5ce09f90a47f487b776ff99e799",
+        "/usr/share/omarchy/shell/Ui/TextField.qml": "b3ad72f56f86c2df164e347d64205c099f77c5fb90933fabea3b0f2a9e2b3778"
+      }
+    }
+  ]
+}

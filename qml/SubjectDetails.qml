@@ -378,42 +378,15 @@ ColumnLayout {
     showMeaning: root.showMeaning && root.sectionVisible("context")
     showReading: root.showReading && root.sectionVisible("context")
   }
-  Label {
-    text: "Made from"
-    font.bold: true
-    visible: root.showMeaning && root.sectionVisible("context") && root.subject && root.subject.components.length > 0
-  }
-  Flow {
+  SubjectPath {
     Layout.fillWidth: true
-    spacing: Style.space(6)
-    visible: root.showMeaning && root.sectionVisible("context")
-    Repeater {
-      model: root.subject ? root.subject.components : []
-      Action {
-        required property var modelData
-        text: modelData.characters + " · " + modelData.meaning
-        enabled: root.editable
-        onClicked: root.controller.showSubject(modelData.id)
-      }
-    }
-  }
-  Label {
-    text: "Related subjects"
-    font.bold: true
-    visible: root.showMeaning && root.showReading && root.sectionVisible("context") && root.subject && root.subject.related.length > 0
-  }
-  Flow {
-    Layout.fillWidth: true
-    spacing: Style.space(6)
-    visible: root.showMeaning && root.showReading && root.sectionVisible("context")
-    Repeater {
-      model: root.subject ? root.subject.related : []
-      Action {
-        required property var modelData
-        text: modelData.characters + " · " + modelData.meaning
-        enabled: root.editable
-        onClicked: root.controller.showSubject(modelData.id)
-      }
+    subject: root.subject
+    showMeaning: root.showMeaning && root.sectionVisible("context")
+    showReading: root.showReading && root.sectionVisible("context")
+    editable: root.editable
+    openEnabled: root.editable && root.controller.opened && root.controller.service && root.controller.service.ready && !root.controller.service.locked
+    onRequestSubject: function (subjectId) {
+      root.controller.showSubject(subjectId)
     }
   }
   ColumnLayout {
