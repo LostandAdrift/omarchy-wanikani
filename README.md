@@ -4,7 +4,7 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.2.0 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.1 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
@@ -50,6 +50,8 @@ Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wa
 
 For scripts and agents, `python3 tools/wanikani.py status --json` returns a versioned aggregate status and `doctor --json` checks local dependencies and shell integration. The helper can open an overview or deliberately begin study; it never supplies answers. See [agent and command-line support](docs/AGENT_SUPPORT.md) for commands, privacy boundaries, exit codes, and recovery guidance.
 
+An optional [agent playbook](skills/omarchy-wanikani/SKILL.md) ships in the repository. Point your agent to it for status checks, learning views, requested study starts, and recovery guidance through the helper. Installing the Omarchy plugin does not register this skill globally. The playbook preserves your requested scope and keeps answers, credentials, and private database contents out of routine agent support.
+
 ## How study works
 
 **Reviews** and **Lessons** have separate overview screens and independently saved sessions. Today shows both actions and any saved position. Switching between them preserves the current question, draft and mistake counts for each. Direct commands still start or resume their requested mode.
@@ -63,6 +65,8 @@ The lesson overview lets you browse confirmed unlocked subjects by type, preview
 Vocabulary pronunciation has visible replay/stop and download/error states. An explicitly requested recording can download without holding up answers. Settings includes separate lesson/review autoplay and **Test selected voice**, using a safe learned sample. A downloaded alternate voice remains usable when the preferred voice is missing offline. Recordings stop when the surface, subject, account or study question changes.
 
 **Listen** offers five familiar words using cached WaniKani pronunciation. The first side has only audio; reveal the word, meanings, and readings before choosing **Got it** or **Again**. Listening has its own local intervals and saved session, with five new listening words per day. It never submits a WaniKani review or changes your account schedule. Undo can revise the last local rating; playing or revealing a new word still counts toward that day's exposure limit. Words in unfinished graded work stay protected. By default, words due on WaniKani within 24 hours are also excluded. Autoplay follows explicit practice actions; returning to a saved session stays silent.
+
+When eligible recordings are missing, Listen offers **Prepare recordings** for a batch of up to five. This explicit download shows aggregate progress while keeping the words hidden. It respects your content access and media budget, and does not start a session, play audio, or use the daily listening allowance. **Cancel preparation** stops further downloads; completed cache files remain usable. Choose **Start listening** when you are ready. Preparation is available in the native Listen view; the CLI can open that view but cannot start the download.
 
 Sessions contain five subjects by default. Lessons introduce the subjects before their quiz. Reviews test each required part; wrong answers retain their mistake counts until the subject is finished. Romaji converts to kana locally, and existing Japanese input methods are supported.
 

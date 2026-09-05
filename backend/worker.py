@@ -28,6 +28,8 @@ class Worker:
         self.request_budget = RequestBudget()
         self.job_lock = threading.Lock()
         self.audio_job_lock = threading.Lock()
+        self.preparation_lock = threading.Lock()
+        self.preparation_job = None
         self.account_job = False
         self.snapshot_lock = threading.Lock()
         self.snapshot_sequence = 0
@@ -195,6 +197,86 @@ class Worker:
         return {"subject_id": args.get("subject_id"), "context": args.get("context", "details"),
             "session_id": args.get("session_id"), "revision": args.get("revision"),
             "voice_actor_id": args.get("voice_actor_id")}
+
+    def prepare_listening(self, request_id):
+        """Explicit cache preparation shares media ownership, never study state."""
+        if self.account_job:
+            raise UserError("Wait for account connection before preparing recordings.", "busy")
+        if not self.audio_job_lock.acquire(blocking=False):
+            self.reply_error(request_id, UserError("Another recording is downloading. Try again shortly.", "busy"))
+            return
+        engine = self.engine
+        cancelled = threading.Event()
+        job = (request_id, cancelled)
+        try:
+            synchronizer = self.sync or Synchronizer(engine, None, self.directory / "media")
+            with self.preparation_lock:
+                self.preparation_job = job
+        except Exception:
+            self.audio_job_lock.release()
+            raise
+
+        def progress(value):
+            if not self.stopping:
+                # Job progress is neutral aggregate data. It never carries a
+                # subject, URL, recording handle or account identifier.
+                safe = self.preparation_result({"status": "preparing", **value})
+                self.emit({"v": 1, "event": "listening_preparation", "data": {"job_id": request_id, **safe}})
+
+        def release():
+            with self.preparation_lock:
+                if self.preparation_job is job:
+                    self.preparation_job = None
+            self.audio_job_lock.release()
+
+        def run():
+            try:
+                from wanikani.listening_preparation import prepare
+                progress({"status": "preparing", "downloaded": 0, "already_cached": 0, "failed": 0,
+                    "skipped_budget": 0, "cancelled": False, "complete": False})
+                value = self.preparation_result(prepare(synchronizer,
+                    cancelled=lambda: self.stopping or cancelled.is_set(), progress=progress))
+                if not self.stopping:
+                    self.emit({"v": 1, "id": request_id, "ok": True, "data": value})
+            except UserError as error:
+                if not self.stopping:
+                    self.reply_error(request_id, error)
+            except Exception:
+                if not self.stopping:
+                    self.reply_error(request_id, UserError("The recordings could not be prepared. Try again when connected.", "audio_error"))
+            finally:
+                release()
+                if not self.stopping and self.engine is engine:
+                    self.readiness.refresh(force=True)
+        try:
+            threading.Thread(target=run, daemon=True, name="wanikani-listening-cache").start()
+        except Exception:
+            release()
+            raise
+
+    @staticmethod
+    def preparation_result(value):
+        counts = ("downloaded", "already_cached", "failed", "skipped_budget")
+        statuses = ("preparing", "ready", "partial", "cancelled", "unavailable")
+        reasons = ("", "ready", "needs_download", "saved_session", "offline", "no_candidates", "daily_limit",
+            "incomplete", "budget", "cancelled", "permission_changed", "download_failed", "cache_cleanup")
+        if (not isinstance(value, dict) or value.get("status") not in statuses
+                or value.get("reason", "") not in reasons
+                or any(type(value.get(key, 0)) is not int or not 0 <= value.get(key, 0) <= 5 for key in counts)
+                or sum(value.get(key, 0) for key in counts) > 5
+                or any(type(value.get(key, False)) is not bool for key in ("cancelled", "complete"))):
+            raise UserError("The recording preparation returned an unreadable result. Check availability before trying again.", "audio_error")
+        return {"status": value["status"], "reason": value.get("reason", ""),
+            **{key: value.get(key, 0) for key in counts},
+            "cancelled": value.get("cancelled", False), "complete": value.get("complete", False)}
+
+    def cancel_listening_preparation(self, job_id=None):
+        with self.preparation_lock:
+            job = self.preparation_job
+            matches = bool(job and (job_id is None or job[0] == job_id))
+            if matches:
+                job[1].set()
+            return matches
 
     def reply_error(self, rid, error):
         self.emit({"v": 1, "id": rid, "ok": False, "error": {"code": error.code, "message": str(error)}})
@@ -388,7 +470,24 @@ class Worker:
                 except UserError as error:
                     status = {"available": 0, "due": 0, "new_remaining": None, "saved": None,
                         "settings": {}, "complete": False, "local_only": True, "message": str(error)}
+                try:
+                    from wanikani.listening_preparation import availability
+                    status["preparation"] = availability(self.engine)
+                except Exception:
+                    # An optional preflight failure must not block a cached
+                    # listening session that is otherwise safe to resume.
+                    status["preparation"] = {"ready": min(5, status["available"]), "needs_download": 0,
+                        "complete": False, "reason": "unavailable", "message": "Recording preparation could not be checked. Reload to try again."}
                 result = {"status": status, "session": listening.view(self.engine)}
+        elif method == "listen_prepare":
+            if args:
+                raise UserError("Recording preparation takes no subject, URL or other arguments.")
+            self.prepare_listening(rid)
+            return
+        elif method == "listen_prepare_cancel":
+            if set(args) != {"job_id"} or not isinstance(args["job_id"], str) or not 1 <= len(args["job_id"]) <= 160:
+                raise UserError("Choose the current recording preparation to cancel.")
+            result = {"cancelled": self.cancel_listening_preparation(args["job_id"])}
         elif method == "listen":
             from wanikani import listening
             result = listening.command(self.engine, rid, args.get("action"), args)
@@ -501,7 +600,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen", "listen_media", "progress", "learning_insights", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "progress", "learning_insights", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):
@@ -552,6 +651,7 @@ def main():
                 worker.reply_error(str(request.get("id", "")) if isinstance(request, dict) else "", UserError("An internal operation failed; saved work was retained.", "internal_error"))
     finally:
         worker.stopping = True
+        worker.cancel_listening_preparation()
         worker.readiness.stop()
         if worker.sync:
             worker.sync.cancelled.set()

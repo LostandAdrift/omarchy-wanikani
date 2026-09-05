@@ -29,6 +29,7 @@ Item {
   property var listenStatus: null
   property bool listenBusy: false
   property string listenError: ""
+  property string listenPreparationNotice: ""
   property int listenSequence: 0
   readonly property string listenContext: JSON.stringify([contentAccess, snapshot.last_sync, snapshot.session_revision, snapshot.pending, snapshot.attention, snapshot.state_revision])
   onListenContextChanged: invalidateListening()
@@ -72,6 +73,7 @@ Item {
     listenSession = null
     listenStatus = null
     listenBusy = false
+    listenPreparationNotice = ""
     helpReturnDetail = null
     results = []
     searchSequence++
@@ -157,6 +159,8 @@ Item {
       search(payload.text)
   }
   function close() {
+    if (service && typeof service.cancelListeningPreparation === "function")
+      service.cancelListeningPreparation()
     listenSequence++
     listenBusy = false
     navigationSequence++
@@ -173,6 +177,9 @@ Item {
       shell.hide(pluginId)
   }
   function navigate(next) {
+    if (next !== "listen" && service && typeof service.cancelListeningPreparation === "function")
+      service.cancelListeningPreparation()
+    listenPreparationNotice = ""
     listenSequence++
     listenBusy = false
     stopAudio()
@@ -444,6 +451,39 @@ Item {
         root.listenError = message || "The listening action could not be saved."
       }
       Qt.callLater(root.focusContent)
+    })
+  }
+  function prepareListening() {
+    if (!opened || view !== "listen" || listenBusy || !service || !service.ready || service.locked || service.listeningPreparationJobId)
+      return
+    stopAudio()
+    listenPreparationNotice = ""
+    var owner = service
+    var access = contentAccess
+    var navigation = navigationSequence
+    service.prepareListening(function (ok, data, message) {
+      if (!root.opened || root.view !== "listen" || root.navigationSequence !== navigation || root.service !== owner || !owner.ready || owner.locked || root.contentAccess !== access)
+        return
+      if (!ok)
+        root.listenPreparationNotice = message || "Recordings could not be prepared. Try again."
+      else {
+        var reasons = {
+          ready: "Recordings are ready. Start listening when you choose.",
+          cancelled: "Preparation stopped. Recordings already saved remain available.",
+          offline: "Connect before preparing missing recordings.",
+          budget: "Some recordings do not fit beside required study media. Use the ready words or adjust the cache limit in Settings.",
+          permission_changed: "Study or account access changed. Availability has been checked again.",
+          daily_limit: "Today's new listening allowance is used. Previously introduced words return at their local interval.",
+          saved_session: "Resume your saved listening session before preparing another batch.",
+          no_candidates: "No eligible familiar recordings were found.",
+          incomplete: "The bounded preparation pass finished. Only the recordings found were checked.",
+          download_failed: "Some recordings could not be downloaded. Try again when connected.",
+          cache_cleanup: "Interrupted cache files could not be cleaned. Check available storage."
+        }
+        var downloaded = data.downloaded || 0
+        root.listenPreparationNotice = downloaded + (downloaded === 1 ? " recording saved · " : " recordings saved · ") + (data.already_cached || 0) + " already cached. " + (reasons[data.reason] || "Check availability before trying again.")
+      }
+      root.loadListening()
     })
   }
   function playListening() {

@@ -173,7 +173,8 @@ def build(directory):
     # records the exact argv instead of importing or running Quickshell.
     behavior=behavior.replace('Quickshell.execDetached(', 'root.captureNotification(')
     handlers='\n'.join(re.search(r'(?m)^  on'+name+r'Changed:.*$',source).group(0) for name in
-        ('NotificationHydrated','Dnd','Locked','Fullscreen','Studying'))
+        ('NotificationHydrated','Dnd','Fullscreen','Studying'))
+    handlers += '\n' + re.search(r'(?ms)^  onLockedChanged: \{.*?^  \}',source).group(0)
     context=re.search(r'(?m)^  readonly property string contentAccess:.*$',source).group(0)
     context_handler=re.search(r'(?ms)^  onContentAccessChanged: \{.*?^  \}',source).group(0)
     timers=[]
@@ -199,9 +200,11 @@ Item {
  property string pluginId: "authored-plugin"
  property var pending: []
  property var notifications: []
+ property var listeningPreparationProgress: null
  readonly property bool deadlineRunning: rhythmDeadline.running
  function stopTimers() { rhythmDelay.stop();rhythmDeadline.stop() }
  function refreshAmbient() {}
+ function cancelListeningPreparation() {}
  function request(method,args,callback) { pending=pending.concat([{method:method,args:args,callback:callback}]) }
  function captureNotification(args) { notifications=notifications.concat([args]) }
 '''+context+'\n'+context_handler+'\n'+handlers+'\n'+behavior+'\n'+'\n'.join(timers)+'\n}\n')

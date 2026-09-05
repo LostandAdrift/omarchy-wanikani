@@ -37,13 +37,21 @@ Item {
   property var stateOrder: SessionState.initial()
   property int pendingCount: 0
   property var rhythm: null
+  property string listeningPreparationJobId: ""
+  property string listeningPreparationContext: ""
+  property var listeningPreparationProgress: null
+  property bool listeningPreparationCancelling: false
   property bool rhythmFetching: false
   property bool rhythmDirty: true
   property string rhythmEvent: "startup"
   readonly property bool notificationHydrated: !!notificationsService && notificationsService.settingsLoaded === true
   onNotificationHydratedChanged: considerNotification()
   onDndChanged: considerNotification()
-  onLockedChanged: considerNotification()
+  onLockedChanged: {
+    considerNotification()
+    if (locked)
+      cancelListeningPreparation()
+  }
   onFullscreenChanged: considerNotification()
   onStudyingChanged: considerNotification()
   property int ambientIndex: 0
@@ -55,6 +63,8 @@ Item {
   property double ambientFetchedAt: 0
   readonly property string contentAccess: JSON.stringify([snapshot.demo === true, snapshot.username || "", snapshot.max_level || 0, snapshot.session_epoch || ""])
   onContentAccessChanged: {
+    cancelListeningPreparation()
+    listeningPreparationProgress = null
     ambientItems = []
     rhythm = null
     considerNotification("startup")
@@ -182,6 +192,11 @@ Item {
       snapshot = Object.assign({}, snapshot, {
         sync_progress: message.data
       })
+      return
+    }
+    if (message.event === "listening_preparation") {
+      if (message.data && message.data.job_id === listeningPreparationJobId && contentAccess === listeningPreparationContext && ready)
+        listeningPreparationProgress = message.data
       return
     }
     if (message.id && callbacks[message.id]) {
@@ -327,6 +342,43 @@ Item {
   }
   function saveSettings(values) {
     request("settings", values)
+  }
+
+  function prepareListening(callback) {
+    if (!ready || locked || listeningPreparationJobId) {
+      if (callback)
+        callback(false, null, "Recording preparation is unavailable while another recording is downloading or the desktop is locked.")
+      return
+    }
+    var access = contentAccess
+    listeningPreparationContext = access
+    listeningPreparationCancelling = false
+    listeningPreparationProgress = {
+      status: "preparing",
+      downloaded: 0,
+      already_cached: 0,
+      failed: 0,
+      skipped_budget: 0
+    }
+    var job = request("listen_prepare", {}, function (ok, data, message) {
+      if (root.listeningPreparationJobId !== job)
+        return
+      root.listeningPreparationJobId = ""
+      root.listeningPreparationCancelling = false
+      root.listeningPreparationProgress = ok && root.contentAccess === access ? data : null
+      if (callback)
+        callback(ok && root.contentAccess === access, data, root.contentAccess === access ? message : "Account access changed. Check listening again.")
+    })
+    listeningPreparationJobId = job
+  }
+
+  function cancelListeningPreparation() {
+    if (!ready || !listeningPreparationJobId || listeningPreparationCancelling)
+      return
+    listeningPreparationCancelling = true
+    request("listen_prepare_cancel", {
+      job_id: listeningPreparationJobId
+    })
   }
 
   Process {

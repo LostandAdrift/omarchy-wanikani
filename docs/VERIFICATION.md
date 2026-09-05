@@ -1,5 +1,15 @@
 # Verification and release qualification
 
+## September 5 overnight 0.2.1 source checkpoint
+
+Frozen tree `83e71ea71f60c89e4549c3a4e93056ca2512ba90` passed **812 tests in 246.998 seconds** from `/tmp/wanikani-milestone-3-release-r2` (log `/tmp/wanikani-milestone-3-release-r2-tests.log`). The first archive found one hardcoded 0.2.0 footer expectation; the repaired test now compares the rendered version against the manifest. Runtime files are identical between those archives. This checkpoint adds deliberate preparation of up to five familiar recordings, cooperative cancellation and count-only progress, fresh post-download readiness, and the optional repository-bundled operating skill.
+
+The preparation regressions cover exact cache limits changing during a read, retained files disappearing before completion, account/permission changes, shared cache ownership, responsive concurrent answers, bounded downloads and redacted messages. Preparation creates no listening session, exposure, rating or graded submission. Twenty-five component/adapter Qt outcomes cover deliberate-only actions, cancellation, busy/retry controls, worker restart and stale completion after closing/reopening or navigating away/back.
+
+The same runtime passed manifest validation, **113 core Qt checks**, and static lint of 34 QML files with zero errors. The linter retains **463 warnings** from dynamic/host-bound references and style diagnostics; this is not a warning-free build. Logs and eight authored narrow light/dark preflight/progress/result captures are in `/home/martin/.cache/tmp/wanikani-milestone-3-static-qa-3f0oe8gy`. Those captures use actual Listening/Card/Label/Theme source with inert Basic buttons and palette/controller adapters; they establish layout, not installed-shell or audible playback behavior.
+
+The read-only host check at approximately 09:29 UTC still returned `locked:true`, `pending:true`, `sessionLocked:false`, and `lock-pending: screen-stabilizing`. No unlock, idle configuration change, installation or shell restart was attempted. Installed production remains `e5cb4e6`. Full hosted qualification, audible Japanese playback and the fourteen-day daily-use gate remain outstanding.
+
 ## September 5 overnight 0.2.0 source checkpoint
 
 The frozen release tree `a2152f8fa8866b2fbedfb2d1a8bc4e12686640e4` passed all **754 tests in 234.616 seconds** from `/tmp/wanikani-milestone-2-release-r2`. The first candidate found one outdated inert TextField fixture; it was repaired before the complete rerun. The same runtime files passed QML lint (exit 0/no errors), 113 core Qt checks, and manifest validation. This checkpoint includes separate lesson discovery, local listening, Study rhythm, local Activity, input palette/accessibility improvements and the documented JSON CLI.

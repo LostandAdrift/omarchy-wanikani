@@ -232,6 +232,7 @@ Item {
   property bool moreNavigation: false
   property int listenSequence: 0
   property bool listenBusy: false
+  property string listenPreparationNotice: ""
   property string view: "dashboard"
   property string contentAccess: "authored-account"
   property int navigationSequence: 0

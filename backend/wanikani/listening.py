@@ -19,6 +19,7 @@ from .common import UserError, accessible_subject, epoch, stamp
 from .api import user_id
 from .grading import KANA, reading, validate_subject_answers
 from .media_files import available_file
+from .media_plan import valid_url
 from . import progress
 
 
@@ -135,7 +136,7 @@ def _scheduled(started_at, available_at, burned_at, now, avoid_due_24h):
     return started
 
 
-def _eligible(engine, subject_id, protection, settings, clip_url=None, pronunciation=None):
+def _eligible(engine, subject_id, protection, settings, clip_url=None, pronunciation=None, *, require_cached=True):
     subject = engine.store.subject(subject_id)
     if not accessible_subject(subject, engine.max_level()) or subject.get("object") not in ("vocabulary", "kana_vocabulary"):
         return None
@@ -187,24 +188,24 @@ def _eligible(engine, subject_id, protection, settings, clip_url=None, pronuncia
             continue
         url = clip.get("url")
         sound = _pronunciation(clip["metadata"].get("pronunciation"))
-        if not isinstance(url, str) or not url.startswith("https://") or not sound or sound in sounds:
+        if not valid_url(url) or not sound or sound in sounds:
             continue
         if clip_url is not None and (url != clip_url or sound != pronunciation):
             continue
         rows = engine.store.rows("SELECT path FROM media WHERE url=?", (url,))
         path = available_file(engine.store.path.parent / "media", rows[0][0]) if rows else None
-        if path:
-            candidates.append({"url": url, "path": str(path), "pronunciation": sound,
+        if path or not require_cached:
+            candidates.append({"url": url, "path": str(path) if path else None, "pronunciation": sound,
                 "actor": clip["metadata"].get("voice_actor_id"),
                 "voice": progress._text(clip["metadata"].get("voice_actor_name"), 80) or "Recorded voice"})
     if not candidates:
         return None
     preferred = engine.settings()["voice_actor_id"]
-    candidates.sort(key=lambda clip: clip["actor"] != preferred)
+    candidates.sort(key=lambda clip: (not bool(clip["path"]), clip["actor"] != preferred))
     return {"subject_id": subject_id, "characters": characters, "started_at": started, "clip": candidates[0]}
 
 
-def _pool(engine, context, settings, subject_ids=None):
+def _pool(engine, context, settings, subject_ids=None, *, require_cached=True):
     protection = _protection(engine)
     if subject_ids is None:
         rows = engine.store.rows("""SELECT CAST(s.id AS INTEGER),json_extract(a.body,'$.data.started_at'),
@@ -257,11 +258,86 @@ def _pool(engine, context, settings, subject_ids=None):
             complete = False
             break
         checked += 1
-        item = _eligible(engine, sid, protection, settings)
+        item = _eligible(engine, sid, protection, settings) if require_cached else \
+            _eligible(engine, sid, protection, settings, require_cached=False)
         if item:
             item["record"] = record
             result.append(item)
     return result, complete
+
+
+def _preparation_context(engine):
+    """Capture grant and local selection inputs beyond durable skill identity."""
+    context = _context(engine)
+    subscription = engine.user().get("subscription")
+    if not isinstance(subscription, dict):
+        raise UserError("Refresh your account access before preparing recordings.", "access_restricted")
+    day, introduced = _day(engine, context)
+    expiry = epoch(subscription.get("period_ends_at"))
+    preferences = engine.settings()
+    return {"skill": context, "subscription": json.dumps(subscription, sort_keys=True),
+        "expired": subscription.get("type") == "recurring" and (expiry is None or expiry <= engine.now()),
+        "maximum": engine.max_level(), "day": day, "introduced": sorted(introduced),
+        "settings": _settings(engine), "voice": preferences["voice_actor_id"],
+        "cache_limit_mb": preferences["cache_limit_mb"]}
+
+
+def preparation_candidates(engine, limit=LIMIT):
+    """Read-only internal descriptors for one batch, never an IPC projection.
+
+    Preparation and cached session creation share all content authorization.
+    Missing files are permitted here only; this does not introduce/hear words.
+    """
+    if type(limit) is not int or not 1 <= limit <= LIMIT:
+        raise UserError("Prepare between one and five recordings.")
+    with engine.store.lock:
+        context = _preparation_context(engine)
+        saved = _session(engine)
+        if saved and saved["context"] == context["skill"] and saved["phase"] != "complete":
+            return {"context": context, "items": [], "complete": True, "reason": "saved_session"}
+        pool, complete = _pool(engine, context["skill"], context["settings"], require_cached=False)
+        # Fill the same usable cached pool before downloading additional words.
+        # Preserve local due/pinned/recent order within each availability group.
+        pool.sort(key=lambda item: not bool(item["clip"]["path"]))
+        introduced = set(context["introduced"])
+        remaining = max(0, FRESH_LIMIT - len(introduced))
+        items, sounds, subjects = [], set(), set()
+        daily_limited = False
+        for item in pool:
+            sound, sid = item["clip"]["pronunciation"], item["subject_id"]
+            if sound in sounds or sid in subjects:
+                continue
+            fresh = not item["record"] and sid not in introduced
+            if fresh and remaining <= 0:
+                daily_limited = True
+                continue
+            remaining -= int(fresh)
+            items.append(item)
+            sounds.add(sound)
+            subjects.add(sid)
+            if len(items) == limit:
+                break
+        reason = "incomplete" if not complete else "daily_limit" if not items and daily_limited else "no_candidates" if not items else ""
+        return {"context": context, "items": items, "complete": complete, "reason": reason}
+
+
+def preparation_permitted(engine, context, item, *, require_cached=False):
+    """Revalidate one selected descriptor without changing local study state."""
+    with engine.store.lock:
+        try:
+            if _preparation_context(engine) != context:
+                return False
+            saved = _session(engine)
+            if saved and saved["context"] == context["skill"] and saved["phase"] != "complete":
+                return False
+            sid, clip = item["subject_id"], item["clip"]
+            current_record = _record(engine.store.get(_card_key(context["skill"], sid)))
+            if current_record != item["record"] or (current_record and epoch(current_record["next_at"]) > engine.now()):
+                return False
+            return _eligible(engine, sid, _protection(engine), context["settings"],
+                clip["url"], clip["pronunciation"], require_cached=require_cached) is not None
+        except UserError:
+            return False
 
 
 def _session(engine):

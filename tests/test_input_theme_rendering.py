@@ -3,6 +3,7 @@
 Backend, audio, notification and unrelated presentation adapters are inert.
 Native TextField, NumberField and Button are copied without modifications.
 """
+import json
 import os
 from pathlib import Path
 import shutil
@@ -178,7 +179,7 @@ Rectangle {
       toggles[0].forceActiveFocus();keyClick(Qt.Key_Space)
       compare(backend.writes[0],{method:"settings",args:{autoplay_listening:false}})
       verify(allItems(page).some(function(item){return typeof item.text==="string"&&item.text.indexOf("Resuming a saved session")>=0}))
-      verify(allItems(page).some(function(item){return typeof item.text==="string"&&item.text.indexOf("0.2.0")>=0}))
+      verify(allItems(page).some(function(item){return typeof item.text==="string"&&item.text.indexOf(@VERSION@)>=0}))
       compare(owner.actions.length,0)
     }
     function test_rhythm_times_windows_quiet_fields_and_numbers() {
@@ -229,7 +230,8 @@ class InputThemeRenderingTests(unittest.TestCase):
             for name in ('Button','TextField','NumberField'):
                 shutil.copyfile(NATIVE/(name+'.qml'),ui/(name+'.qml'))
             (ui/'BorderSurface.qml').write_text('import QtQuick\nRectangle {property var borderSpec:({});property real leftPadding:0;property real rightPadding:0;property real topPadding:0;property real bottomPadding:0}\n')
-            (directory/'tst_InputTheme.qml').write_text(QML)
+            version=json.loads((ROOT/'manifest.json').read_text())["version"]
+            (directory/'tst_InputTheme.qml').write_text(QML.replace('@VERSION@',json.dumps(version)))
             result=subprocess.run([str(RUNNER),'-input',str(directory),'-import',str(directory)],capture_output=True,text=True,timeout=35,
                 env={**os.environ,'QT_QPA_PLATFORM':'offscreen','QT_QPA_PLATFORMTHEME':'','QT_QUICK_CONTROLS_STYLE':'Basic'})
         output=result.stdout+result.stderr

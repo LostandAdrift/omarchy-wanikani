@@ -1,6 +1,6 @@
 # Prepare five recordings
 
-Accepted contract for the next bounded feature after the 0.2.0 verification checkpoint. **This document describes proposed work; preparation is not implemented by this document.** The existing listening session, pronunciation player and media cache remain the foundation.
+Implemented source contract for the bounded recording-preparation feature after the 0.2.0 checkpoint. The existing listening session, pronunciation player and media cache remain the foundation. Source and installed verification are recorded separately in [the overnight log](OVERNIGHT_WORK.md).
 
 ## Learner experience
 
@@ -25,11 +25,11 @@ Reuse the listening selector rather than introducing a second learning policy. T
 
 Use the current bounded listening scan: at most 12,000 metadata candidates and 256 hydrated eligible candidates, with cheap schedule exclusions applied before consuming the hydration budget. Stop after enough authorized distinct candidates are selected. Carry the existing honest `complete` result through the preflight. No scan is added to answer/advance processing or periodic full snapshots; preparation availability belongs to the visible Listen preflight.
 
-Capture account identity, durable session epoch, reset generation and current subscription/grant context. The existing listening `_context()` covers identity, epoch and reset; preparation must additionally compare the grant/type/expiry and effective access. Recheck current eligibility under the store lock before every clip and after each network read. Graded sessions, assignments, outbox and the clock may change while the network runs even when account switches are gated. Stop on an invalidated context; a stale result never supplies subject content or playable media to the UI.
+Capture account identity, durable session epoch, reset generation and current subscription/grant context, voice selection and cache limit. The existing listening `_context()` covers identity, epoch and reset; preparation must additionally compare the grant/type/expiry and effective access. Recheck current eligibility under the store lock before every clip and after each network read. Graded sessions, assignments, outbox and the clock may change while the network runs even when account switches are gated. Stop on an invalidated context; a stale result never supplies subject content or playable media to the UI.
 
-## Proposed interfaces
+## Interfaces
 
-These are **new signatures**, not claims about existing callable helpers. Private candidate descriptors stay inside the backend.
+Private candidate descriptors stay inside the backend. These helpers are implemented in the listening and listening-preparation modules.
 
 ```python
 # listening.py: shared, read-only authorization and local scheduling boundary.
@@ -53,7 +53,7 @@ def prepare(sync, *, cancelled=lambda: False, progress=lambda value: None):
 
 Extend the existing `listen_state.status` with `preparation: {ready, needs_download, complete, reason, message}` while preserving current fields. This object distinguishes preparation coverage from the existing cached-pool `complete` field. `reason` is an explicit state such as `ready`, `needs_download`, `saved_session`, `offline`, `no_candidates`, `daily_limit` or `incomplete`; numbers alone cannot describe the empty state.
 
-Add worker `listen_prepare` with an empty arguments object. Its ordinary request ID receives the final response; a separate opaque job ID identifies count-only progress and cancellation. A matching `listen_prepare_cancel({job_id})` stops this preparation only. Reject unknown arguments rather than silently allowing future arbitrary media selection. Example final response:
+Add worker `listen_prepare` with an empty arguments object. Its ordinary request ID receives the final response; the same opaque request ID identifies count-only progress and cancellation as `job_id`. A matching `listen_prepare_cancel({job_id})` stops this preparation only. Reject unknown arguments rather than silently allowing future arbitrary media selection. Example final response:
 
 ```json
 {
@@ -68,14 +68,14 @@ Add worker `listen_prepare` with an empty arguments object. Its ordinary request
 }
 ```
 
-Here `complete` means the selected bounded preparation pass finished without cancellation, expiry or an incomplete plan; it does not mean all five recordings are ready. `status` is `ready`, `partial`, `cancelled` or `unavailable`. Count each selected word once; no failure count is inferred for unattempted words. The UI obtains fresh readiness after completion instead of treating `downloaded` as current study permission.
+Here `complete` means the selected bounded preparation pass finished without cancellation, expiry or an incomplete plan; it does not mean all five recordings are ready. `status` is `ready`, `partial`, `cancelled` or `unavailable`. Count each selected word once; no failure count is inferred for unattempted words. Before reporting `ready`, the backend rechecks that selected authorized recordings still exist. Download counts remain historical operation counts if another cache owner trimmed files after placement. The UI obtains fresh readiness after completion instead of treating `downloaded` as current study permission.
 
 ## Existing helpers and ownership
 
 | Existing source and signature | Reuse and limit |
 | --- | --- |
-| `listening.status(engine)` / `listening.view(engine)` | Keep existing cached readiness and saved-session projection. Neither currently exposes preparation candidates. |
-| `listening._pool(engine, context, settings, subject_ids=None)` / `_eligible(engine, subject_id, protection, settings, clip_url=None, pronunciation=None)` | Private policy to refactor narrowly into shared selection. The latter currently requires a usable cached file. Do not duplicate its assignment, sound protection and outbox checks in the new module. |
+| `listening.status(engine)` / `listening.view(engine)` | Keep existing cached readiness and saved-session projection. Preparation readiness is added only by the visible `listen_state` adapter. |
+| `listening._pool(engine, context, settings, subject_ids=None)` / `_eligible(engine, subject_id, protection, settings, clip_url=None, pronunciation=None)` | Shared private policy. Existing callers require a usable cached file; only preparation opts into the explicit `require_cached=False` path. Do not duplicate its assignment, sound protection and outbox checks in the new module. |
 | `listening.media(engine, handle)` | **Do not call.** It durably records exposure before returning a playable URI; cache preparation is not hearing a word. |
 | `pronunciation.status(engine, subject_id, context="details", session_id=None, revision=None, voice_actor_id=None)` | Existing explicit lookup/study status only. Details authorization deliberately permits more than automatic listening. It is not the preparation eligibility gate. |
 | `pronunciation.sample(engine, voice_actor_id=None)` | Learned/unprotected voice test selection, but not the full listening schedule/outbox policy. It is not the preparation selector. |
@@ -87,10 +87,10 @@ Here `complete` means the selected bounded preparation pass finished without can
 | `Synchronizer.cache_media()` / `trim_media()` / `clear_media()` | Already share the per-Store reentrant media lock. Leave automatic prefetch and its failure backoff separate from this explicit operation. |
 | `Worker.prepare_pronunciation(request_id, args)` | Existing asynchronous audio-job lifecycle: one recording job, responsive answers, redacted errors and readiness refresh. Reuse this ownership pattern; do not use the general account-sync `job()` wrapper. |
 
-There is currently **no fully public focused batch executor**. Pronunciation preparation attaches `sync._media_plan`, calls `plan._candidate(...)` and cleans interrupted files through `sync._remove_media(...)`. The smallest maintainable integration is to extract this existing cache transaction behind one internal public boundary, rather than allowing new callers to manipulate those private fields independently:
+The focused batch executor keeps cache transaction ownership inside the synchronizer. Existing pronunciation preparation retains its established behavior; the new listening caller does not manipulate private plan fields or cleanup helpers:
 
 ```python
-# sync.py: proposed focused executor, internal callers only.
+# sync.py: focused executor, internal callers only.
 def prepare_recordings(self, candidates, *, permitted,
                        cancelled=lambda: False, progress=lambda value: None):
     # candidates is bounded to five backend-created descriptors.
@@ -99,7 +99,7 @@ def prepare_recordings(self, candidates, *, permitted,
     ...
 ```
 
-This helper must not invent authorization. Listening provides its strict `permitted` check; existing pronunciation retains its own explicit context checks if migrated onto the helper. A small public `MediaPlan.focus_audio(url, subject_id, now)` method may wrap the existing private priority update. It must reject incomplete plans and invalid descriptors. Keep cleanup/temporary plan attachment inside the synchronizer and restore the previous plan in `finally`.
+This helper must not invent authorization. Listening provides its strict `permitted` check; existing pronunciation retains its own explicit context checks if migrated onto the helper. The `MediaPlan.focus_audio(url, subject_id, now)` method wraps the existing private priority update and rejects incomplete plans and invalid descriptors. Keep cleanup/temporary plan attachment inside the synchronizer and restore the previous plan in `finally`.
 
 ## Media, cancellation and lifecycle
 
@@ -113,7 +113,7 @@ Keep one eight-second soft preparation pass, including plan construction, with n
 
 Closing, locking, changing view or explicitly cancelling sets a **per-job** cancellation event. Do not set `Synchronizer.cancelled` for a panel cancellation: that event can stop unrelated account synchronization. A running network read may finish; do not begin another. Validated retained files may remain cached, but cancellation never starts playback or commits listening state. Recheck authorization before placement where possible and after IO, and never publish a stale content-bearing result.
 
-The QML adapter guards the job ID, visible route, lock state, worker readiness and account/access context. Late progress or completion may release local busy state but cannot reopen a view, initiate another request, reveal words or play audio. A worker restart abandons the job; durable valid files remain, and a fresh preflight can discover them. Preparation is never automatically restarted.
+The QML adapter guards the job ID, navigation sequence, visible route, lock state, worker readiness and account/access context. Late progress or completion may release local busy state but cannot reopen a view, initiate another request, reveal words or play audio. A worker restart abandons the job; durable valid files remain, and a fresh preflight can discover them. Preparation is never automatically restarted.
 
 ## Minimal implementation and verification
 

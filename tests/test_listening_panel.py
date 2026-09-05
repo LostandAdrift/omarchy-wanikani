@@ -217,6 +217,7 @@ Item {
  property var listenStatus: null
  property bool listenBusy: false
  property string listenError: ""
+ property string listenPreparationNotice: ""
  property int listenSequence: 0
  property int navigationSequence: 0
  property bool moreNavigation: false

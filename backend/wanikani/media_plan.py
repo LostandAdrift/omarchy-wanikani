@@ -226,6 +226,21 @@ class MediaPlan:
         if previous is None or (candidate.priority, candidate.order) < (previous.priority, previous.order):
             self.candidates[url] = candidate
 
+    def focus_audio(self, url, subject_id, now):
+        """Prioritize an authorized explicit clip below required study images.
+
+        Authorization belongs to the caller. This validates only the bounded
+        cache descriptor, and never turns an incomplete inventory into consent
+        to download or evict files. Cached chosen clips receive the same rank
+        so a later member of their preparation batch cannot displace them.
+        """
+        previous = self.candidates.get(url) if isinstance(url, str) else None
+        if (not self.complete or not valid_url(url) or type(subject_id) is not int or subject_id <= 0
+                or type(now) not in (int, float) or not math.isfinite(now)
+                or (previous is not None and previous.kind != "audio")):
+            raise ValueError("Cannot focus this recording in the current cache plan.")
+        self._candidate(url, subject_id, "audio", (1, 3, 0), now)
+
 
 def _active_subjects(store):
     active = {}

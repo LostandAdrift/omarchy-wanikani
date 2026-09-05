@@ -18,6 +18,12 @@ That is a shortened, authored example. Actual status also includes supported agg
 
 When supplied by the installed service, `learning_progress` reports the current level's `passed`, `required`, and `remaining` counts with completeness and pending/attention flags. For example, 24 passed of 27 required means three more are needed; incomplete cache data leaves the requirement unknown. `saved_sessions` exposes only review/lesson/practice presence. `panel_open` and `studying` describe native UI state. `reminders` exposes its suppression status, next opportunity, and remaining daily budget. Optional `last_sync` and `next_reviews_at` are validated ISO timestamps. These fields support both learning suggestions and an operational handoff without exposing personal study content.
 
+## Optional agent playbook
+
+The repository includes [skills/omarchy-wanikani/SKILL.md](../skills/omarchy-wanikani/SKILL.md) and its agent display metadata. It is an optional operating guide, not a plugin-development skill. An agent can read it directly from the repository to locate the installed client, check its manifest identity, use the bounded helper, and interpret local progress and recovery states.
+
+Installing or updating the Omarchy plugin does not install the skill into an agent's global configuration. Point your agent to the playbook when you want this support; permanent registration is a separate, optional host action. Existing authorization carries through: “Start five reviews” authorizes that start, while “How many reviews are due?” calls for a status read. The playbook supplies no answers, requests no credentials, and does not inspect private account databases.
+
 ## Choose a surface or deliberately begin
 
 Opening an overview does not start its study session:
@@ -50,6 +56,14 @@ python3 tools/wanikani.py resume
 ```
 
 The optional batch is a whole number from 1 to 20. Omitting it uses the plugin preference. Beginning study creates or restores durable local session state and can refresh online, including normal replay of previously completed pending work. Reviews and lessons use the native mode selection and saved-session rules. The CLI supplies no answers and acknowledges no feedback. It has no grading, automatic study, correction, forced-recovery, credential, or generic worker-command interface.
+
+## Listening and recording preparation
+
+`open listen` opens the native listening preflight. It does not play audio, prepare recordings, or begin a listening session. If familiar words need audio, the native **Prepare recordings** action downloads a bounded batch of up to five, using the account's accessible WaniKani recordings and the configured media budget. Progress shows counts without revealing the selected words. Preparation itself creates no listening session, records no exposure or rating, and submits no graded work.
+
+The learner can cancel preparation without cancelling ordinary account synchronization. Cancellation is cooperative; a file already in progress may finish, and completed files remain cached. A failed or partial preparation leaves a visible result and ready recordings can still be used. The learner explicitly chooses when to start listening afterward. Preparation does not establish that the speakers work or that the selected voice has been heard.
+
+There is currently no CLI preparation, preparation-cancellation, playback, or listening-rating command. Use `open listen` for a request to show these controls; do not invent helper arguments or bypass the helper through raw worker messages. Aggregate `listening_due` is cached availability when supplied, not the preparation job's progress or proof of audible playback. An unavailable value stays `null`.
 
 ## Synchronization and recovery
 

@@ -19,7 +19,11 @@ Rectangle {
   width: 720; height: 2200; color: Color.background
   property var screen: null
   Component { id: page; Kani.Listening { width: 350; controller: owner } }
-  QtObject { id: service; property bool ready: true; property bool locked: false }
+  QtObject { id: service; property bool ready: true; property bool locked: false
+    property string listeningPreparationJobId: ""
+    property var listeningPreparationProgress: null
+    property bool listeningPreparationCancelling: false
+  }
   QtObject {
     id: owner
     property var service: null
@@ -30,6 +34,7 @@ Rectangle {
     property var listenStatus: ({available:5,new_remaining:5,complete:true,settings:{avoid_due_24h:true},saved:null})
     property bool listenBusy: false
     property string listenError: ""
+    property string listenPreparationNotice: ""
     property string audioContext: ""
     property string audioState: ""
     property string audioNotice: ""
@@ -223,7 +228,7 @@ class ListeningRenderingTests(unittest.TestCase):
             for name in ("Listening.qml", "Card.qml", "Label.qml", "Theme.mjs"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
             (qml / "Action.qml").write_text('import QtQuick\nimport QtQuick.Controls\nButton {\n'
-                'property bool selected: false\nproperty string accessibleName: text\n'
+                'property bool selected: false\nproperty string accessibleName: text\nproperty string accessibleHint: ""\n'
                 'property color surfaceColor: "white"\nproperty color textColor: "black"\n'
                 'Accessible.name: accessibleName\nAccessible.ignored: !visible\n}\n')
             common = directory / "qs" / "Commons"

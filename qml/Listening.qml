@@ -9,7 +9,10 @@ ColumnLayout {
   readonly property var session: controller.listenSession || null
   readonly property var status: controller.listenStatus || ({})
   readonly property bool interactive: visible && controller.opened && controller.service && controller.service.ready && !controller.service.locked
-  readonly property bool busy: controller.listenBusy === true
+  readonly property bool preparing: !!(controller.service && controller.service.listeningPreparationJobId)
+  readonly property var preparation: status.preparation || ({})
+  readonly property var preparationProgress: controller.service && controller.service.listeningPreparationProgress || ({})
+  readonly property bool busy: controller.listenBusy === true || preparing
   readonly property bool complete: !!session && session.phase === "complete"
   readonly property bool revealed: !!session && session.phase === "revealed" && !session.unavailable
   readonly property var subject: interactive && revealed && session.subject && typeof session.subject.characters === "string" ? session.subject : null
@@ -17,6 +20,8 @@ ColumnLayout {
   readonly property string cardKey: session ? String(session.id) + ":" + String(session.index) + ":" + String(session.media_handle || "") : ""
   readonly property string contentAccess: controller.contentAccess || ""
   readonly property bool saved: !!status.saved && status.saved.phase !== "complete"
+  readonly property int batchSize: Math.min(5, Math.max(1, status.available || 5))
+  readonly property int preparationSize: (preparation.ready || 0) + (preparation.needs_download || 0)
   readonly property bool playing: controller.audioContext === "listening" && controller.audioState === "playing"
   readonly property bool loadingAudio: controller.audioContext === "listening" && controller.audioState === "loading"
   readonly property string audioNotice: controller.audioContext === "listening" ? controller.audioNotice || "" : ""
@@ -143,7 +148,7 @@ ColumnLayout {
       Label {
         objectName: "listeningAvailability"
         Layout.fillWidth: true
-        text: root.saved ? "Your listening session is saved, separately from lessons and reviews." : root.busy ? "Checking familiar recordings…" : (root.status.available || 0) > 0 ? (root.status.complete === false ? "At least " : "") + root.status.available + " familiar recordings ready · " + (root.status.new_remaining || 0) + " new words left today" : root.status.new_remaining === 0 ? "Today's five new listening words are complete. Due local listening words will return at their next interval." : root.status.message || "Refresh your account and download vocabulary audio to begin. Learned words with cached recordings will appear here."
+        text: root.saved ? "Your listening session is saved, separately from lessons and reviews." : root.preparing ? "Preparing your next listening break…" : root.busy ? "Checking familiar recordings…" : (root.status.available || 0) > 0 ? (root.status.complete === false ? "At least " : "") + root.status.available + " familiar recordings ready · " + (root.status.new_remaining || 0) + " new words left today" : root.status.new_remaining === 0 ? "Today's five new listening words are complete. Due local listening words will return at their next interval." : root.preparation.message || root.status.message || "Refresh your account and download vocabulary audio to begin. Learned words with cached recordings will appear here."
         secondary: true
       }
       Flow {
@@ -151,7 +156,7 @@ ColumnLayout {
         spacing: Style.space(8)
         Action {
           objectName: "listeningStart"
-          text: root.saved ? "Resume listening" : "Listen to five"
+          text: root.saved ? "Resume listening" : "Listen to " + root.batchSize + (root.batchSize === 1 ? " word" : " words")
           enabled: root.interactive && !root.busy && (root.saved || (root.status.available || 0) > 0)
           onClicked: root.act("start", {})
         }
@@ -426,7 +431,7 @@ ColumnLayout {
         spacing: Style.space(8)
         Action {
           objectName: "listeningAnother"
-          text: "Another five"
+          text: "Listen to " + root.batchSize + " more"
           enabled: root.interactive && !root.busy && (root.status.available || 0) > 0
           onClicked: root.act("start", {})
         }
@@ -444,6 +449,50 @@ ColumnLayout {
           onClicked: root.act("undo", {})
         }
       }
+    }
+  }
+  ColumnLayout {
+    Layout.fillWidth: true
+    visible: (!root.session || root.complete) && !root.saved
+    spacing: Style.space(10)
+    Label {
+      Layout.fillWidth: true
+      visible: (root.preparation.needs_download || 0) > 0 && !root.preparing
+      text: (root.preparation.ready || 0) + " ready · " + (root.preparation.needs_download || 0) + (root.preparation.needs_download === 1 ? " recording can be prepared. " : " recordings can be prepared. ") + "Downloads keep your listening words hidden until you start and reveal them."
+      secondary: true
+    }
+    Flow {
+      Layout.fillWidth: true
+      spacing: Style.space(8)
+      Action {
+        objectName: "listeningPrepare"
+        visible: !root.preparing && (root.preparation.needs_download || 0) > 0
+        text: "Prepare " + root.preparationSize + (root.preparationSize === 1 ? " recording" : " recordings")
+        enabled: root.interactive && !root.busy && root.preparation.reason !== "offline"
+        accessibleHint: "Cache up to five familiar recordings without starting study or playing audio"
+        onClicked: root.controller.prepareListening()
+      }
+      Action {
+        objectName: "listeningPrepareCancel"
+        visible: root.preparing
+        text: root.controller.service && root.controller.service.listeningPreparationCancelling ? "Stopping…" : "Cancel preparation"
+        enabled: root.interactive && !root.controller.service.listeningPreparationCancelling
+        onClicked: root.controller.service.cancelListeningPreparation()
+      }
+    }
+    Label {
+      objectName: "listeningPrepareProgress"
+      Layout.fillWidth: true
+      visible: root.preparing
+      text: (root.preparationProgress.downloaded || 0) + " saved · " + (root.preparationProgress.already_cached || 0) + " already cached" + (root.controller.service && root.controller.service.listeningPreparationCancelling ? ". Finishing the current file, then stopping." : ". You choose when to start listening afterward.")
+      secondary: true
+    }
+    Label {
+      objectName: "listeningPrepareNotice"
+      Layout.fillWidth: true
+      visible: !!root.controller.listenPreparationNotice
+      text: root.controller.listenPreparationNotice || ""
+      secondary: true
     }
   }
   Label {

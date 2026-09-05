@@ -515,8 +515,108 @@ class Synchronizer:
         finally:
             self._media_plan = None
 
+    def prepare_recordings(self, candidates, *, permitted, cancelled=lambda: False, progress=lambda value: None):
+        """Prepare at most five backend-selected recordings; return counts only.
+
+        ``permitted(candidate)`` supplies the caller's current learning/access
+        policy and is always evaluated under the Store lock. Neither this
+        operation nor cancellation changes listening state or account sync.
+        """
+        if (not isinstance(candidates, (list, tuple)) or len(candidates) > 5
+                or any(not isinstance(item, dict) or set(item) != {"subject_id", "url"}
+                    or type(item["subject_id"]) is not int or item["subject_id"] <= 0
+                    or not media_plan.valid_url(item["url"]) for item in candidates)
+                or len({item["subject_id"] for item in candidates}) != len(candidates)
+                or len({item["url"] for item in candidates}) != len(candidates)):
+            raise UserError("Choose up to five valid backend recording candidates.", "invalid_recordings")
+        candidates = [dict(item) for item in candidates]
+        counts = {"downloaded": 0, "already_cached": 0, "failed": 0, "skipped_budget": 0}
+        deadline = time.monotonic() + 8
+
+        def emit():
+            try:
+                progress({**counts, "completed": sum(counts.values()), "total": len(candidates)})
+            except Exception:
+                pass
+
+        def finish(reason="", complete=True):
+            stopped = reason == "cancelled"
+            ready = counts["downloaded"] + counts["already_cached"]
+            status = "cancelled" if stopped else "ready" if complete and ready == len(candidates) and candidates else "partial" if ready else "unavailable"
+            return {**counts, "status": status, "cancelled": stopped, "complete": complete,
+                "reason": reason or ("budget" if counts["skipped_budget"] else "download_failed" if counts["failed"] else "ready" if candidates else "no_candidates")}
+
+        def allowed(candidate):
+            try:
+                return permitted(dict(candidate)) is True
+            except UserError:
+                return False
+
+        def stopped():
+            if cancelled():
+                return "cancelled"
+            if time.monotonic() >= deadline:
+                return "incomplete"
+            return None
+
+        if not candidates:
+            return finish()
+        self.media_requested.set()
+        try:
+            with self.media_lock:
+                reason = stopped()
+                if reason:
+                    return finish(reason, False)
+                with self.store.lock:
+                    if not all(allowed(candidate) for candidate in candidates):
+                        return finish("permission_changed", False)
+                plan = media_plan.build(self.engine, self.media_dir, deadline, cancelled, clock=time.monotonic)
+                if not plan.complete:
+                    return finish(stopped() or "incomplete", False)
+                with self.store.lock:
+                    reason = stopped()
+                    if reason:
+                        return finish(reason, False)
+                    if not all(allowed(candidate) for candidate in candidates):
+                        return finish("permission_changed", False)
+                    for candidate in candidates:
+                        try:
+                            plan.focus_audio(candidate["url"], candidate["subject_id"], self.engine.now())
+                        except ValueError:
+                            return finish("permission_changed", False)
+                    if not self._remove_media(plan.orphans, plan):
+                        return finish("cache_cleanup", False)
+                previous = getattr(self, "_media_plan", None)
+                self._media_plan = plan
+                try:
+                    emit()
+                    for candidate in candidates:
+                        reason = stopped()
+                        if reason:
+                            return finish(reason, False)
+                        with self.store.lock:
+                            if not allowed(candidate):
+                                return finish("permission_changed", False)
+                        outcome = self.download_media(candidate["url"],
+                            permitted=lambda: allowed(candidate), cancelled=cancelled)
+                        if outcome in ("cancelled", "permission_changed"):
+                            return finish(outcome, False)
+                        key = "downloaded" if outcome == "downloaded" else "already_cached" if outcome == "cached" else "skipped_budget" if outcome == "skipped_budget" else "failed"
+                        counts[key] += 1
+                        emit()
+                        with self.store.lock:
+                            if not allowed(candidate):
+                                return finish("permission_changed", False)
+                        if cancelled():
+                            return finish("cancelled", False)
+                    return finish()
+                finally:
+                    self._media_plan = previous
+        finally:
+            self.media_requested.clear()
+
     @serialized_media
-    def download_media(self, url):
+    def download_media(self, url, *, permitted=lambda: True, cancelled=lambda: False):
         plan = getattr(self, "_media_plan", None)
         if not plan or not plan.complete or not media_plan.valid_url(url):
             return "failed"
@@ -525,9 +625,22 @@ class Synchronizer:
         if admission.status != "ready":
             return "skipped_budget" if admission.status == "skipped_budget" else "cached" if admission.status == "cached" else "failed"
         temporary = None
+        def blocked():
+            # The caller may cancel only this clip job. Existing account-sync
+            # cancellation retains its established exception behavior.
+            self.check_cancelled()
+            if cancelled():
+                return "cancelled"
+            with self.store.lock:
+                if not permitted():
+                    return "permission_changed"
+            return None
+
         # No Authorization header is attached to media or redirected elsewhere.
         try:
-            self.check_cancelled()
+            reason = blocked()
+            if reason:
+                return reason
             opener = urllib.request.build_opener(NoRedirect())
             with opener.open(urllib.request.Request(url, headers={"User-Agent": "Omarchy-WaniKani/0.1"}), timeout=10) as response:
                 mime = response.headers.get_content_type()
@@ -541,9 +654,13 @@ class Synchronizer:
                     return "skipped_budget"
                 if admission.status != "ready":
                     return "failed"
-                self.check_cancelled()
+                reason = blocked()
+                if reason:
+                    return reason
                 data = response.read(admission.max_bytes + 1)
-                self.check_cancelled()
+                reason = blocked()
+                if reason:
+                    return reason
                 decision = plan.placement(url, len(data))
                 if decision.status == "skipped_budget":
                     self._media_size_hints[url] = len(data)
@@ -560,25 +677,33 @@ class Synchronizer:
                 with tempfile.NamedTemporaryFile(dir=self.media_dir, prefix="download-", suffix=".tmp", delete=False) as stream:
                     temporary = Path(stream.name)
                     stream.write(data)
-                self.check_cancelled()
-                temporary.replace(dest)
-                temporary = None
-                now = time.time()
-                try:
-                    self.store.execute("INSERT OR REPLACE INTO media VALUES(?,?,?,?)", (url, str(dest), len(data), now))
-                    plan.remember(url, dest, now)
-                except BaseException:
-                    dest.unlink(missing_ok=True)
-                    self.store.execute("DELETE FROM media WHERE url=? AND path=?", (url, str(dest)))
-                    raise
-                if self.cancelled.is_set():
-                    self._remove_media((plan.cached[url],), plan)
-                    self.check_cancelled()
-                if not self._remove_media(decision.evictions, plan):
-                    # Failure to reclaim space cannot leave a new file above
-                    # the user's limit. Existing undeletable media stays intact.
-                    self._remove_media((plan.cached[url],), plan)
-                    return "failed"
+                with self.store.lock:
+                    reason = blocked()
+                    if reason:
+                        return reason
+                    # Hold authorization stable through placement and any
+                    # weaker-file eviction; never hold this lock over reads.
+                    decision = plan.placement(url, len(data))
+                    if decision.status != "accepted":
+                        return "skipped_budget" if decision.status == "skipped_budget" else "failed"
+                    temporary.replace(dest)
+                    temporary = None
+                    now = time.time()
+                    try:
+                        self.store.execute("INSERT OR REPLACE INTO media VALUES(?,?,?,?)", (url, str(dest), len(data), now))
+                        plan.remember(url, dest, now)
+                    except BaseException:
+                        dest.unlink(missing_ok=True)
+                        self.store.execute("DELETE FROM media WHERE url=? AND path=?", (url, str(dest)))
+                        raise
+                    if self.cancelled.is_set():
+                        self._remove_media((plan.cached[url],), plan)
+                        self.check_cancelled()
+                    if not self._remove_media(decision.evictions, plan):
+                        # Failure to reclaim space cannot leave a new file above
+                        # the user's limit. Existing undeletable media stays intact.
+                        self._remove_media((plan.cached[url],), plan)
+                        return "failed"
                 self._media_size_hints.pop(url, None)
                 return "downloaded"
         except (OSError, ValueError, http.client.HTTPException):
