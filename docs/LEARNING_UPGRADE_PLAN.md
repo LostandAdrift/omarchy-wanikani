@@ -16,7 +16,7 @@ Keep “five reviews, then back to work” as the quick action within a complete
 
 Source entry points: [study dispatch](../backend/wanikani/engine.py), [dashboard](../qml/Dashboard.qml), [study presentation](../qml/Study.qml), [subject details](../qml/SubjectDetails.qml), [voice choices](../qml/VoiceChoices.qml), and [audio player](../Panel.qml).
 
-Tsurukame is the comparison client pending confirmation of the iPad app's name. Its published feature set includes offline study, upcoming reviews, and current-level radical/kanji/vocabulary progress. The useful target is that learning clarity within Omarchy's native shell. [Developer's App Store listing](https://apps.apple.com/us/app/tsurukame-for-wanikani/id1367114761)
+The user confirmed Tsurukame as their iPad client and the comparison benchmark. Its published feature set includes offline study, upcoming reviews, and current-level radical/kanji/vocabulary progress. The useful target is that learning clarity within Omarchy's native shell. [Developer's App Store listing](https://apps.apple.com/us/app/tsurukame-for-wanikani/id1367114761)
 
 “Voice” is provisionally interpreted as pronunciation playback. If it also means speaking answers, add a separate speech-input design after confirming that preference; the current plan does not introduce a microphone or speech-recognition service.
 
