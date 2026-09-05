@@ -29,7 +29,7 @@ Item {
       Column {
         x: root.gallery ? (parent.width - width) / 2 : parent.width - width - Style.space(44)
         y: root.gallery ? (parent.height - height) / 2 : parent.height - height - Style.space(70)
-        width: root.gallery ? Math.min(parent.width * 0.7, Style.space(700)) : Style.space(280)
+        width: root.gallery ? Math.min(parent.width * 0.7, Style.space(700)) : Math.min(Style.space(280), Math.max(1, parent.width - Style.space(88)))
         spacing: Style.space(12)
         Label {
           width: parent.width
@@ -39,12 +39,10 @@ Item {
           font.pixelSize: Style.font.bodySmall
           font.letterSpacing: 2
         }
-        Label {
+        SubjectGlyph {
           width: parent.width
-          horizontalAlignment: Text.AlignHCenter
-          text: root.service.ambientSubject ? root.service.ambientSubject.characters : ""
-          font.family: "Noto Sans CJK JP"
-          font.pixelSize: root.gallery ? Style.space(150) : Style.space(66)
+          subject: root.service.ambientSubject
+          pixelSize: root.gallery ? Style.space(150) : Style.space(66)
         }
         Label {
           width: parent.width

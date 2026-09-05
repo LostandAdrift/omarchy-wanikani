@@ -1,9 +1,11 @@
 import unittest
+from pathlib import Path
 
-from test_backend import EngineFixture, NOW
+from test_backend import EngineFixture, FakeApi, NOW
 from wanikani.common import UserError, stamp
 from wanikani.practice import catalogue
 from wanikani.readiness import calculate
+from wanikani.sync import Synchronizer
 
 
 class AccessContractTests(EngineFixture, unittest.TestCase):
@@ -52,3 +54,22 @@ class AccessContractTests(EngineFixture, unittest.TestCase):
         for kind in ('free', 'unknown', 'recurring'):
             self.subscription(kind, granted=0, end=stamp(NOW - 1))
             self.assertEqual(0, self.engine.max_level())
+
+    def test_zero_grant_never_sends_an_empty_unfiltered_subject_query(self):
+        self.subscription('free', granted=0)
+        api = FakeApi(self.store)
+        calls = []
+        original = api.collection
+        def collections(endpoint, params=None):
+            calls.append((endpoint, params))
+            yield from original(endpoint, params)
+        api.collection = collections
+        sync = Synchronizer(self.engine, api, Path(self.temp.name) / 'media')
+        self.assertTrue(sync.run(for_study=True))
+        self.assertNotIn('subjects', [endpoint for endpoint, _ in calls])
+        self.assertEqual(0, self.store.get('cached_max_level'))
+        self.subscription('free', granted=3)
+        api.user = self.store.get('user')
+        calls.clear()
+        self.assertTrue(sync.run(for_study=True))
+        self.assertEqual({'levels': '1,2,3'}, next(params for endpoint, params in calls if endpoint == 'subjects'))

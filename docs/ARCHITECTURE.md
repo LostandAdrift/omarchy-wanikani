@@ -6,9 +6,11 @@ The Omarchy manifest declares a service, bar widget, and one persistent panel. T
 
 Request: `{"v":1,"id":"unique-request-id","method":"answer","args":{"text":"mountain"}}`.
 
-Response: `{"v":1,"id":"unique-request-id","ok":true,"data":{...}}`; errors use `ok:false,error:{code,message}`. Events are `ready` and `state`. Secrets are accepted only by `authenticate` and never echoed. Background synchronization has its own thread; local commands are serviced while HTTP is in progress.
+Response: `{"v":1,"id":"unique-request-id","ok":true,"data":{...}}`; errors use `ok:false,error:{code,message}`. Events are `ready`, `state`, `readiness`, and `sync_progress`. The latter two update offline availability and synchronization progress without rebuilding every surface. Secrets are accepted only by `authenticate` and never echoed. Background synchronization has its own thread; local commands are serviced while HTTP is in progress.
 
-Study mutation methods are `start`, `draft`, `answer`, `correct`, `advance`, `lesson_next`, `finish`; note edits use `set_material`. Read methods include `snapshot`, `session`, `search`, `details`, and `ambient`. Account methods include `authenticate`, `disconnect`, `use_demo`, `sync`, `clear_cache`, `delete_data`, `resolve`, and `diagnostics`.
+Study mutation methods are `start`, `draft`, `answer`, `correct`, `advance`, `lesson_next`, and `finish`. Explicitly saving synonyms or notes uses `set_material`; `editor_draft` and `editor_discard` keep unsaved text local. `pin`, `settings`, `snooze`, and `ack_milestone` change local preferences or acknowledgments. Milestones arrive inside state snapshots; acknowledging one does not change account progress.
+
+Read methods include `snapshot`, `session`, `search`, `details`, `ambient`, `practice_catalogue`, `recovery`, and `voices`. `readiness` retrieves or requests a local cache-availability refresh. Account and maintenance methods include `authenticate`, `disconnect`, `use_demo`, `sync`, `clear_cache`, `delete_data`, `resolve`, and `diagnostics`. The periodic `tick` checks wake/clock changes and schedules eligible background refreshes.
 
 SQLite stores API resource snapshots, sessions, local events, command replies, synchronization cursors, and the submission queue. A reentrant lock serializes short transactions across the command and network threads. WAL and FULL synchronous mode protect the local acknowledgment boundary. The command effect and reply commit together so the same local request ID cannot increment errors or advance twice.
 
@@ -20,6 +22,18 @@ Reviews and practice: question → feedback → next question / completed subjec
 Each subject stores required parts, completed parts, and error counts independently. An incorrect answer increments the relevant count. A typo correction can decrement that one current error and marks feedback corrected. `advance` applies accepted feedback and creates the outbox item only after every required part is complete. `draft` is persisted during input. Hiding a panel does not finish a session.
 
 Practice and graded sessions have independent saved state. Explicit practice can run while a graded session is paused; Resume prioritizes that graded session. Practice never creates submission operations and remains available for subjects with pending graded work.
+
+## Unsaved study-material input
+
+`editor_draft` accepts `subject_id` and `values:{synonyms_text,meaning_note,reading_note}`. Raw synonym text keeps spacing and unfinished commas; each field is limited to 2,000 Unicode characters. Every committed text change is sent immediately, without a debounce or close-time timer. Text composition remains owned by the native input control. Closing, navigating, and restarting do not discard a persisted draft.
+
+The command returns only `{subject_id,stored,dirty,revision}` after the input and its small acknowledgment commit in SQLite. It emits no dashboard state event and starts no synchronization. Acknowledged edits are durable; an abrupt failure before acknowledgment can still lose that unacknowledged edit. Escape does not cancel requests already sent to the worker. Replaying the same local request ID returns its prior acknowledgment without overwriting a newer draft.
+
+Unsaved input is stored under `material_editor_<subject_id>` in the current mode's database. It never becomes an accepted answer, a search synonym, or a submission operation. `details` exposes `editor_draft`, `editor_dirty`, and `editor_revision` separately from `material`; `material_draft_<subject_id>` retains its existing meaning of explicitly saved study material waiting to synchronize. A future editor draft may coexist with such pending material, while another Save remains blocked until the prior operation resolves.
+
+`set_material` can include the exact raw `editor_draft` captured when Save was pressed. It inserts the material operation and clears the editor only if the current raw input still matches that expected value and normalizes to the submitted values. This happens in the same transaction. An older Save cannot erase newer typing, even a newly added comma or space. A failed Save keeps the draft. Callers that omit the expected raw input leave unsaved editor content alone.
+
+`editor_discard` returns current saved/pending material in the subject detail response. Its optional `expected` raw input prevents an older Discard from deleting newer typing. It creates no submission and emits no dashboard refresh. Subject access checks cover reading, editing, and discarding; account and demo databases stay separate. Explicit data deletion removes these drafts and their recoverable SQLite pages along with the rest of that mode's personal data.
 
 ## Submission state machine
 

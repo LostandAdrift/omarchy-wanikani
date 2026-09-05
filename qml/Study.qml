@@ -190,7 +190,7 @@ ColumnLayout {
     Card {
       id: subjectCard
       Layout.fillWidth: true
-      Layout.preferredHeight: Style.space(220)
+      Layout.preferredHeight: Math.max(Style.space(220), subjectPrompt.implicitHeight + Style.space(32))
       activeFocusOnTab: root.session && root.session.phase === "lesson"
       border.color: activeFocus ? Color.accent : Qt.alpha(Color.foreground, 0.14)
       Accessible.role: Accessible.Grouping
@@ -211,6 +211,7 @@ ColumnLayout {
         color: root.subjectColor
       }
       Column {
+        id: subjectPrompt
         anchors.centerIn: parent
         width: parent.width - Style.space(32)
         spacing: Style.space(9)
@@ -225,7 +226,8 @@ ColumnLayout {
         SubjectGlyph {
           width: parent.width
           subject: root.subject
-          pixelSize: Style.space(root.subject && root.subject.characters.length > 5 ? 62 : 94)
+          pixelSize: Style.space(94)
+          revealLabel: !!root.session && (root.session.phase === "lesson" || root.session.phase === "feedback")
         }
         Label {
           width: parent.width

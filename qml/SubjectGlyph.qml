@@ -4,34 +4,30 @@ import qs.Commons
 Item {
   id: root
   property var subject: null
+  property bool revealLabel: true
   property real pixelSize: Style.space(94)
+  property real minimumPixelSize: Style.space(22)
   implicitWidth: Style.space(140)
-  implicitHeight: pixelSize * 1.2
-  Label {
-    anchors.fill: parent
+  implicitHeight: Math.max(pixelSize * 1.2, glyph.visible ? glyph.contentHeight : 0)
+  JapaneseText {
+    id: glyph
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
     visible: !!(root.subject && root.subject.characters)
     text: root.subject ? root.subject.characters : ""
-    font.family: "Noto Sans CJK JP"
+    color: Color.foreground
     font.pixelSize: root.pixelSize
-    horizontalAlignment: Text.AlignHCenter
-    verticalAlignment: Text.AlignVCenter
-    maximumLineCount: 1
-    elide: Text.ElideRight
+    minimumPixelSize: Math.min(root.minimumPixelSize, root.pixelSize)
   }
-  Rectangle {
+  RadicalImage {
     anchors.centerIn: parent
     width: Math.min(parent.width, parent.height)
     height: width
     visible: !!(root.subject && !root.subject.characters && root.subject.images.length)
-    // WaniKani's black radical images need a light backing in dark themes.
-    color: "white"
+    subject: root.subject
+    revealLabel: root.revealLabel
     radius: Style.cornerRadius
-    Image {
-      anchors.fill: parent
-      anchors.margins: Style.space(8)
-      source: root.subject && root.subject.images.length ? root.subject.images[0] : ""
-      fillMode: Image.PreserveAspectFit
-      Accessible.name: root.subject ? "Radical " + root.subject.slug : "Radical image"
-    }
+    imageMargin: Style.space(8)
   }
 }

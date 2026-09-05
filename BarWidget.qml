@@ -58,6 +58,8 @@ Ui.BarWidget {
       height: Style.space(20)
       ink: root.bar ? root.bar.barForeground : Color.foreground
       shellColor: ink
+      animate: root.service && root.service.animations && !root.service.locked && root.Window.window && root.Window.window.visible
+      celebrating: !!root.info.milestone
     }
     Kani.Label {
       visible: !root.vertical
@@ -71,7 +73,11 @@ Ui.BarWidget {
     visible: root.vertical
     anchors.right: parent.right
     anchors.bottom: parent.bottom
-    text: root.info.attention > 0 ? "!" : String(root.info.reviews || 0)
+    text: root.label.replace(/ /g, "")
+    width: root.width
+    wrapMode: Text.NoWrap
+    elide: Text.ElideRight
+    horizontalAlignment: Text.AlignRight
     font.pixelSize: Style.space(9)
     color: root.bar ? root.bar.barForeground : Color.foreground
   }

@@ -17,12 +17,13 @@ ColumnLayout {
     font.letterSpacing: 3
     font.pixelSize: Style.font.bodySmall
   }
-  Label {
+  SubjectGlyph {
     Layout.fillWidth: true
-    text: root.subject ? root.subject.characters : "ひと休み"
-    font.family: "Noto Sans CJK JP"
-    font.pixelSize: Style.space(root.subject && root.subject.characters.length > 4 ? 76 : 116)
-    horizontalAlignment: Text.AlignHCenter
+    subject: root.subject || {
+      characters: "ひと休み",
+      images: []
+    }
+    pixelSize: Style.space(116)
   }
   Label {
     Layout.fillWidth: true

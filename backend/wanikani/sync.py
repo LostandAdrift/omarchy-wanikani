@@ -9,6 +9,7 @@ from pathlib import Path
 from .api import ApiError, NoRedirect, validate_user
 from .common import UserError, epoch, private_dir, stamp
 from .engine import baseline
+from . import milestones
 
 
 COLLECTIONS = (
@@ -78,6 +79,11 @@ class Synchronizer:
             self.store.set("reset_cursor", reset_now)
             for endpoint, key in COLLECTIONS:
                 self.check_cancelled()
+                if endpoint == "subjects" and engine.max_level() == 0:
+                    # An empty levels parameter can mean an unfiltered
+                    # catalogue. No content grant means no subject request.
+                    self.store.set("cached_max_level", 0)
+                    continue
                 label = {"subjects": "Caching subject catalogue", "assignments": "Refreshing lessons and reviews",
                     "study_materials": "Refreshing personal study material", "review_statistics": "Refreshing learning statistics",
                     "level_progressions": "Refreshing level progress", "spaced_repetition_systems": "Refreshing review schedules"}[endpoint]
@@ -122,6 +128,7 @@ class Synchronizer:
             # background refresh; missing required images stay unavailable.
             if not for_study:
                 self.cache_media()
+            milestones.observe(engine)
             succeeded = True
             return True
         except ApiError as error:
@@ -184,11 +191,13 @@ class Synchronizer:
     def _invalidate_reset(self, reset):
         target = int(reset["data"].get("target_level", 1))
         with self.store.transaction():
-            for row in self.store.rows("SELECT * FROM outbox WHERE state IN ('pending','blocked','uncertain')"):
+            milestones.invalidate_reset(self.engine)
+            for row in self.store.rows("SELECT id,subject_id FROM outbox WHERE state IN ('pending','blocked','uncertain')"):
                 subject = self.store.subject(row["subject_id"])
                 if subject and subject["data"].get("level", 0) >= target:
                     self.state(row["id"], "conflicted", "WaniKani account reset; the local result was preserved but will not be submitted.")
-            for session_row in self.store.rows("SELECT body FROM sessions"):
+            for session_row in self.store.rows("""SELECT body FROM sessions
+                WHERE json_extract(body,'$.phase')!='complete' AND json_extract(body,'$.mode')!='practice'"""):
                 session = json.loads(session_row["body"])
                 if session["phase"] == "complete" or session["mode"] == "practice":
                     continue
@@ -222,12 +231,39 @@ class Synchronizer:
         self.store.put(resource)
         return resource
 
-    def reconcile_uncertain(self):
-        rows = self.store.rows("SELECT * FROM outbox WHERE state='uncertain'")
-        self.report("reconcile", "Checking interrupted submissions", 0, len(rows))
-        for index, row in enumerate(rows):
+    def _outbox_window(self, state):
+        # The rowid cutoff captures work present at the beginning of this pass.
+        # Newly saved answers wait for the next pass, including answers whose
+        # wall-clock timestamp sorts before the current page after a clock edit.
+        row = self.store.rows("SELECT COUNT(*) AS total,COALESCE(MAX(rowid),0) AS cutoff FROM outbox WHERE state=?", (state,))[0]
+        return row["total"], row["cutoff"]
+
+    def _outbox_rows(self, state, cutoff):
+        previous = None
+        while True:
             self.check_cancelled()
-            self.report("reconcile", "Checking interrupted submissions", index, len(rows))
+            after = " AND (created_at,id)>(?,?)" if previous else ""
+            parameters = (state, cutoff, *previous) if previous else (state, cutoff)
+            candidates = self.store.rows("SELECT id,created_at FROM outbox WHERE state=? AND rowid<=?" + after +
+                " ORDER BY created_at,id LIMIT 25", parameters)
+            if not candidates:
+                return
+            for candidate in candidates:
+                self.check_cancelled()
+                previous = (candidate["created_at"], candidate["id"])
+                # Only materialize the body about to be processed. A quota or
+                # transport failure must not allocate every later answer/note.
+                rows = self.store.rows("SELECT * FROM outbox WHERE id=? AND state=? AND rowid<=?",
+                    (candidate["id"], state, cutoff))
+                if rows:
+                    yield rows[0]
+
+    def reconcile_uncertain(self):
+        total, cutoff = self._outbox_window("uncertain")
+        self.report("reconcile", "Checking interrupted submissions", 0, total)
+        for index, row in enumerate(self._outbox_rows("uncertain", cutoff)):
+            self.check_cancelled()
+            self.report("reconcile", "Checking interrupted submissions", index, total)
             body = json.loads(row["body"])
             if row["kind"] == "material":
                 material = self.fetch_material(row["subject_id"])
@@ -266,11 +302,13 @@ class Synchronizer:
         if self.engine.clock_untrusted or abs(self.engine.clock_offset) > 300:
             raise UserError("Refresh to verify the system clock before submitting saved work.", "clock_changed")
         confirmed = 0
-        rows = self.store.rows("SELECT * FROM outbox WHERE state='pending' ORDER BY created_at,id")
-        self.report("submitting", "Checking and sending saved work", 0, len(rows))
-        for index, row in enumerate(rows):
+        total, cutoff = self._outbox_window("pending")
+        processed = 0
+        self.report("submitting", "Checking and sending saved work", 0, total)
+        for index, row in enumerate(self._outbox_rows("pending", cutoff)):
             self.check_cancelled()
-            self.report("submitting", "Checking and sending saved work", index, len(rows))
+            self.report("submitting", "Checking and sending saved work", index, total)
+            processed = index + 1
             body = json.loads(row["body"])
             if body.get("account_id") != self.store.get("account_id"):
                 self.state(row["id"], "conflicted", "Account mismatch. This result will not be submitted.")
@@ -331,7 +369,7 @@ class Synchronizer:
             except Exception:
                 self.state(row["id"], "uncertain", "Confirmation was interrupted. Refresh to reconcile; automatic retry is disabled.")
                 raise
-        self.report("submitting", "Saved work checked", len(rows), len(rows))
+        self.report("submitting", "Saved work checked", processed, total)
         return confirmed
 
     def apply_result(self, row, response):

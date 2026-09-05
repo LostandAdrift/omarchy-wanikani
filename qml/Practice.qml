@@ -11,6 +11,7 @@ ColumnLayout {
   property bool loading: false
   property string notice: ""
   property int requestSerial: 0
+  property string observedSync: ""
   readonly property string contentAccess: controller.contentAccess || ""
   onContentAccessChanged: {
     requestSerial++
@@ -99,6 +100,16 @@ ColumnLayout {
   }
   Component.onCompleted: loadPage(0)
   Component.onDestruction: requestSerial++
+  Connections {
+    target: root.controller.service
+    function onSnapshotChanged() {
+      var refreshed = String(root.controller.snapshot.last_sync || "")
+      if (refreshed !== root.observedSync) {
+        root.observedSync = refreshed
+        root.loadPage(root.library.offset)
+      }
+    }
+  }
 
   Label {
     Layout.fillWidth: true

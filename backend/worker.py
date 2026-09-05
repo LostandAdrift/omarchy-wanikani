@@ -245,6 +245,9 @@ class Worker:
             from wanikani.recovery import catalogue
             result = catalogue(self.engine, state=args.get("state", "open"), kind=args.get("kind", "all"),
                 offset=args.get("offset", 0), limit=args.get("limit", 30))
+        elif method == "voices":
+            from wanikani.voices import catalogue
+            result = catalogue(self.engine)
         elif method == "details":
             result = self.engine.details(int(args["subject_id"]))
         elif method == "ambient":
@@ -315,7 +318,7 @@ class Worker:
         else:
             result = self.engine.command(rid, method, args)
         self.emit({"v": 1, "id": rid, "ok": True, "data": result})
-        if method not in ("snapshot", "readiness", "draft", "search", "practice_catalogue", "recovery", "details", "ambient", "session", "tick", "diagnostics"):
+        if method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "practice_catalogue", "recovery", "voices", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

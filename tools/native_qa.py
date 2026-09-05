@@ -98,7 +98,9 @@ QA_DRIVER = r'''
     return JSON.stringify({ready: !!(service && service.ready), opened: opened,
       view: view, busy: busy, error: error || (service ? service.error : ""),
       pageLoaded: content.status === Loader.Ready && content.item !== null,
-      session: session, state: snapshot, capture: qaCapture, controls: controls,
+      session: session, state: snapshot, detail: detail,
+      pendingRequests: service ? service.pendingCount : 0,
+      capture: qaCapture, controls: controls,
       frame: {width: frame.width, height: frame.height},
       screen: {name: window.screen ? window.screen.name : "", pixelRatio: frame.Screen.devicePixelRatio},
       scroll: {y: scroll.contentItem.contentY || 0, height: scroll.height,
@@ -116,6 +118,9 @@ QA_DRIVER = r'''
         root.dismiss()
       } else if (action.kind === "help") {
         root.showHelp()
+      } else if (action.kind === "milestone-preview") {
+        if (!service || !service.snapshot.demo) throw new Error("Preview requires authored demo fixtures")
+        service.snapshot = Object.assign({}, service.snapshot, { milestone: { id: "qa-milestone-preview", level: 4, confirmed_at: new Date().toISOString(), source: "Authored fixture preview" } })
       } else if (action.kind === "backend") {
         var methods = ["draft", "answer", "advance", "correct", "lesson_next", "settings", "pin"]
         if (methods.indexOf(action.method) < 0) throw new Error("QA method is not allowed")
@@ -320,7 +325,111 @@ def capture(run, name):
     return snapshot
 
 
+def editor_smoke(run):
+    """Use real native editor actions against this generated demo database only."""
+    synonym_placeholder = "Meaning synonyms, separated by commas"
+    note_placeholder = "Your meaning note"
+    save_label = "Save notes & synonyms"
+
+    def form(snapshot):
+        return {control["placeholder"]: control["text"] for control in snapshot["controls"]
+                if control["editor"] and control["placeholder"] in (synonym_placeholder, note_placeholder)}
+
+    def button(snapshot, label, enabled=True):
+        return any(control["text"] == label and control["enabled"] == enabled
+                   for control in snapshot["controls"] if not control["editor"])
+
+    def settled(snapshot):
+        # Editor keystrokes intentionally do not set Panel.busy or emit state.
+        # Wait for their small durable acknowledgments before navigating away.
+        return snapshot["pendingRequests"] == 0
+
+    def open_subject():
+        action(run, {"kind": "open", "view": "lookup", "text": "山"})
+        wait_snapshot(run, lambda s: s["view"] == "lookup" and button(s, "Open") and settled(s))
+        action(run, {"kind": "activate", "selector": {"text": "Open", "index": 0}})
+        return wait_snapshot(run, lambda s: (s.get("detail") or {}).get("id") == 2
+                             and len(form(s)) == 2 and settled(s))
+
+    def edit(synonyms, note):
+        action(run, {"kind": "edit", "selector": {"placeholder": synonym_placeholder}, "text": synonyms})
+        action(run, {"kind": "edit", "selector": {"placeholder": note_placeholder}, "text": note})
+        return wait_snapshot(run, lambda s: form(s) == {synonym_placeholder: synonyms, note_placeholder: note}
+                             and settled(s))
+
+    def editor_capture(name):
+        action(run, {"kind": "focus", "selector": {"placeholder": note_placeholder}})
+        wait_snapshot(run, lambda s: any(control["placeholder"] == note_placeholder and control["focus"]
+            and control["inFrame"] and control["inViewport"] for control in s["controls"]) and settled(s))
+        return capture(run, name)
+
+    initial = open_subject()
+    baseline = form(initial)
+    if initial["state"]["pending"] or initial["detail"].get("editor_dirty"):
+        raise RuntimeError("Editor QA requires a fresh subject with no outstanding fixture submissions.")
+    raw_synonyms = "peak,  partial,"
+    note = "Independently authored QA note. Still an unsaved local draft."
+    edited = edit(raw_synonyms, note)
+    if edited["state"]["pending"]:
+        raise RuntimeError("Typing an editor draft created a submission.")
+    action(run, {"kind": "close"})
+    restored = open_subject()
+    if form(restored) != {synonym_placeholder: raw_synonyms, note_placeholder: note}:
+        raise RuntimeError("Closing and reopening changed raw editor input.")
+    if not restored["detail"]["editor_dirty"] or restored["detail"]["editor_draft"]["synonyms_text"] != raw_synonyms:
+        raise RuntimeError("Reopened native editor did not load its durable local draft.")
+    editor_capture("editor-draft-restored")
+    action(run, {"kind": "activate", "selector": {"text": "Discard draft"}})
+    discarded = wait_snapshot(run, lambda s: form(s) == baseline and not (s.get("detail") or {}).get("editor_draft")
+                              and settled(s))
+    if discarded["state"]["pending"]:
+        raise RuntimeError("Discarding an editor draft created a submission.")
+    editor_capture("editor-discarded")
+
+    action(run, {"kind": "backend", "method": "settings", "args": {"demo_offline": True}})
+    wait_snapshot(run, lambda s: s["state"]["settings"]["demo_offline"] and settled(s))
+    edit(raw_synonyms, note)
+    wait_snapshot(run, lambda s: button(s, save_label) and settled(s))
+    action(run, {"kind": "activate", "selector": {"text": save_label}})
+    saved = wait_snapshot(run, lambda s: s["state"]["pending"] == 1
+        and (s.get("detail") or {}).get("material_pending")
+        and not s["detail"].get("editor_draft") and settled(s))
+    operations = saved["state"].get("outbox", [])
+    if len(operations) != 1 or operations[0]["kind"] != "material" or operations[0]["subject_id"] != 2:
+        raise RuntimeError("Explicit Save did not create exactly one fixture material operation.")
+    operation_id = operations[0]["id"]
+    if saved["detail"]["material"]["meaning_synonyms"] != ["peak", "partial"]:
+        raise RuntimeError("Explicit Save did not normalize the raw synonym input.")
+    editor_capture("editor-saved-offline")
+
+    newer_synonyms = "peak,  partial, next,"
+    newer_note = "A newer local note while the previous save waits."
+    edit(newer_synonyms, newer_note)
+    action(run, {"kind": "close"})
+    newer = open_subject()
+    if (form(newer) != {synonym_placeholder: newer_synonyms, note_placeholder: newer_note}
+            or not newer["detail"]["editor_dirty"] or not button(newer, save_label, enabled=False)
+            or newer["state"]["pending"] != 1 or newer["state"]["outbox"][0]["id"] != operation_id):
+        raise RuntimeError("A future editor draft did not remain separate from its pending saved material.")
+    editor_capture("editor-newer-pending")
+    action(run, {"kind": "backend", "method": "settings", "args": {"demo_offline": False}})
+    reconnected = wait_snapshot(run, lambda s: s["state"]["pending"] == 0
+        and not (s.get("detail") or {}).get("material_pending") and button(s, save_label) and settled(s))
+    if (form(reconnected) != {synonym_placeholder: newer_synonyms, note_placeholder: newer_note}
+            or reconnected["detail"]["material"]["meaning_note"] != note
+            or not reconnected["detail"]["editor_dirty"]):
+        raise RuntimeError("Demo confirmation overwrote newer unsaved editor input.")
+    editor_capture("editor-reconnected-draft")
+
+
 def smoke(run):
+    action(run, {"kind": "open", "view": "dashboard"})
+    wait_snapshot(run, lambda s: s["opened"] and s["view"] == "dashboard")
+    action(run, {"kind": "milestone-preview"})
+    wait_snapshot(run, lambda s: any(c["text"] == "Dismiss" for c in s["controls"]))
+    capture(run, "milestone-preview")
+    action(run, {"kind": "activate", "selector": {"text": "Dismiss"}})
+    wait_snapshot(run, lambda s: not s["state"].get("milestone"))
     for view in ("dashboard", "lessons", "help", "lookup", "practice-library", "settings", "zen", "recovery"):
         action(run, {"kind": "open", "view": view, "text": "山"})
         wait_snapshot(run, lambda s: s["opened"] and s["view"] == ("study" if view == "lessons" else view))
@@ -365,6 +474,38 @@ def smoke(run):
     action(run, {"kind": "activate", "selector": {"text": "Confirmed · 3"}})
     wait_snapshot(run)
     capture(run, "recovery-confirmed")
+    action(run, {"kind": "open", "view": "reviews", "limit": 5})
+    graded = wait_snapshot(run, lambda s: s["view"] == "study" and s["session"]["mode"] == "reviews")["session"]
+    action(run, {"kind": "backend", "method": "draft", "args": {"text": "paused graded fixture"}})
+    wait_snapshot(run)
+    action(run, {"kind": "open", "view": "practice-library"})
+    wait_snapshot(run, lambda s: any(c["text"] == "Add five from this page" and c["enabled"] for c in s["controls"]))
+    action(run, {"kind": "activate", "selector": {"text": "Add five from this page"}})
+    chosen = wait_snapshot(run, lambda s: any(c["text"].startswith("Practice selected · ") for c in s["controls"]))
+    start_label = next(c["text"] for c in chosen["controls"] if c["text"].startswith("Practice selected · "))
+    capture(run, "practice-selection")
+    action(run, {"kind": "activate", "selector": {"text": start_label}})
+    snapshot = wait_snapshot(run, lambda s: s["view"] == "study" and s["session"]["mode"] == "practice")
+    capture(run, "practice-question")
+    for _ in range(40):
+        if snapshot["session"]["phase"] == "complete":
+            break
+        if snapshot["session"]["phase"] == "feedback":
+            action(run, {"kind": "backend", "method": "advance"})
+        else:
+            subject = snapshot["session"]["subject"]
+            answer = subject["meanings"][0] if snapshot["session"]["part"] == "meaning" else next(r["reading"] for r in subject["readings"] if r["accepted"])
+            action(run, {"kind": "backend", "method": "answer", "args": {"text": answer}})
+        snapshot = wait_snapshot(run)
+    if snapshot["session"]["phase"] != "complete" or snapshot["state"]["pending"]:
+        raise RuntimeError("Ungraded fixture practice did not finish independently.")
+    capture(run, "practice-complete")
+    action(run, {"kind": "open", "view": "resume"})
+    snapshot = wait_snapshot(run, lambda s: s["session"]["id"] == graded["id"] and s["session"]["draft"] == "paused graded fixture")
+    if snapshot["session"]["subject"]["id"] != graded["subject"]["id"] or snapshot["session"]["part"] != graded["part"]:
+        raise RuntimeError("Practice changed the saved graded question.")
+    capture(run, "graded-resume-after-practice")
+    editor_smoke(run)
     action(run, {"kind": "open", "view": "settings"})
     action(run, {"kind": "bounds", "width": 540, "height": 650})
     wait_snapshot(run)

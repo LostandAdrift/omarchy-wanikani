@@ -32,6 +32,8 @@ class Store:
             kind,CAST(id AS INTEGER),id,json_extract(body,'$.data.level'),json_extract(body,'$.data.hidden_at'))
             WHERE kind IN ('radical','kanji','vocabulary','kana_vocabulary');
           CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, body TEXT NOT NULL);
+          CREATE INDEX IF NOT EXISTS sessions_unfinished_graded ON sessions(id)
+            WHERE json_extract(body,'$.phase')!='complete' AND json_extract(body,'$.mode')!='practice';
           CREATE TABLE IF NOT EXISTS outbox (
             id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject_id INTEGER NOT NULL,
             state TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL,

@@ -28,6 +28,7 @@ Item {
   property string searchState: "all"
   property int searchSequence: 0
   property bool searching: false
+  property string observedSync: ""
   property string helpReturnView: "dashboard"
   property var helpReturnDetail: null
   property var chosenScreen: null
@@ -97,7 +98,8 @@ Item {
   }
   function closeHelp() {
     navigate(helpReturnView)
-    detail = helpReturnDetail
+    if (helpReturnView === "lookup" && helpReturnDetail)
+      showSubject(helpReturnDetail.id)
     helpReturnDetail = null
   }
 
@@ -196,6 +198,9 @@ Item {
   function search(text) {
     query = String(text || "").slice(0, 256)
     detail = null
+    refreshSearch()
+  }
+  function refreshSearch() {
     if (!service)
       return
     var expected = ++searchSequence
@@ -298,6 +303,12 @@ Item {
     function onSnapshotChanged() {
       if (root.view === "study")
         root.session = root.snapshot.session || null
+      var refreshed = String(root.snapshot.last_sync || "")
+      if (refreshed !== root.observedSync) {
+        root.observedSync = refreshed
+        if (root.opened && root.view === "lookup" && !root.detail)
+          root.refreshSearch()
+      }
     }
     function onLockedChanged() {
       if (root.service.locked)

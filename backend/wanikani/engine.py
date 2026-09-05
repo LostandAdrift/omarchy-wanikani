@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from .common import UserError, epoch, plain, stamp
 from .grading import grade, validate_subject_answers
+from . import editor, milestones
 
 DEFAULTS = {
     "batch_size": 5, "notifications": True, "quiet_start": 22, "quiet_end": 8,
@@ -197,6 +198,7 @@ class Engine:
             "related": relatives(data.get("amalgamation_subject_ids", [])) if include_relations else [],
             "audio": audio, "audio_available": bool(audio_items), "content_error": content_error,
             "material": visible_material, "material_pending": draft is not None,
+            **editor.view(self, int(subject_id), visible_material),
             "pinned": int(subject_id) in self.store.get("pinned_subjects", []),
             "assignment": (assignment or {}).get("data", {}), "statistics": (statistic or {}).get("data", {}),
         }
@@ -439,7 +441,7 @@ class Engine:
                 self.store.set("material_draft_" + str(row["subject_id"]), None)
             self.store.execute("UPDATE outbox SET state='confirmed',detail='Demo only; nothing was sent to WaniKani' WHERE id=?", (row["id"],))
 
-    def set_material(self, subject_id, values):
+    def set_material(self, subject_id, values, editor_draft=None):
         self.ensure_access(self.store.subject(int(subject_id)))
         synonyms = values.get("meaning_synonyms", [])
         if not isinstance(synonyms, list) or len(synonyms) > 20 or any(not isinstance(s, str) or not s.strip() or len(s) > 64 for s in synonyms):
@@ -452,6 +454,7 @@ class Engine:
             body = {"values": values, "baseline": (existing or {}).get("data", {}), "material_id": (existing or {}).get("id"), "account_id": self.store.get("account_id")}
             self.store.execute("INSERT INTO outbox VALUES(?,?,?,?,?,?,?)", (str(uuid.uuid4()), "material", subject_id, "pending", json.dumps(body), stamp(self.now()), "Waiting to sync"))
             self.store.set("material_draft_" + str(subject_id), values)
+            editor.clear_saved(self, subject_id, values, editor_draft)
             if self.demo:
                 self.confirm_demo()
         return self.details(subject_id)
@@ -531,7 +534,7 @@ class Engine:
             "max_level": self.max_level(), "vacation": bool(self.user().get("current_vacation_started_at")),
             "reviews": due, "lessons": lessons, "next_reviews_at": stamp(next_at) if next_at else None,
             "forecast": forecast, "level_total": counts[0], "level_passed": counts[1] or 0,
-            "activity": activity, "session": session, "paused_graded": bool(graded and graded["phase"] != "complete"),
+            "activity": activity, "milestone": milestones.latest(self), "session": session, "paused_graded": bool(graded and graded["phase"] != "complete"),
             **outbox_summary, "last_sync": self.store.get("last_sync"), "settings": self.settings(),
             "cache": {"files": media[0], "bytes": media[1], "subjects": cached_subjects}, "difficult": self.difficult(), "now": now,
             "credential_storage": self.store.get("credential_storage", "session"),
@@ -542,9 +545,12 @@ class Engine:
             "draft": lambda: self.draft(args.get("text", "")), "answer": lambda: self.answer(args.get("text", "")),
             "advance": self.advance, "correct": self.correct, "finish": self.finish,
             "lesson_next": lambda: self.lesson_next(args.get("back", False)),
-            "set_material": lambda: self.set_material(int(args["subject_id"]), args.get("values", {})),
+            "set_material": lambda: self.set_material(int(args["subject_id"]), args.get("values", {}), args.get("editor_draft")),
+            "editor_draft": lambda: editor.write(self, int(args["subject_id"]), args.get("values")),
+            "editor_discard": lambda: editor.discard(self, int(args["subject_id"]), args.get("expected")),
             "pin": lambda: self.pin(int(args["subject_id"]), bool(args.get("enabled"))),
             "settings": lambda: self.set_settings(args),
+            "ack_milestone": lambda: milestones.acknowledge(self, args.get("id")),
             "snooze": lambda: self.set_settings({"snooze_until": self.now() + max(60, min(86400, int(args.get("seconds", 3600))))})}
         if method not in handlers:
             raise UserError("Unknown command.")

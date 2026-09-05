@@ -248,22 +248,9 @@ ColumnLayout {
       }
     }
   }
-  RowLayout {
+  VoiceChoices {
     Layout.fillWidth: true
-    Label {
-      text: "Pronunciation voice actor ID"
-      Layout.fillWidth: true
-    }
-    Ui.NumberField {
-      from: 1
-      to: 100
-      value: root.snapshot.settings.voice_actor_id || 1
-      onModified: function (value) {
-        root.controller.service.saveSettings({
-          voice_actor_id: value
-        })
-      }
-    }
+    controller: root.controller
   }
   Label {
     text: "Offline storage"

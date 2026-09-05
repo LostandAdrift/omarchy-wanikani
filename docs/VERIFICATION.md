@@ -8,8 +8,8 @@ Omarchy 4.0.2-1, Quickshell 0.3.1, Python 3.14.7, Qt 6.11.2, Hyprland 0.56.2. In
 
 ## Automated results
 
-- Python: **234 tests passed**, including **12 real subprocess crash boundaries**.
-- Qt: **49 checks passed**, covering kana conversion, activation-repeat protection, and desktop notification/ambient policy (Qt totals include initialization and cleanup).
+- Python: **303 tests passed**, including the original **12 real subprocess crash boundaries** and four additional milestone transaction crash checks.
+- Qt: **61 checks passed**, covering kana conversion, activation-repeat protection, desktop notification/ambient policy, full Japanese prompt fitting, and image-radical accessibility labels (Qt totals include initialization and cleanup).
 - Omarchy manifest validation passed.
 - Both installed desktop launcher files passed `desktop-file-validate`; Hyprland reported no configuration errors.
 - QML formatting and syntax checks completed. `qmllint` retains host-specific warnings for dynamically injected shell objects and registered Quickshell types; it is not a warning-free static build.
@@ -37,7 +37,7 @@ Qt policy checks cover quiet-hour boundaries, persisted reminder intervals, snoo
 | Worker lifecycle | Disabling stopped the worker; enabling started exactly one. Durable demo counts and session state were retained. |
 | Hot reload | Durable state survived. On this host, nested QML occasionally stayed stale until `omarchy restart shell`; documented in the README. |
 | Views | Dashboard, quick study, lessons/quiz, practice library, recovery, lookup, Settings, help, and Zen rendered in the running shell. Native dark/light captures are in docs/screenshots/. |
-| Isolated lesson/recovery scenario | Temporary authored fixture plugin in the same shell: lesson introduction, quiz, wrong-answer feedback, exact draft close/resume, three offline lesson completions, pending recovery and demo confirmation passed. Narrow 540×650 layout and focused-control scrolling passed. Actions were synthetic component calls, not native key events; cleanup removed each temporary plugin. |
+| Isolated lesson/recovery scenario | Temporary authored fixture plugin in the same shell: lesson introduction, quiz, wrong-answer feedback, exact draft close/resume, three offline lesson completions, pending recovery and demo confirmation passed. An additional run verified a clearly labeled fixture milestone preview, ungraded practice with exact graded-session restoration, and durable raw note drafts across close/reopen, discard, explicit offline Save, a newer unsaved edit, and demo confirmation. Narrow 540×650 layout and focused-control scrolling passed. Actions were synthetic component calls, not native key events; cleanup removed each temporary plugin. |
 | Study keyboard | Romaji entry, Enter feedback, Escape closing, and resuming the saved question/draft were exercised. Full IME/cursor variants also have pure conversion fixtures; comprehensive installed-IME qualification remains pending. |
 | Bar | All four positions were exercised on all three monitors; horizontal and vertical crab/count presentations inspected. Original top position restored. |
 | Themes | Tokyo Night and Flexoki Light applied to live surfaces, then original theme and wallpaper restored. |
@@ -53,16 +53,18 @@ All measurements are local development observations, not a guarantee across mach
 |---|---|---|
 | Warm study opening | 73.9 ms | One sample from IPC invocation to a visible compositor layer; does not instrument first-pixel rendering. |
 | Other warm views | Dashboard 82.3 ms; lookup 59.8 ms; Zen 64.2 ms; Settings 62.6 ms | Same method, one sample per view. All below the 200 ms target in this run. |
-| Durable answer plus advance | Median 21.37 ms; maximum 28.47 ms | Latest 100-operation authored fixture run; includes both local transactions and strict cache validation. Earlier build measured 11–13 ms. |
-| Full-catalogue snapshot | Median 80.13 ms | Latest 9,016 authored fixture catalogue run. |
-| Ranked local search | Median 15.17 ms | Full Unicode/romaji/synonym ranking across the same catalogue. |
+| Durable answer plus advance | Median 11.36 ms; p95 12.69 ms | Latest 100-operation authored fixture run; includes both local transactions and strict cache validation. |
+| Full-catalogue snapshot | Median 88.84 ms | Latest 9,016 authored fixture catalogue run. |
+| Ranked local search | Median 15.63 ms | Full Unicode/romaji/synonym ranking across the same catalogue. |
 | Practice / offline readiness | Practice 93.79 ms; searched practice 99.54 ms; readiness 90.37 ms | Same catalogue; readiness checked 3,008 eligible items in a background pass. |
 | Large local submission history | Snapshot summary 1.47 ms / 1,964 bytes; first page 2.40 ms | 50,000 authored outbox rows plus 10,000 completed sessions. Deep open page at offset 30,000 measured 11.71 ms. |
 | Online pre-study transport model | 0.18 s versus previous 8.42 s | Nine mocked reads at 20 ms each; burst-aware pacing and deferred media. Not live network timing. |
-| Idle worker CPU | 0.0% of one core at process-tick resolution | 45 seconds with the panel closed. This does not measure incremental QML CPU in the existing shell. |
-| Worker memory | RSS 30.2 MiB; PSS 17.7 MiB | Isolated worker process, measured separately from the existing shell. |
+| Idle worker CPU | 0.0222% of one core | Latest valid 45-second closed-panel sample. This does not measure incremental QML CPU in the existing shell. |
+| Worker memory | RSS 31.34 MiB; PSS 18.26 MiB; private 16.60 MiB | Latest valid sample, measured separately from the existing shell. |
+| Local note draft acknowledgment | Median 10.39 ms; p95 10.59 ms | Authored edits, immediate durable transactions, 96-byte acknowledgments; no submission before explicit Save. |
+| Cached audio voice catalogue | 280 ms / 329-byte result | 9,016 authored subjects and 54,000 audio entries; runs only when opening or refreshing Settings. |
 
-Hidden companion animations are disabled. Incremental QML memory and CPU inside the shared shell still need an isolated baseline comparison; the combined plugin idle-CPU target is not yet certified.
+Hidden companion animations are disabled. The read-only profile helper detected an external shell restart during the first baseline sequence and rejected that sample. A later stable disabled/enabled pair measured shared-shell CPU at 6.27% and 5.07% respectively; this difference is background noise and cannot establish incremental plugin cost. Incremental QML memory and CPU still need a stable before/disabled/after comparison; the combined plugin idle-CPU target is not yet certified. See [performance profiling](PERFORMANCE.md).
 
 ## Remaining release gates
 
@@ -80,3 +82,5 @@ The implementation and demonstration script are available now. These outstanding
 The native fixture harness retains private PNGs and rendered-control snapshots under its printed temporary run directory. The successful 02:34 UTC run used `wanikani-native-qa-pic0tb6s`; it completed three authored lessons offline and showed their local demo confirmation. Its own plugin namespace produced no TypeError, ReferenceError or binding-loop messages. A prior QA-only font-size binding error was fixed before this run.
 
 New regressions cover exact-meaning preference, numeric/negation grading, malformed cache data across all study surfaces, suspension-aware clock handling, rate-limit headers, paginated recovery, diagnostic symlink replacement and per-mode deletion, and desktop journal ownership. Diagnostics now use explicit aggregate fields in private `diagnostics-account.json` or `diagnostics-demo.json` files.
+
+The 03:08 UTC hosted run `wanikani-native-qa-g04t9mw5` passed the expanded 26-capture scenario and removed its temporary plugin. Milestones are derived only from successfully reconciled account observations; first-sync baselines, resets, duplicate observations, stale acknowledgments and transaction interruption have authored regressions. Unsaved editor drafts never affect grading or create an outbox operation. Additional tests cover bounded queue scans with 50,000 rows, reset handling amid 50,000 completed sessions, accessible cached voice metadata, and a zero-level account grant that must not issue an unfiltered subject request.

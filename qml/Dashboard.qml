@@ -19,6 +19,46 @@ ColumnLayout {
     text: "Native lessons and reviews, ready whenever you have a few minutes. Connect your WaniKani account or explore with sample material."
     color: Qt.alpha(Color.foreground, 0.76)
   }
+  Card {
+    Layout.fillWidth: true
+    Layout.preferredHeight: milestoneRow.implicitHeight + Style.space(24)
+    visible: !!root.s.milestone
+    RowLayout {
+      id: milestoneRow
+      anchors.fill: parent
+      anchors.margins: Style.space(12)
+      spacing: Style.space(14)
+      Crab {
+        Layout.preferredWidth: Style.space(64)
+        Layout.preferredHeight: Style.space(52)
+        animate: root.controller.opened && root.controller.service && root.controller.service.animations
+        celebrating: visible && !!root.s.milestone
+      }
+      ColumnLayout {
+        Layout.fillWidth: true
+        Label {
+          Layout.fillWidth: true
+          text: root.s.milestone ? (root.s.demo ? "Demo milestone · Level " + root.s.milestone.level : "Level " + root.s.milestone.level + " confirmed") : ""
+          font.bold: true
+          color: Color.accent
+        }
+        Label {
+          Layout.fillWidth: true
+          text: root.s.demo ? "A presentation preview using authored fixtures. Account milestones appear only after WaniKani confirms a new level." : "WaniKani confirmed your account’s new level. A little progress, shared across your devices."
+          color: Qt.alpha(Color.foreground, 0.76)
+          font.pixelSize: Style.font.bodySmall
+        }
+      }
+      Action {
+        text: "Dismiss"
+        accessibleName: "Dismiss confirmed level milestone"
+        enabled: !root.controller.busy
+        onClicked: root.controller.call("ack_milestone", {
+          id: root.s.milestone.id
+        })
+      }
+    }
+  }
   Flow {
     Layout.fillWidth: true
     spacing: Style.space(8)
