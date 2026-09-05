@@ -390,7 +390,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "WaniKani for Omarchy · 0.2.8\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
+    text: "WaniKani for Omarchy · 0.2.9\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
     secondary: true
     font.pixelSize: Style.font.bodySmall
   }

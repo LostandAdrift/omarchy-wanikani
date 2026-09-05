@@ -30,6 +30,12 @@ class NativePreparationTests(unittest.TestCase):
             shutil.copyfile(ROOT / name, cls.source / name)
         for name in qa.RUNTIME_ROOTS:
             shutil.copytree(ROOT / name, cls.source / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        # copytree preserves the frozen archive's directory permissions.
+        # Only this owned, disposable fixture checkout needs writable folders
+        # for its untracked sentinel and deliberate missing-module experiment.
+        for directory in cls.source.rglob("*"):
+            if directory.is_dir():
+                directory.chmod(0o700)
         for args in (["git", "init", "--quiet"], ["git", "add", "."],
                 ["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@localhost", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "Authored fixture"]):
             qa.command(args, cwd=cls.source)

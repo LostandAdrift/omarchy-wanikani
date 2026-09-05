@@ -199,12 +199,12 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "Use Reviews to recall learned subjects, Lessons to explore new subjects before a quiz, and Listen to train your ear with familiar recordings and local ratings. Each keeps its own saved position."
+    text: "Reviews recalls subjects you have learned. Lessons introduces new subjects before a separate quiz. Listen offers two activities with their own saved positions: Recall meaning and Type kana. Listening results stay local; they do not change your WaniKani schedule."
     secondary: true
   }
   Label {
     Layout.fillWidth: true
-    text: "In Listen, use the focused Play, Reveal, Got it, or Again buttons. Returning to a saved session stays silent. Configure autoplay and gentle reminders in Settings."
+    text: "For Recall meaning, use Play, Reveal, then Got it or Again. For Type kana, play the recording, type romaji or kana, and Check; Continue saves the result. Returning to either saved session stays silent. Choose pronunciation, autoplay and Study rhythm in Settings."
     secondary: true
   }
   Label {

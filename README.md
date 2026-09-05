@@ -4,7 +4,7 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.2.8 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.9 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
@@ -182,10 +182,12 @@ python3 -m unittest discover -s tests -v
 omarchy plugin validate .
 ```
 
+For a repeatable source check, `python3 tools/verify.py --revision HEAD` verifies an exact committed tree in a private external archive and writes a structured report. It excludes uncommitted changes and does not install or reload anything. See [frozen-source verification](docs/VERIFICATION_RUNNER.md).
+
 See [isolated native QA](docs/NATIVE_QA.md), [verification](docs/VERIFICATION.md), [read-only performance profiling](docs/PERFORMANCE.md), [architecture](docs/ARCHITECTURE.md), the [contest demonstration](docs/CONTEST_DEMO.md), and the [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
 
 The release gate includes two weeks of personal daily use, checks across desktop configurations, and deliberately answered live lessons/reviews. Those are not replaced by passing automated tests.
 
 Use the [first-session checklist and fourteen-day log](docs/DAILY_USE.md) to record that qualification.
 
-Planned extensions include practice selections directly from the reading trail, contrast practice, and a visual lesson path. Their scope and acceptance criteria are in [next feature proposals](docs/NEXT_FEATURES.md).
+Further proposals include contrast practice, a visual lesson path, and explained written-to-listening practice suggestions. Passage-to-practice selection is already implemented in source. Their scope and acceptance criteria are in [next feature proposals](docs/NEXT_FEATURES.md).

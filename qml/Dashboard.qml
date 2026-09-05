@@ -6,8 +6,9 @@ ColumnLayout {
   id: root
   required property var controller
   readonly property var s: controller.snapshot
-  spacing: Style.space(18)
+  spacing: Style.space(14)
   Label {
+    objectName: "today-heading"
     Layout.fillWidth: true
     text: s.username ? (s.reviews > 0 ? "A little progress goes a long way." : "A moment to breathe.") : "Make Japanese part of your day."
     font.pixelSize: Style.font.title
@@ -19,7 +20,117 @@ ColumnLayout {
     text: "Native lessons and reviews, ready whenever you have a few minutes. Connect your WaniKani account or explore with sample material."
     secondary: true
   }
+  Flow {
+    Layout.fillWidth: true
+    spacing: Style.space(8)
+    visible: !s.username
+    Action {
+      text: "Connect WaniKani"
+      selected: true
+      onClicked: root.controller.navigate("settings")
+    }
+    Action {
+      text: "Try the demo"
+      onClicked: root.controller.call("use_demo", {
+        enabled: true
+      })
+    }
+  }
+  GridLayout {
+    Layout.fillWidth: true
+    columns: root.width < Style.space(480) ? 1 : 2
+    columnSpacing: Style.space(12)
+    rowSpacing: Style.space(12)
+    visible: !!s.username
+    Repeater {
+      model: [
+        {
+          label: "Reviews",
+          mode: "reviews",
+          value: root.s.reviews || 0
+        },
+        {
+          label: "Lessons",
+          mode: "lessons",
+          value: root.s.lessons || 0
+        }
+      ]
+      Card {
+        id: studyCard
+        objectName: "today-" + modelData.mode
+        required property var modelData
+        readonly property var saved: root.s.saved_sessions && typeof root.s.saved_sessions === "object" && !Array.isArray(root.s.saved_sessions) ? root.s.saved_sessions[modelData.mode] : undefined
+        readonly property bool savedValid: !!saved && typeof saved === "object" && !Array.isArray(saved) && Number.isSafeInteger(saved.completed) && Number.isSafeInteger(saved.total) && saved.total >= 1 && saved.total <= 20 && saved.completed >= 0 && saved.completed < saved.total && (saved.mode === undefined || saved.mode === modelData.mode) && (saved.phase === undefined || ["question", "feedback"].indexOf(saved.phase) >= 0 || modelData.mode === "lessons" && saved.phase === "lesson") && !saved.invalidated
+        readonly property bool needsCheck: saved === undefined || saved !== null && !savedValid
+        Layout.fillWidth: true
+        Layout.preferredHeight: studyCardContent.implicitHeight + Style.space(24)
+        ColumnLayout {
+          id: studyCardContent
+          anchors.fill: parent
+          anchors.margins: Style.space(12)
+          spacing: Style.space(6)
+          RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.space(8)
+            Label {
+              Layout.fillWidth: true
+              text: studyCard.modelData.label
+              font.pixelSize: Style.font.title
+              font.bold: true
+            }
+            Label {
+              objectName: "today-" + studyCard.modelData.mode + "-count"
+              text: studyCard.modelData.value + (studyCard.modelData.mode === "reviews" ? " due" : " new")
+              font.pixelSize: Style.space(28)
+              textColor: Color.accent
+              font.bold: true
+            }
+          }
+          Label {
+            objectName: "today-" + studyCard.modelData.mode + "-saved"
+            Layout.fillWidth: true
+            text: studyCard.needsCheck ? "Saved session status needs a check." : studyCard.savedValid ? "Saved · " + studyCard.saved.completed + " of " + studyCard.saved.total + " complete" + (root.s.vacation ? " · vacation" : "") : root.s.vacation ? "Vacation · graded study is paused." : studyCard.modelData.mode === "reviews" ? "Recall what you’ve learned." : "Learn new meanings and readings."
+            font.pixelSize: Style.font.bodySmall
+          }
+          Flow {
+            Layout.fillWidth: true
+            spacing: Style.space(6)
+            Action {
+              objectName: "today-" + studyCard.modelData.mode + "-begin"
+              text: studyCard.needsCheck ? "Check saved status →" : studyCard.savedValid ? "Resume " + studyCard.modelData.mode + " →" : studyCard.modelData.mode === "reviews" ? "Review 5 →" : "Choose lessons →"
+              accessibleName: studyCard.needsCheck ? "Check saved " + studyCard.modelData.mode + " status" : text
+              selected: true
+              enabled: !root.controller.busy && (studyCard.needsCheck || studyCard.savedValid || (studyCard.modelData.value > 0 && !root.s.vacation))
+              onClicked: {
+                if (studyCard.needsCheck)
+                  root.controller.navigate(studyCard.modelData.mode === "reviews" ? "review-overview" : "lesson-overview")
+                else if (studyCard.savedValid || studyCard.modelData.mode === "reviews")
+                  root.controller.begin(studyCard.modelData.mode, 5)
+                else
+                  root.controller.navigate("lesson-overview")
+              }
+            }
+            Action {
+              objectName: "today-" + studyCard.modelData.mode + "-overview"
+              visible: !studyCard.needsCheck
+              text: "Overview"
+              accessibleName: studyCard.modelData.label + " overview"
+              onClicked: root.controller.navigate(studyCard.modelData.mode === "reviews" ? "review-overview" : "lesson-overview")
+            }
+          }
+        }
+      }
+    }
+  }
+  TodayLevel {
+    Layout.fillWidth: true
+    visible: !!root.s.username
+    progress: root.s.learning_progress || null
+    demo: root.s.demo === true
+    onExplore: root.controller.navigate("progress")
+  }
   Card {
+    objectName: "today-milestone"
     Layout.fillWidth: true
     Layout.preferredHeight: milestoneRow.implicitHeight + Style.space(24)
     visible: !!root.s.milestone
@@ -59,98 +170,6 @@ ColumnLayout {
       }
     }
   }
-  Flow {
-    Layout.fillWidth: true
-    spacing: Style.space(8)
-    visible: !s.username
-    Action {
-      text: "Connect WaniKani"
-      selected: true
-      onClicked: root.controller.navigate("settings")
-    }
-    Action {
-      text: "Try the demo"
-      onClicked: root.controller.call("use_demo", {
-        enabled: true
-      })
-    }
-  }
-  GridLayout {
-    Layout.fillWidth: true
-    columns: root.width < Style.space(480) ? 1 : 2
-    columnSpacing: Style.space(12)
-    rowSpacing: Style.space(12)
-    visible: !!s.username
-    Repeater {
-      model: [
-        {
-          label: "Reviews",
-          mode: "reviews",
-          value: root.s.reviews || 0
-        },
-        {
-          label: "Lessons",
-          mode: "lessons",
-          value: root.s.lessons || 0
-        }
-      ]
-      Card {
-        id: studyCard
-        required property var modelData
-        readonly property var saved: root.s.saved_sessions ? root.s.saved_sessions[modelData.mode] : null
-        Layout.fillWidth: true
-        Layout.preferredHeight: studyCardContent.implicitHeight + Style.space(32)
-        ColumnLayout {
-          id: studyCardContent
-          anchors.fill: parent
-          anchors.margins: Style.space(16)
-          spacing: Style.space(8)
-          Label {
-            Layout.fillWidth: true
-            text: studyCard.modelData.label
-            font.pixelSize: Style.font.title
-            font.bold: true
-          }
-          Label {
-            text: studyCard.modelData.value + (studyCard.modelData.mode === "reviews" ? " due" : " new")
-            font.pixelSize: Style.space(40)
-            textColor: Color.accent
-          }
-          Label {
-            Layout.fillWidth: true
-            text: studyCard.saved ? studyCard.saved.completed + " of " + studyCard.saved.total + " subjects completed · Session saved" : studyCard.modelData.mode === "reviews" ? "Recall subjects you have learned." : "Discover new meanings and readings."
-            font.pixelSize: Style.font.bodySmall
-          }
-          Flow {
-            Layout.fillWidth: true
-            spacing: Style.space(6)
-            Action {
-              text: studyCard.saved ? "Resume " + studyCard.modelData.mode + " →" : studyCard.modelData.mode === "reviews" ? "Review 5 →" : "Choose lessons →"
-              selected: true
-              enabled: !root.controller.busy && (!!studyCard.saved || (studyCard.modelData.value > 0 && !root.s.vacation))
-              onClicked: {
-                if (studyCard.saved || studyCard.modelData.mode === "reviews")
-                  root.controller.begin(studyCard.modelData.mode, 5)
-                else
-                  root.controller.navigate("lesson-overview")
-              }
-            }
-            Action {
-              text: "Overview"
-              accessibleName: studyCard.modelData.label + " overview"
-              onClicked: root.controller.navigate(studyCard.modelData.mode === "reviews" ? "review-overview" : "lesson-overview")
-            }
-          }
-        }
-      }
-    }
-  }
-  LevelProgress {
-    Layout.fillWidth: true
-    visible: !!root.s.username
-    progress: root.s.learning_progress || null
-    onExplore: root.controller.navigate("progress")
-  }
   Card {
     Layout.fillWidth: true
     visible: !!root.s.username
@@ -173,10 +192,12 @@ ColumnLayout {
         Layout.fillWidth: true
         spacing: Style.space(8)
         Action {
+          objectName: "today-listen"
           text: "Recall meaning →"
           onClicked: root.controller.navigate("listen")
         }
         Action {
+          objectName: "today-dictation"
           text: "Type kana →"
           onClicked: root.controller.navigate("dictation")
         }
@@ -184,6 +205,7 @@ ColumnLayout {
     }
   }
   Label {
+    objectName: "today-vacation"
     Layout.fillWidth: true
     visible: s.vacation === true
     text: "Vacation mode is on. Take your time; ungraded practice is available."
