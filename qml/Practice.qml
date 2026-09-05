@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui as Ui
+import "SubjectStatus.mjs" as SubjectStatus
 
 ColumnLayout {
   id: root
@@ -128,6 +129,14 @@ ColumnLayout {
         next.push(item.id)
     }
     selectedIds = next
+  }
+  function stageLabel(item) {
+    var named = SubjectStatus.stageName(item.srs_stage)
+    if (named)
+      return named
+    if (item.srs_stage === 0 && item.pending_graded === true)
+      return "No confirmed SRS stage yet"
+    return item.srs_stage === 0 && item.learned === false ? "Lesson not started" : "SRS stage unavailable"
   }
   function startSelected() {
     if (!selectedIds.length || selectedIds.length > selectionLimit || controller.busy)
@@ -318,61 +327,75 @@ ColumnLayout {
     model: root.library.items
     Card {
       id: subjectCard
+      objectName: "practice-subject-card"
       required property var modelData
+      required property int index
+      readonly property var glyphSubject: Array.isArray(root.library.items) && index >= 0 && index < root.library.items.length && root.library.items[index] && root.library.items[index].id === modelData.id ? root.library.items[index] : null
       readonly property bool chosen: root.selectedIds.indexOf(modelData.id) >= 0
       enabled: !root.loading
       opacity: root.loading ? 0.6 : 1
       Layout.fillWidth: true
-      Layout.preferredHeight: itemRow.implicitHeight + Style.space(24)
+      Layout.preferredHeight: itemContent.implicitHeight + Style.space(24)
       border.color: chosen ? Color.accent : Qt.alpha(Color.foreground, 0.12)
-      RowLayout {
-        id: itemRow
+      ColumnLayout {
+        id: itemContent
         anchors.fill: parent
         anchors.margins: Style.space(12)
-        spacing: Style.space(12)
-        SubjectGlyph {
-          Layout.preferredWidth: Style.space(100)
-          Layout.preferredHeight: Style.space(68)
-          subject: subjectCard.modelData
-          pixelSize: Style.space(34)
-        }
-        ColumnLayout {
+        spacing: Style.space(8)
+        RowLayout {
           Layout.fillWidth: true
-          spacing: Style.space(5)
+          spacing: Style.space(12)
+          SubjectGlyph {
+            objectName: "practice-subject-glyph"
+            Layout.preferredWidth: Style.space(78)
+            Layout.preferredHeight: Style.space(64)
+            subject: subjectCard.glyphSubject
+            pixelSize: Style.space(34)
+          }
           Label {
+            objectName: "practice-subject-meaning"
             Layout.fillWidth: true
             text: subjectCard.modelData.spoilers_hidden ? "Meaning hidden during your graded session" : subjectCard.modelData.meaning || "Radical image"
-            textColor: subjectCard.modelData.spoilers_hidden ? Qt.alpha(Color.foreground, 0.76) : Color.foreground
+            secondary: subjectCard.modelData.spoilers_hidden
             font.bold: !subjectCard.modelData.spoilers_hidden
           }
-          Label {
-            Layout.fillWidth: true
-            text: subjectCard.modelData.type.replace("_", " ") + " · Level " + subjectCard.modelData.level + " · " + (subjectCard.modelData.learned ? "SRS " + subjectCard.modelData.srs_stage : "Lesson not started")
-            secondary: true
-            font.pixelSize: Style.font.bodySmall
-          }
-          Label {
-            Layout.fillWidth: true
-            text: subjectCard.modelData.reasons.map(function (reason) {
-              return reason.label
-            }).join(" · ")
-            secondary: true
-            font.pixelSize: Style.font.bodySmall
-          }
-          Label {
-            Layout.fillWidth: true
-            visible: !subjectCard.modelData.ready
-            text: subjectCard.modelData.cache_note
-            textColor: Color.urgent
-            font.pixelSize: Style.font.bodySmall
-          }
         }
-        Action {
-          text: subjectCard.chosen ? "Selected ✓" : "Select"
-          selected: subjectCard.chosen
-          enabled: subjectCard.chosen || (subjectCard.modelData.ready && root.selectedIds.length < root.selectionLimit)
-          accessibleName: (subjectCard.chosen ? "Remove " : "Add ") + (subjectCard.modelData.characters || "radical") + (subjectCard.chosen ? " from" : " to") + " practice selection"
-          onClicked: root.toggleSubject(subjectCard.modelData)
+        Label {
+          objectName: "practice-subject-status"
+          Layout.fillWidth: true
+          text: subjectCard.modelData.type.replace("_", " ") + " · Level " + subjectCard.modelData.level + " · " + root.stageLabel(subjectCard.modelData)
+          secondary: true
+          font.pixelSize: Style.font.bodySmall
+        }
+        Label {
+          objectName: "practice-subject-reasons"
+          Layout.fillWidth: true
+          text: subjectCard.modelData.reasons.map(function (reason) {
+            return reason.label
+          }).join(" · ")
+          secondary: true
+          font.pixelSize: Style.font.bodySmall
+        }
+        Label {
+          Layout.fillWidth: true
+          visible: !subjectCard.modelData.ready
+          text: subjectCard.modelData.cache_note
+          textColor: Color.urgent
+          font.pixelSize: Style.font.bodySmall
+        }
+        Flow {
+          Layout.fillWidth: true
+          spacing: Style.space(6)
+          Action {
+            objectName: "practice-subject-select"
+            text: subjectCard.chosen ? "Selected ✓" : "Select"
+            selected: subjectCard.chosen
+            enabled: subjectCard.chosen || (subjectCard.modelData.ready && root.selectedIds.length < root.selectionLimit)
+            accessibleName: (subjectCard.chosen ? "Remove " : "Add ") + (subjectCard.modelData.characters || "radical") + (subjectCard.chosen ? " from" : " to") + " practice selection"
+            Accessible.checkable: true
+            Accessible.checked: subjectCard.chosen
+            onClicked: root.toggleSubject(subjectCard.modelData)
+          }
         }
       }
     }

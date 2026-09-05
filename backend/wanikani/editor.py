@@ -78,7 +78,7 @@ def discard(engine, subject_id, expected=None):
         old = record(engine, subject_id)
         if expected is None or old is None or old["values"] == expected:
             engine.store.execute("DELETE FROM meta WHERE key=?", (PREFIX + str(subject_id),))
-        return engine.details(subject_id)
+        return engine.details(subject_id, include_status=True)
 
 
 def clear_saved(engine, subject_id, submitted, expected):

@@ -6,12 +6,17 @@ Record the installed revision separately from the tested source revision. Featur
 
 ## First session
 
+Keep an existing working account connection. Token replacement and session-only restart checks are separate, deliberate authentication exercises; they are not needed to try a new plugin version.
+
 - [ ] Rehearse in **Try the demo**: five reviews, Escape/resume, Lookup, and simulated offline/reconnect. Confirm the saved question and draft return.
-- [ ] Connect a **read-only token** in Settings. Check the account name, level, review count, and accessible Lookup content against WaniKani. This check uses dashboard and lookup only.
-- [ ] Clear **Remember securely in the desktop keyring** for **session-only authentication**. Settings should report session storage. Restart the plugin: cached state should remain and token re-entry should be required. Resolve any older-token removal notice.
+- [ ] Check the connected account name, level, review count and accessible Lookup content against WaniKani. If connecting for the first time, a read-only token is sufficient for this check.
 - [ ] Connect study permissions: assignment starts and review creation; study-material create/update for notes and synonyms. Choose meaning strictness, audio/voice, cache size, reminders, and ambient settings.
 - [ ] Check offline readiness and sync freshness; required images and optional audio are separate. Deliberately complete up to five **real due subjects**, acknowledge final feedback, and inspect **Saved submissions**. Submit only answers you intend to commit; use demo or ungraded practice for fault experiments.
 - [ ] After the audio features are installed, deliberately play an original vocabulary recording and verify audible Japanese and the displayed voice/pronunciation. In **Listen**, reveal before choosing Got it or Again. In **Type kana**, finish the current recording, type an answer, inspect feedback, then Continue. Check replay, Stop, silent reopen, draft resume, Skip and immediate Undo. Decoder tests and CLI dispatch do not establish audible output or human hearing; these local skills must not change WaniKani's schedule.
+
+## Optional authentication exercise
+
+Use this only when deliberately qualifying authentication, with the desktop fully unlocked and study closed. Preserve pending data. Clear **Remember securely in the desktop keyring** for session-only authentication; Settings should report session storage. After a normal plugin restart, cached state should remain and token re-entry should be required. Resolve any older-token removal notice, then restore your preferred credential storage. Do not put the token in a report or ask an agent to retrieve it.
 
 ## Daily record
 

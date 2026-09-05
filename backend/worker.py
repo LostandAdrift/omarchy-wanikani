@@ -594,7 +594,7 @@ class Worker:
             from wanikani.srs_explorer import guarded_details
             if set(args) != {"subject_id"}:
                 raise UserError("Choose one subject from current cached progress.", "invalid_request")
-            result = guarded_details(self.engine, args["subject_id"])
+            result = guarded_details(self.engine, args["subject_id"], include_status=True)
         elif method == "progress":
             from wanikani.progress import overview
             result = overview(self.engine)
@@ -620,7 +620,7 @@ class Worker:
             from wanikani.session_report import report
             result = report(self.engine, args.get("session_id"))
         elif method == "details":
-            result = self.engine.details(int(args["subject_id"]))
+            result = self.engine.details(int(args["subject_id"]), include_status=True)
         elif method == "ambient":
             result = self.engine.ambient()
         elif method == "session":

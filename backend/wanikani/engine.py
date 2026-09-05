@@ -178,7 +178,7 @@ class Engine:
             if eligible:
                 yield assignment, self.store.subject(row["subject_id"])
 
-    def details(self, subject_id, include_relations=True):
+    def details(self, subject_id, include_relations=True, *, include_status=False):
         subject = self.store.subject(int(subject_id))
         self.ensure_access(subject)
         data = subject["data"]
@@ -239,7 +239,12 @@ class Engine:
             path = available_file(media_dir, rows[0][0]) if rows else None
             if path:
                 images.append(path.as_uri())
+        learning_status = {}
+        if include_status:
+            from .subject_status import project
+            learning_status = {"learning_status": project(self, [int(subject_id)]).get(int(subject_id))}
         return {
+            **learning_status,
             "id": subject["id"], "type": subject["object"], "characters": data.get("characters") if isinstance(data.get("characters"), str) else "",
             "slug": data.get("slug") if isinstance(data.get("slug"), str) else "", "level": data.get("level"), "images": images,
             "meanings": [m["meaning"] for m in objects("meanings") if m.get("accepted_answer") is True and isinstance(m.get("meaning"), str)],
@@ -632,7 +637,7 @@ class Engine:
             editor.clear_saved(self, subject_id, values, editor_draft)
             if self.demo:
                 self.confirm_demo()
-        return self.details(subject_id)
+        return self.details(subject_id, include_status=True)
 
     def difficult(self):
         rows = self.store.rows("""SELECT DISTINCT subject_id FROM events WHERE kind='answer'
@@ -658,7 +663,7 @@ class Engine:
         elif not enabled and subject_id in ids:
             ids.remove(subject_id)
         self.store.set("pinned_subjects", ids[:100])
-        return self.details(subject_id)
+        return self.details(subject_id, include_status=True)
 
     def ambient(self):
         rows = self.store.rows(f"""SELECT s.id FROM resources s JOIN resources a ON a.kind='assignment'

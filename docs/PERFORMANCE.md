@@ -28,7 +28,7 @@ Exit status is 0 for a completed valid report, 1 for an invalidated report, 2 fo
 
 ## Estimate the contribution inside the shared shell
 
-Use an enabled → disabled → enabled sequence with the same shell process. Close study first so its saved session is durable. Let synchronization and surface transitions settle before each capture. Keep theme, monitor arrangement, idle settings, other plugins, and desktop activity as consistent as possible. Record whether ambient surfaces were enabled; compare the same conditions in both enabled runs. The collector does not control these conditions.
+Use an enabled → disabled → enabled sequence with the same shell process. Lifecycle changes require a fully unlocked desktop and closed study; defer the sequence if any lock state is active or uncertain. See [the observed lock/reload issue](LOCK_RELOAD_INCIDENT.md). Close study first so its saved session is durable. Let synchronization and surface transitions settle before each capture. Keep theme, monitor arrangement, idle settings, other plugins, and desktop activity as consistent as possible. Record whether ambient surfaces were enabled; compare the same conditions in both enabled runs. The collector does not control these conditions.
 
 1. Collect `enabled-before.json` using the command above.
 2. Disable WaniKani with the normal Omarchy plugin controls. Do not restart the shell. Once it settles, collect the baseline:

@@ -209,7 +209,7 @@ class InputThemeRenderingTests(unittest.TestCase):
             for name in ('Study','Lookup','SubjectDetails','SubjectPath','Settings','StudyRhythm','Label','Card','Action','ActivationGuard','SubjectGlyph','JapaneseText','RadicalImage'):
                 content=(ROOT/'qml'/(name+'.qml')).read_text().replace('import Quickshell\n','')
                 (qml/(name+'.qml')).write_text(content)
-            for name in ('Theme.mjs','UnicodeText.mjs'):
+            for name in ('Theme.mjs','UnicodeText.mjs','SubjectStatus.mjs'):
                 shutil.copyfile(ROOT/'qml'/name,qml/name)
             vendor=directory/'vendor';vendor.mkdir();shutil.copyfile(ROOT/'vendor/WanaKana.mjs',vendor/'WanaKana.mjs')
             for name,properties in {

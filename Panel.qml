@@ -842,6 +842,13 @@ Item {
           }
         }
       }
+      Shortcut {
+        objectName: "dictation-navigation-shortcut"
+        sequence: "Ctrl+0"
+        enabled: root.opened && !root.editingText
+        autoRepeat: false
+        onActivated: root.navigate("dictation")
+      }
       ColumnLayout {
         anchors.fill: parent
         anchors.margins: Style.space(22)

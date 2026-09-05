@@ -81,6 +81,7 @@ Item {
     shutil.copyfile(ROOT / 'vendor/WanaKana.mjs', directory / 'WanaKana.mjs')
     shutil.copyfile(ROOT / 'qml/UnicodeText.mjs', directory / 'UnicodeText.mjs')
     shutil.copyfile(ROOT / 'qml/Theme.mjs', directory / 'Theme.mjs')
+    shutil.copyfile(ROOT / 'qml/SubjectStatus.mjs', directory / 'SubjectStatus.mjs')
     shutil.copyfile(ROOT / 'tests/fixtures/SurfaceLifecycle.qml', directory / 'tst_SurfaceLifecycle.qml')
 
 

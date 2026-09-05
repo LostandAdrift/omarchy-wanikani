@@ -63,6 +63,10 @@ ColumnLayout {
     {
       key: "Ctrl+9",
       action: "Local learning activity"
+    },
+    {
+      key: "Ctrl+0",
+      action: "Type kana"
     }
   ]
   spacing: Style.space(16)
@@ -168,7 +172,7 @@ ColumnLayout {
     }
     Label {
       Layout.fillWidth: true
-      text: "These shortcuts work when you are outside a text field."
+      text: "These shortcuts work inside the open panel when you are outside a text field."
       secondary: true
       font.pixelSize: Style.font.bodySmall
     }
@@ -199,12 +203,12 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "Reviews recalls subjects you have learned. Lessons introduces new subjects before a separate quiz. Listen offers two activities with their own saved positions: Recall meaning and Type kana. Listening results stay local; they do not change your WaniKani schedule."
+    text: "Reviews test subjects you have learned. Lessons introduce new subjects before a separate quiz. Listen offers two activities with their own saved positions: Recall meaning and Type kana. Listening results stay local; they do not change your WaniKani schedule."
     secondary: true
   }
   Label {
     Layout.fillWidth: true
-    text: "For Recall meaning, use Play, Reveal, then Got it or Again. For Type kana, play the recording, type romaji or kana, and Check; Continue saves the result. Returning to either saved session stays silent. Choose pronunciation, autoplay and Study rhythm in Settings."
+    text: "For Recall meaning, use Play, Reveal, then Got it or Again. For Type kana, play the recording, type romaji or kana, and Check; Continue saves the result. Returning to either saved session stays silent. Choose a pronunciation voice and autoplay in Settings → Audio. Set Study rhythm in Settings → Reminders."
     secondary: true
   }
   Label {
@@ -214,7 +218,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "Super+Alt+W opens study. Super+Alt+Shift+W looks up selected text. Enable desktop shortcuts in Settings; existing bindings are preserved."
+    text: "Super+Alt+W opens study. Super+Alt+Shift+W looks up selected text. Enable desktop shortcuts in Settings → Desktop; existing bindings are preserved."
     secondary: true
   }
 }

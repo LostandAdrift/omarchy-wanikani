@@ -96,12 +96,14 @@ def lookup(engine, text, limit=30, filters=None, reading_query=None):
             CAST(id AS INTEGER)
           LIMIT :limit
         """, values)
-        pending_subjects = {row[0] for row in engine.store.rows("""SELECT subject_id FROM outbox
-          WHERE kind IN ('review','lesson') AND state IN ('pending','inflight','uncertain','blocked','conflicted')""")}
+        from .subject_status import project
+        statuses = project(engine, [int(row["id"]) for row in rows])
         result = []
         for row in rows:
             detail = engine.details(int(row["id"]), False)
-            detail["pending"] = int(row["id"]) in pending_subjects
+            detail["learning_status"] = statuses.get(int(row["id"]))
+            detail["pending"] = bool(detail["learning_status"] and
+                (detail["learning_status"]["pending"] or detail["learning_status"]["attention"]))
             detail["match"] = "exact" if row["rank"] <= 2 else "in_selection" if row["rank"] == 3 else "related"
             result.append(detail)
         return result

@@ -104,6 +104,64 @@
         "/usr/share/omarchy/shell/Ui/Button.qml": "fda48672cc11dba109acea1cc98eb4b29746e5ce09f90a47f487b776ff99e799",
         "/usr/share/omarchy/shell/Ui/TextField.qml": "b3ad72f56f86c2df164e347d64205c099f77c5fb90933fabea3b0f2a9e2b3778"
       }
+    },
+    {
+      "file": "practice-component-dark.png",
+      "sha256": "8ed9750b8c9e898ba1b3e6b0a170e620d958964a0e3eaf40b2586aa16c361b10",
+      "source_version": "0.2.12",
+      "runtime_sources": {
+        "qml/Action.qml": "c04dcd2ed4a66ffd889d677f1f2782cf869074dc71342756a18dc738977eadb4",
+        "qml/ActivationGuard.qml": "cb959cb1413ecc66626ddb0a66b39a0587382fd04b911244558ad99015f8438d",
+        "qml/Card.qml": "4f766b8110f91331a2918342846392e02d4664b9fd3af5cb8e21506ef4ad1bfd",
+        "qml/JapaneseText.qml": "ed6b0c2a8c8e3b1677a2df266bd2cbb952a4b4e5f63892a41126edef3c208557",
+        "qml/KanjiExamples.qml": "6e36cd34da987a602620fe6b96a95ffc08e05401917f8f33e3d2f4982a8c3822",
+        "qml/Label.qml": "b1947e9af54ac061961bccba1016cfbaa345b3d2927cf54c5be1f0eae2855679",
+        "qml/Lookalikes.qml": "21848263919afed472a7450610aa62aa23b9ae06d1dfdba76c11e9d00ba83807",
+        "qml/Practice.qml": "7447a533e368ca58ce4a196d75fc56ead79e9ebdf00d51560b30aa26b0931029",
+        "qml/Pronunciation.qml": "90f710ab2413d6af46457691e9ad1e10fea6fbf6b3f0d3e3968df6455e2580b7",
+        "qml/RadicalImage.qml": "e776dc74b20a8e31d0742ff2dbdb7d0f11cf0ee12cb29569be45996428889718",
+        "qml/Study.qml": "a77d5dd7500e05e8910568df2a03bdd29afc68a04e4c692ab2ac62b7a68dbfe7",
+        "qml/SubjectDetails.qml": "50cd2978f764187b1e3c9066473f455752133e50d036005f0cf979ae4cfde328",
+        "qml/SubjectGlyph.qml": "e7871a67cc48fecaae457652c1b7f45dea8d60795d38edaba298d8786f03a817",
+        "qml/SubjectPath.qml": "e079dc2e7f17be5447a3fecb004c1381884272a7e3b2406feb1f13dd1a489c13",
+        "qml/SubjectStatus.mjs": "16abd7f50317694589c42d54cb79460a7c4d859011289bb3296b5eca078eb6bc",
+        "qml/Theme.mjs": "294b9882a70bfbc509a12b1b296f68f7aba25743a764a027fc088f3c440137d5",
+        "qml/UnicodeText.mjs": "e7566632909383358c9993b0b685219d818bc517965f2081162fc9e06772b8b0"
+      },
+      "scope": "Production Practice and native Button/TextField; authored catalogue and inert IO/theme adapters. Offscreen Qt, not hosted shell. Recaptured against final SubjectStatus helper.",
+      "native_controls": {
+        "/usr/share/omarchy/shell/Ui/Button.qml": "fda48672cc11dba109acea1cc98eb4b29746e5ce09f90a47f487b776ff99e799",
+        "/usr/share/omarchy/shell/Ui/TextField.qml": "b3ad72f56f86c2df164e347d64205c099f77c5fb90933fabea3b0f2a9e2b3778"
+      }
+    },
+    {
+      "file": "practice-radical-component-light.png",
+      "sha256": "65cba2e7756cb97e41f49aa1cf7111987a23e5a3013b039ab84f793875791d82",
+      "source_version": "0.2.12",
+      "runtime_sources": {
+        "qml/Action.qml": "c04dcd2ed4a66ffd889d677f1f2782cf869074dc71342756a18dc738977eadb4",
+        "qml/ActivationGuard.qml": "cb959cb1413ecc66626ddb0a66b39a0587382fd04b911244558ad99015f8438d",
+        "qml/Card.qml": "4f766b8110f91331a2918342846392e02d4664b9fd3af5cb8e21506ef4ad1bfd",
+        "qml/JapaneseText.qml": "ed6b0c2a8c8e3b1677a2df266bd2cbb952a4b4e5f63892a41126edef3c208557",
+        "qml/KanjiExamples.qml": "6e36cd34da987a602620fe6b96a95ffc08e05401917f8f33e3d2f4982a8c3822",
+        "qml/Label.qml": "b1947e9af54ac061961bccba1016cfbaa345b3d2927cf54c5be1f0eae2855679",
+        "qml/Lookalikes.qml": "21848263919afed472a7450610aa62aa23b9ae06d1dfdba76c11e9d00ba83807",
+        "qml/Practice.qml": "7447a533e368ca58ce4a196d75fc56ead79e9ebdf00d51560b30aa26b0931029",
+        "qml/Pronunciation.qml": "90f710ab2413d6af46457691e9ad1e10fea6fbf6b3f0d3e3968df6455e2580b7",
+        "qml/RadicalImage.qml": "e776dc74b20a8e31d0742ff2dbdb7d0f11cf0ee12cb29569be45996428889718",
+        "qml/Study.qml": "a77d5dd7500e05e8910568df2a03bdd29afc68a04e4c692ab2ac62b7a68dbfe7",
+        "qml/SubjectDetails.qml": "50cd2978f764187b1e3c9066473f455752133e50d036005f0cf979ae4cfde328",
+        "qml/SubjectGlyph.qml": "e7871a67cc48fecaae457652c1b7f45dea8d60795d38edaba298d8786f03a817",
+        "qml/SubjectPath.qml": "e079dc2e7f17be5447a3fecb004c1381884272a7e3b2406feb1f13dd1a489c13",
+        "qml/SubjectStatus.mjs": "16abd7f50317694589c42d54cb79460a7c4d859011289bb3296b5eca078eb6bc",
+        "qml/Theme.mjs": "294b9882a70bfbc509a12b1b296f68f7aba25743a764a027fc088f3c440137d5",
+        "qml/UnicodeText.mjs": "e7566632909383358c9993b0b685219d818bc517965f2081162fc9e06772b8b0"
+      },
+      "scope": "Production Practice and native Button/TextField; authored catalogue and inert IO/theme adapters. Offscreen Qt, not hosted shell. Recaptured against final SubjectStatus helper.",
+      "native_controls": {
+        "/usr/share/omarchy/shell/Ui/Button.qml": "fda48672cc11dba109acea1cc98eb4b29746e5ce09f90a47f487b776ff99e799",
+        "/usr/share/omarchy/shell/Ui/TextField.qml": "b3ad72f56f86c2df164e347d64205c099f77c5fb90933fabea3b0f2a9e2b3778"
+      }
     }
   ]
 }

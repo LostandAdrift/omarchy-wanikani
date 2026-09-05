@@ -9,7 +9,7 @@ from .common import UserError, accessible_subject
 from .grading import validate_subject_answers
 
 
-def _details(engine, value, guarded=False):
+def _details(engine, value, guarded=False, include_status=False):
     subject_id = value.get("id")
     if type(subject_id) is not int or subject_id < 1:
         raise UserError("This completed request's subject is no longer accessible.", "access_restricted")
@@ -19,7 +19,7 @@ def _details(engine, value, guarded=False):
     if guarded:
         from .srs_explorer import guarded_details
         return subject, guarded_details(engine, subject_id)
-    return subject, engine.details(subject_id)
+    return subject, engine.details(subject_id, include_status=True) if include_status else engine.details(subject_id)
 
 
 def restricted_session(value):
@@ -83,5 +83,5 @@ def replay(engine, value):
     if "id" in value and "type" in value:
         # Pin, save material and discard editor return subject details directly.
         # If access ended, return a normal error while retaining the durable ID.
-        return _details(engine, value)[1]
+        return _details(engine, value, include_status=True)[1]
     return value  # Small settings/draft acknowledgments contain no subject text.

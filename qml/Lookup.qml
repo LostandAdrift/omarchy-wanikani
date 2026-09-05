@@ -4,6 +4,7 @@ import qs.Commons
 import "Theme.mjs" as Theme
 import qs.Ui as Ui
 import "UnicodeText.mjs" as UnicodeText
+import "SubjectStatus.mjs" as SubjectStatus
 
 ColumnLayout {
   id: root
@@ -217,36 +218,41 @@ ColumnLayout {
   Repeater {
     model: root.controller.detail ? [] : root.controller.results
     Card {
-      required property var modelData
+      id: resultCard
+      required property int index
+      readonly property var entry: root.controller.results && index >= 0 && index < root.controller.results.length ? root.controller.results[index] : null
       Layout.fillWidth: true
       Layout.preferredHeight: row.implicitHeight + Style.space(24)
-      RowLayout {
+      ColumnLayout {
         id: row
         anchors.fill: parent
         anchors.margins: Style.space(12)
-        SubjectGlyph {
-          subject: modelData
-          pixelSize: Style.space(30)
-          Layout.preferredWidth: Style.space(120)
-          Layout.preferredHeight: Style.space(50)
-        }
-        ColumnLayout {
+        RowLayout {
           Layout.fillWidth: true
-          Label {
-            Layout.fillWidth: true
-            text: modelData.meanings.join(" · ")
+          SubjectGlyph {
+            subject: resultCard.entry
+            pixelSize: Style.space(30)
+            Layout.preferredWidth: Style.space(root.width < 420 ? 80 : 120)
+            Layout.preferredHeight: Style.space(50)
           }
           Label {
             Layout.fillWidth: true
-            text: modelData.type.replace("_", " ") + " · Level " + modelData.level + " · " + (modelData.pending ? "Waiting to sync" : modelData.assignment.burned_at ? "Burned" : modelData.assignment.started_at ? "SRS " + modelData.assignment.srs_stage : "Not started")
-            font.pixelSize: Style.font.bodySmall
-            secondary: true
+            text: resultCard.entry ? resultCard.entry.meanings.join(" · ") : ""
+          }
+          Action {
+            text: "Open"
+            accessibleName: resultCard.entry ? "Open " + (resultCard.entry.characters || resultCard.entry.slug) + ", " + resultCard.entry.meanings.join(", ") : "Open subject"
+            enabled: root.active && resultCard.entry !== null
+            onClicked: if (resultCard.entry)
+              root.controller.showSubject(resultCard.entry.id)
           }
         }
-        Action {
-          text: "Open"
-          accessibleName: "Open " + (modelData.characters || modelData.slug) + ", " + modelData.meanings.join(", ")
-          onClicked: root.controller.showSubject(modelData.id)
+        Label {
+          objectName: "lookup-result-status"
+          Layout.fillWidth: true
+          text: resultCard.entry ? resultCard.entry.type.replace("_", " ") + " · Level " + resultCard.entry.level + " · " + SubjectStatus.label(resultCard.entry.learning_status) : ""
+          font.pixelSize: Style.font.bodySmall
+          secondary: true
         }
       }
     }
@@ -274,7 +280,9 @@ ColumnLayout {
       pixelSize: Style.space(64)
     }
     Label {
-      text: root.controller.detail ? root.controller.detail.type.replace("_", " ") + " · Level " + root.controller.detail.level + " · SRS " + (root.controller.detail.assignment.srs_stage || 0) : ""
+      objectName: "lookup-detail-status"
+      Layout.fillWidth: true
+      text: root.controller.detail ? root.controller.detail.type.replace("_", " ") + " · Level " + root.controller.detail.level + " · " + SubjectStatus.label(root.controller.detail.learning_status) : ""
       secondary: true
     }
     Action {

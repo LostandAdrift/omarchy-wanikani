@@ -131,7 +131,7 @@ class SrsWorkerTests(unittest.TestCase):
         before = self.preserved()
         with patch("wanikani.srs_explorer.guarded_details", return_value={"id": 4, "authored": True}) as guarded:
             self.assertEqual({"id": 4, "authored": True}, self.request("progress_details", {"subject_id": 4}))
-        guarded.assert_called_once_with(self.engine, 4)
+        guarded.assert_called_once_with(self.engine, 4, include_status=True)
         self.assert_preserved(before)
 
     def test_actual_guarded_detail_is_a_read_without_session_or_outbox_effects(self):

@@ -505,6 +505,7 @@ ColumnLayout {
       Card {
         id: lessonCard
         required property var modelData
+        required property int index
         Layout.fillWidth: true
         Layout.preferredHeight: lessonContent.implicitHeight + Style.space(24)
         ColumnLayout {
@@ -517,7 +518,9 @@ ColumnLayout {
             SubjectGlyph {
               Layout.preferredWidth: Style.space(66)
               Layout.preferredHeight: Style.space(66)
-              subject: lessonCard.modelData
+              // Repeater roles wrap nested arrays; keep the original cached
+              // image list and reject a stale delegate during page changes.
+              subject: root.catalogue.items[lessonCard.index] && root.catalogue.items[lessonCard.index].id === lessonCard.modelData.id ? root.catalogue.items[lessonCard.index] : null
               pixelSize: Style.space(42)
             }
             ColumnLayout {

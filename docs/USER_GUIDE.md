@@ -21,7 +21,7 @@ Open the crab in the bar for **Today**. Reviews and Lessons have separate overvi
 
 An unfinished Review session and an unfinished Lesson session are saved independently. Switching modes preserves each question, answer draft, discovery step and error count. Explicit Reviews or Lessons actions resume their own mode. Generic Resume prefers saved graded work, then saved ungraded practice. Practice can coexist with paused graded work; it does not erase it.
 
-**Escape** saves your place and returns to work. **Expand** changes the presentation without restarting. **Enter** checks an answer and, after feedback, advances. Holding Enter cannot check and immediately skip the feedback. **F1** opens keyboard help. Navigation shortcuts leave answer fields and IME composition alone, and focused controls scroll into view.
+**Escape** saves your place and returns to work. **Expand** changes the presentation without restarting. **Enter** checks an answer and, after feedback, advances. Holding Enter cannot check and immediately skip the feedback. **F1** opens keyboard help. **Ctrl+0** opens Type kana inside the panel when focus is outside a text field. Navigation shortcuts leave answer fields and IME composition alone, and focused controls scroll into view.
 
 The optional desktop integration supplies **Super+Alt+W** for study and **Super+Alt+Shift+W** for selection lookup when those bindings are free. Install or remove it under **Settings → Desktop**; occupied bindings and unrelated configuration are preserved. For command-line usage, see the [README](../README.md) and [command-line support](AGENT_SUPPORT.md). Press **F1** for the complete keyboard shortcut reference.
 
@@ -45,7 +45,7 @@ Reading answers require exact normalized kana. Meaning grading accepts the subje
 
 At the end, **Review this batch** shows recorded mistakes and each subject's current local submission status. **Practice items to revisit** opens ungraded practice of missed items; guarded typo corrections are excluded. Another batch is optional. [Authored batch recap](screenshots/recap-dark.png)
 
-The **Practice** library groups saved difficult items, recent local mistakes and learned subjects. Choose up to twenty, or add five at a time. Cards explain why each item appears and whether required content is available offline. Graded answers remain concealed on protected library cards. Starting an explicitly different practice selection keeps the earlier local record and paused lessons/reviews; it replaces only the active ungraded practice reference. [Authored practice selection](screenshots/practice-dark.png)
+The **Practice** library groups saved difficult items, recent local mistakes and learned subjects. Compact cards show familiar SRS stage names and give the selection reason its own line. Choose up to twenty, or add five at a time. Cards explain why each item appears and whether required content is available offline. Graded answers remain concealed on protected library cards. Starting an explicitly different practice selection keeps the earlier local record and paused lessons/reviews; it replaces only the active ungraded practice reference. [Authored compact practice selection](screenshots/practice-component-dark.png)
 
 ## Hear original pronunciation
 
@@ -101,6 +101,8 @@ Choose an SRS group or open **SRS explorer** to browse across accessible levels.
 For the same distinction in a cached command-line recap, use the documented [learning reports](AGENT_SUPPORT.md#cached-learning-reports). Reports carry their own calculation time and stale/unknown status; reading a report does not refresh the account or start a session.
 
 ## Look up a word or practise from a passage
+
+Lookup labels use named SRS stages from cached confirmed assignments. Waiting or attention flags are shown separately; an unfinished local result never predicts the next stage. Missing or invalid progress stays unavailable.
 
 Invoke lookup to read the current selection, falling back to clipboard text. It does not poll your clipboard. You can also type Japanese, romaji readings, meanings or saved personal synonyms. Type/progress filters narrow the accessible catalogue; exact matches rank first and longer selections surface known words contained in the text. This is local WaniKani catalogue search, with no screenshot OCR or general translation service.
 

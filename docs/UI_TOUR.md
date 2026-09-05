@@ -1,6 +1,6 @@
 # A quick tour
 
-These previews use independently authored sample data and the native controls in the **0.2.10 source**, with subject connections from **0.2.11**. They were rendered offscreen with inert account, audio and shell adapters. They show layout and interaction states; they are not photographs of the currently installed desktop or evidence of audible playback. Source and installed verification remain [separate](IMPLEMENTATION.md).
+These previews use independently authored sample data and the native controls in the **0.2.10 source**, with subject connections from **0.2.11** and compact Practice from **0.2.12**. They were rendered offscreen with inert account, audio and shell adapters. They show layout and interaction states; they are not photographs of the currently installed desktop or evidence of audible playback. Source and installed verification remain [separate](IMPLEMENTATION.md).
 
 ## Know what comes next
 
@@ -39,6 +39,12 @@ A missed transcription shows the learner's kana beside the actual recording's ka
 Today's saved recap separates completed written study, meaning-listening self-ratings and kana-dictation matches. Skips remain visible separately. The date window and calculation time explain what the recap includes; open Activity for a current local report.
 
 ![Local activity recap with separate written and audio results](screenshots/activity-component-light.png)
+
+## Build your own practice set
+
+Compact Practice cards give meanings, named SRS stages and the reason for the suggestion room to breathe. Select a subject explicitly; paused graded work stays saved. Cached image radicals use the real local image.
+
+![A selected ungraded practice card in a narrow dark component](screenshots/practice-component-dark.png)
 
 ## Fit practice into the day
 

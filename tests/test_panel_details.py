@@ -383,6 +383,7 @@ Item {
             shutil.copyfile(ROOT / "vendor" / "WanaKana.mjs", directory / "WanaKana.mjs")
             shutil.copyfile(ROOT / "qml" / "UnicodeText.mjs", directory / "UnicodeText.mjs")
             shutil.copyfile(ROOT / "qml" / "Theme.mjs", directory / "Theme.mjs")
+            shutil.copyfile(ROOT / "qml" / "SubjectStatus.mjs", directory / "SubjectStatus.mjs")
             (directory / "tst_PanelDetails.qml").write_text(QML)
             process = subprocess.run([str(RUNNER), "-input", str(directory)],
                 capture_output=True, text=True, timeout=30,

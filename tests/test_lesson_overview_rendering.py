@@ -124,6 +124,32 @@ Item {
       action("Kana vocabulary · 7")
       compare(owner.starts.length,0)
     }
+    function test_cached_image_radical_uses_original_catalogue_array() {
+      var radical = card(91,"radical",true)
+      radical.images = [String(Qt.resolvedUrl("radical.svg"))]
+      backend.cards = [radical]
+      settle()
+      var image = findChild(screen,"radicalImage")
+      verify(image !== null)
+      tryCompare(image,"status",Image.Ready)
+      compare(String(image.source),String(Qt.resolvedUrl("radical.svg")))
+      var reads = backend.requests.length
+      action("Add to lessons").clicked()
+      previewSettled()
+      compare(screen.selectedIds,[91])
+      compare(owner.starts.length,0)
+      compare(backend.requests.length,reads+1)
+      verify(backend.requests.every(function (request) { return request.method !== "media" }))
+      backend.cards = [card(92,"radical",false)]
+      screen.loadPage(0)
+      settle()
+      var missing = findChild(screen,"radicalImage")
+      verify(missing !== null)
+      compare(String(missing.source),"")
+      compare(missing.status,Image.Null)
+      verify(!action("Add to lessons").enabled)
+      compare(owner.starts.length,0)
+    }
     function test_recommended_preview_then_separate_start() {
       settle()
       action("Preview recommended").clicked()
@@ -368,6 +394,7 @@ class LessonOverviewRenderingTests(unittest.TestCase):
             (common / "Color.qml").write_text('pragma Singleton\nimport QtQuick\nQtObject {\n'
                 ' property color background: "#ffffff"\n property color foreground: "#202020"\n'
                 ' property color accent: "#006699"\n property color urgent: "#990000"\n}\n')
+            shutil.copyfile(ROOT / "tests/qml/fixtures/radical.svg", directory / "radical.svg")
             (directory / "tst_LessonOverview.qml").write_text(QML)
             result = subprocess.run([str(RUNNER), "-input", str(directory), "-import", str(directory)],
                 capture_output=True, text=True, timeout=45,

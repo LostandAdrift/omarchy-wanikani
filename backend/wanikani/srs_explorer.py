@@ -135,7 +135,7 @@ def catalogue(engine, group="apprentice", subject_type=None, level=None,
             "source": "cached_wanikani", "scope": "Accessible cached subjects; confirmed current assignments"}
 
 
-def guarded_details(engine, subject_id):
+def guarded_details(engine, subject_id, *, include_status=False):
     """Reauthorize automatic progress links independently of manual Lookup.
 
     The same lock covers identity, current assignment/access, every unfinished
@@ -152,7 +152,7 @@ def guarded_details(engine, subject_id):
         protected, aliases = progress._protected(engine)
         if protected is None or subject_id in protected or bool(rows[0]["characters"] and rows[0]["characters"] in aliases):
             raise UserError("This answer is kept for your saved graded study. Resume that session to reveal it.", "protected_study")
-        result = engine.details(subject_id)
+        result = engine.details(subject_id, include_status=True) if include_status else engine.details(subject_id)
         # Ordinary manual Lookup's helpers use truthy `done` flags. Preserve
         # the Explorer's stricter protection for every automatic relationship
         # and comparison too, including malformed non-boolean completion flags.
