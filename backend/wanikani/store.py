@@ -92,12 +92,14 @@ class Store:
     def all(self, kind):
         return [json.loads(r[0]) for r in self.rows("SELECT body FROM resources WHERE kind=?", (kind,))]
 
-    def save_session(self, session):
+    def save_session(self, session, activate=True):
         self.execute("INSERT OR REPLACE INTO sessions VALUES (?,?)", (session["id"], json.dumps(session, ensure_ascii=False)))
-        self.set("active_session", session["id"])
+        self.set("practice_session" if session["mode"] == "practice" else "graded_session", session["id"])
+        if activate:
+            self.set("active_session", session["id"])
 
-    def session(self):
-        rows = self.rows("SELECT body FROM sessions WHERE id=?", (self.get("active_session"),))
+    def session(self, session_id=None):
+        rows = self.rows("SELECT body FROM sessions WHERE id=?", (session_id or self.get("active_session"),))
         return json.loads(rows[0][0]) if rows else None
 
     def event(self, session_id, subject_id, kind, created_at, data):

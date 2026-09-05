@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import "qml" as Kani
+import "qml/DesktopPolicy.mjs" as Policy
 
 Item {
   id: root
@@ -41,12 +42,18 @@ Item {
   readonly property bool locked: lockService ? lockService.locked : true
   readonly property bool dnd: notificationsService ? notificationsService.doNotDisturb : false
   readonly property bool fullscreen: ToplevelManager.activeToplevel ? ToplevelManager.activeToplevel.fullscreen : false
-  readonly property bool canDecorate: !locked && !fullscreen && !studying && !panelOpen
+  readonly property bool canDecorate: Policy.ambientAllowed({
+    locked: locked,
+    fullscreen: fullscreen,
+    studying: studying,
+    panelOpen: panelOpen
+  })
   readonly property bool animations: snapshot.settings.companion_animation === true && snapshot.settings.reduced_motion !== true
   readonly property var ambientSubject: ambientItems.length ? ambientItems[ambientIndex % ambientItems.length] : null
   readonly property var idleConfig: shell && shell.shellConfig ? shell.shellConfig.idle || {} : {}
   readonly property int idleDeadline: idleService ? idleService.firstIdleTimeoutSeconds : Math.min(Number(idleConfig.screensaver || 150), Number(idleConfig.lock || 300))
-  readonly property bool idleVisible: canDecorate && snapshot.settings.idle_gallery === true && idleDeadline > 65 && idleStart.isIdle && !idleEnd.isIdle && ambientSubject !== null
+  readonly property var idleWindow: Policy.idleWindow(idleDeadline)
+  readonly property bool idleVisible: canDecorate && snapshot.settings.idle_gallery === true && idleWindow.enabled && idleStart.isIdle && !idleEnd.isIdle && ambientSubject !== null
 
   function request(method, args, callback) {
     if (!ready) {
@@ -117,21 +124,21 @@ Item {
     if (shell)
       shell.summon(pluginId, JSON.stringify(payload))
   }
-  function quietNow() {
-    var hour = new Date().getHours()
-    var start = snapshot.settings.quiet_start === undefined ? 22 : snapshot.settings.quiet_start
-    var end = snapshot.settings.quiet_end === undefined ? 8 : snapshot.settings.quiet_end
-    return start === end ? false : start > end ? hour >= start || hour < end : hour >= start && hour < end
-  }
   function considerNotification() {
     var due = Number(snapshot.reviews || 0)
-    var increased = previousReviews >= 0 && due > previousReviews
-    previousReviews = due
-    // suppressed changes are consumed, never replayed later
     var now = Date.now() / 1000
-    if (!increased || snapshot.demo || snapshot.settings.notifications === false || locked || dnd || studying || snapshot.vacation || quietNow())
-      return
-    if (now < Number(snapshot.settings.snooze_until || 0) || now - Math.max(lastNotification, Number(snapshot.settings.last_notification_at || 0)) < Number(snapshot.settings.reminder_interval || 7200))
+    var settings = Object.assign({}, snapshot.settings, {
+      last_notification_at: Math.max(lastNotification, Number(snapshot.settings.last_notification_at || 0))
+    })
+    var decision = Policy.notification(previousReviews, due, now, new Date().getHours(), settings, {
+      demo: snapshot.demo,
+      locked: locked,
+      dnd: dnd,
+      studying: studying,
+      vacation: snapshot.vacation
+    })
+    previousReviews = decision.previousDue
+    if (!decision.notify)
       return
     lastNotification = now
     saveSettings({
@@ -190,25 +197,31 @@ Item {
   Timer {
     interval: 30000
     repeat: true
-    running: root.canDecorate && (root.snapshot.settings.desktop_card === true || root.idleVisible)
+    running: root.canDecorate && (desktopIdle.isIdle || root.idleVisible)
     onTriggered: root.ambientIndex++
   }
   IdleMonitor {
+    id: desktopIdle
+    timeout: 10
+    enabled: root.snapshot.settings.desktop_card === true
+    respectInhibitors: true
+  }
+  IdleMonitor {
     id: idleStart
-    timeout: 60
-    enabled: root.snapshot.settings.idle_gallery === true && root.idleDeadline > 65 && root.idleService && root.idleService.idleEnabled
+    timeout: root.idleWindow.start
+    enabled: root.snapshot.settings.idle_gallery === true && root.idleWindow.enabled && root.idleService && root.idleService.idleEnabled
     respectInhibitors: true
   }
   IdleMonitor {
     id: idleEnd
-    timeout: Math.max(61, root.idleDeadline - 2)
+    timeout: Math.max(61, root.idleWindow.end)
     enabled: idleStart.enabled
     respectInhibitors: true
   }
   Kani.Ambient {
     service: root
     gallery: root.idleVisible
-    showCard: root.canDecorate && root.snapshot.settings.desktop_card === true
+    showCard: root.canDecorate && root.snapshot.settings.desktop_card === true && desktopIdle.isIdle
   }
   IpcHandler {
     target: "wanikani"

@@ -1,5 +1,6 @@
 """Bounded HTTPS transport. A mutation is never retried by this layer."""
 import json
+import http.client
 import socket
 import ssl
 import time
@@ -19,6 +20,20 @@ class ApiError(UserError):
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+def validate_user(resource):
+    """Validate account fields before replacing access-critical cached state."""
+    if not isinstance(resource, dict) or not resource.get("id") or resource.get("object") != "user":
+        raise ApiError(0, "WaniKani returned an invalid account response.")
+    data = resource.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("subscription"), dict):
+        raise ApiError(0, "WaniKani returned incomplete account access information.")
+    maximum = data["subscription"].get("max_level_granted")
+    level = data.get("level")
+    if type(maximum) is not int or not 0 <= maximum <= 60 or type(level) is not int or not 1 <= level <= 60:
+        raise ApiError(0, "WaniKani returned invalid account access information.")
+    return resource
 
 
 class Api:
@@ -67,7 +82,7 @@ class Api:
                 return value, response.headers.get("ETag")
         except urllib.error.HTTPError as error:
             self._headers(error.headers)
-            if error.code == 304:
+            if error.code == 304 and method == "GET" and etag:
                 return None, etag
             messages = {
                 401: "Your API token was rejected. Reconnect in Settings.",
@@ -76,8 +91,8 @@ class Api:
                 422: "WaniKani rejected this change. Refresh progress before continuing.",
                 429: "WaniKani rate limit reached. Synchronization will resume later.",
             }
-            raise ApiError(error.code, messages.get(error.code, "WaniKani is temporarily unavailable."), method != "GET" and error.code >= 500) from None
-        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError):
+            raise ApiError(error.code, messages.get(error.code, "WaniKani is temporarily unavailable."), method != "GET" and (error.code >= 500 or error.code in (304, 408))) from None
+        except (urllib.error.URLError, TimeoutError, socket.timeout, OSError, http.client.HTTPException):
             raise ApiError(0, "You are offline or WaniKani could not be reached.", method != "GET") from None
 
     def _headers(self, headers):
@@ -96,11 +111,14 @@ class Api:
         path = endpoint + ("?" + urllib.parse.urlencode(params) if params else "")
         seen = set()
         while path:
-            if path in seen or len(seen) > 250:
+            if not isinstance(path, str) or path in seen or len(seen) >= 250:
                 raise ApiError(0, "Invalid API pagination.")
             seen.add(path)
             result, _ = self.request(path)
-            if not isinstance(result.get("data"), list):
+            if not isinstance(result, dict) or not isinstance(result.get("data"), list):
                 raise ApiError(0, "Unexpected collection response.")
             yield result["data"]
-            path = result.get("pages", {}).get("next_url")
+            pages = result.get("pages", {})
+            if not isinstance(pages, dict):
+                raise ApiError(0, "Invalid API pagination.")
+            path = pages.get("next_url")

@@ -93,11 +93,10 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.controller.detail !== null
     spacing: Style.space(14)
-    Label {
+    SubjectGlyph {
       Layout.fillWidth: true
-      text: root.controller.detail ? root.controller.detail.characters || root.controller.detail.slug : ""
-      font.family: "Noto Sans CJK JP"
-      font.pixelSize: Style.space(64)
+      subject: root.controller.detail
+      pixelSize: Style.space(64)
     }
     Label {
       text: root.controller.detail ? root.controller.detail.type.replace("_", " ") + " · Level " + root.controller.detail.level + " · SRS " + (root.controller.detail.assignment.srs_stage || 0) : ""

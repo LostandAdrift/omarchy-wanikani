@@ -6,7 +6,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from .api import ApiError, NoRedirect
+from .api import ApiError, NoRedirect, validate_user
 from .common import UserError, epoch, private_dir, stamp
 from .engine import baseline
 
@@ -39,6 +39,7 @@ class Synchronizer:
         try:
             self.check_cancelled()
             user, _ = self.api.request("user")
+            validate_user(user)
             if user.get("id") != self.store.get("account_id"):
                 raise UserError("The token belongs to a different account. Disconnect and remove local account data before switching.", "account_mismatch")
             self.store.set("user", user)
@@ -46,15 +47,21 @@ class Synchronizer:
             engine.clock_untrusted = abs(engine.clock_offset) > 300
             self.store.execute("UPDATE outbox SET state='pending' WHERE state='blocked' AND detail='This subject is outside current subscription access.'")
             reset_before = self.store.get("reset_cursor")
-            reset_now = stamp(engine.now())
+            reset_now = stamp(engine.now() - 2)
             reset_params = {"updated_after": reset_before} if reset_before else {}
             for page in self.api.collection("resets", reset_params):
                 for reset in page:
-                    old = self.store.resource("reset", reset["id"])
-                    self.store.put(reset)
-                    if not old and reset_before and reset["data"].get("confirmed_at"):
-                        self._invalidate_reset(reset)
-                        full = True
+                    with self.store.transaction():
+                        old = self.store.resource("reset", reset["id"])
+                        # Confirmation may arrive as an update to a reset we
+                        # already cached while it was still unconfirmed.
+                        confirmed = reset["data"].get("confirmed_at")
+                        if confirmed and not (old or {}).get("data", {}).get("confirmed_at"):
+                            self._invalidate_reset(reset)
+                            full = True
+                        # Persist observation together with invalidation: a
+                        # crash cannot acknowledge the reset without applying it.
+                        self.store.put(reset)
             self.store.set("reset_cursor", reset_now)
             for endpoint, key in COLLECTIONS:
                 self.check_cancelled()
@@ -79,7 +86,8 @@ class Synchronizer:
                 self.store.set("summary_etag", etag)
             self.reconcile_uncertain()
             if not engine.user().get("current_vacation_started_at") and abs(engine.clock_offset) <= 300:
-                self.flush()
+                if self.flush():
+                    self.refresh_after_writes()
             engine.connected = True
             engine.status = "online"
             engine.message = ""
@@ -109,6 +117,38 @@ class Synchronizer:
             self.lock.release()
             self.changed()
 
+    def refresh_after_writes(self):
+        """Fetch unlocks once after confirmed writes, without replaying work."""
+        self.check_cancelled()
+        user, _ = self.api.request("user")
+        validate_user(user)
+        if user.get("id") != self.store.get("account_id"):
+            raise UserError("The account changed while refreshing progress. Saved results were retained.", "account_mismatch")
+        self.store.set("user", user)
+        self.engine.clock_offset = self.api.server_offset
+        self.engine.clock_untrusted = abs(self.engine.clock_offset) > 300
+        since = self.store.get("cursor_assignments")
+        started = stamp(self.engine.now() - 2)
+        complete = False
+        for index, page in enumerate(self.api.collection("assignments", {"updated_after": since} if since else {})):
+            self.check_cancelled()
+            with self.store.transaction():
+                for resource in page:
+                    self.store.put(resource)
+            # Limit this follow-up to four pages. If exceptionally many items
+            # changed, keep the old cursor so the next regular sync catches all.
+            if index >= 3:
+                break
+        else:
+            complete = True
+        if complete:
+            self.store.set("cursor_assignments", started)
+        self.check_cancelled()
+        summary, etag = self.api.request("summary", etag=self.store.get("summary_etag"))
+        if summary is not None:
+            self.store.set("summary", summary)
+            self.store.set("summary_etag", etag)
+
     def _invalidate_reset(self, reset):
         target = int(reset["data"].get("target_level", 1))
         with self.store.transaction():
@@ -116,19 +156,37 @@ class Synchronizer:
                 subject = self.store.subject(row["subject_id"])
                 if subject and subject["data"].get("level", 0) >= target:
                     self.state(row["id"], "conflicted", "WaniKani account reset; the local result was preserved but will not be submitted.")
-            session = self.store.session()
-            if session and session["phase"] != "complete" and session["mode"] != "practice":
+            for session_row in self.store.rows("SELECT body FROM sessions"):
+                session = json.loads(session_row["body"])
+                if session["phase"] == "complete" or session["mode"] == "practice":
+                    continue
                 if any((self.store.subject(item["subject_id"]) or {"data": {}})["data"].get("level", 0) >= target for item in session["queue"]):
                     session["phase"] = "complete"
                     session["ended_at"] = stamp(self.engine.now())
                     session["invalidated"] = "Account reset"
-                    self.store.save_session(session)
+                    self.store.save_session(session, activate=False)
+            # A collection refresh only upserts returned rows. Assignments
+            # removed by a reset will never reappear in that response, so remove
+            # affected cached progress before fetching the replacement state.
+            self.store.execute("""DELETE FROM resources WHERE kind IN ('assignment','review_statistic')
+              AND CAST(json_extract(body,'$.data.subject_id') AS INTEGER) IN
+              (SELECT CAST(id AS INTEGER) FROM resources WHERE kind IN
+                ('radical','kanji','vocabulary','kana_vocabulary')
+                AND json_extract(body,'$.data.level')>=?)""", (target,))
+            self.store.execute("DELETE FROM resources WHERE kind='level_progression'")
+            for _, key in COLLECTIONS:
+                self.store.set("cursor_" + key, None)
+            self.store.set("summary_etag", None)
 
     def state(self, operation_id, state, message):
         self.store.execute("UPDATE outbox SET state=?,detail=? WHERE id=?", (state, message, operation_id))
 
     def fetch_assignment(self, body):
         resource, _ = self.api.request("assignments/" + str(body["assignment_id"]))
+        if (not isinstance(resource, dict) or resource.get("object") != "assignment"
+                or resource.get("id") != body["assignment_id"]
+                or resource.get("data", {}).get("subject_id") != body["baseline"].get("subject_id")):
+            raise ApiError(0, "WaniKani returned an unexpected assignment. Saved work was retained.")
         self.store.put(resource)
         return resource
 
@@ -168,6 +226,11 @@ class Synchronizer:
         return found
 
     def flush(self):
+        if self.engine.user().get("current_vacation_started_at"):
+            raise UserError("Vacation mode is active. Saved work will wait for synchronization.", "vacation")
+        if self.engine.clock_untrusted or abs(self.engine.clock_offset) > 300:
+            raise UserError("Refresh to verify the system clock before submitting saved work.", "clock_changed")
+        confirmed = 0
         for row in self.store.rows("SELECT * FROM outbox WHERE state='pending' ORDER BY created_at,id"):
             self.check_cancelled()
             body = json.loads(row["body"])
@@ -215,7 +278,7 @@ class Synchronizer:
             self.state(row["id"], "inflight", "Sending to WaniKani")
             try:
                 result, _ = self.api.request(path, method, payload)
-                self.apply_result(row, result)
+                confirmed += bool(self.apply_result(row, result))
             except ApiError as error:
                 if error.uncertain:
                     self.state(row["id"], "uncertain", "The response was lost. Refresh to check remote progress; this request will not be automatically retried.")
@@ -230,21 +293,28 @@ class Synchronizer:
             except Exception:
                 self.state(row["id"], "uncertain", "Confirmation was interrupted. Refresh to reconcile; automatic retry is disabled.")
                 raise
+        return confirmed
 
     def apply_result(self, row, response):
         try:
             with self.store.transaction():
+                body = json.loads(row["body"])
+                if not isinstance(response, dict):
+                    raise ValueError("Unexpected result")
                 if row["kind"] == "review":
                     updated = response.get("resources_updated", {})
                     assignment = updated.get("assignment")
                     statistic = updated.get("review_statistic")
                     if not assignment or assignment.get("object") != "assignment":
                         raise ValueError("Missing assignment")
-                    body = json.loads(row["body"])
                     if assignment.get("id") != body["assignment_id"] or assignment.get("data", {}).get("subject_id") != row["subject_id"]:
                         raise ValueError("Mismatched assignment")
+                    if baseline(assignment) == body["baseline"]:
+                        raise ValueError("Progress was not updated")
                     self.store.put(assignment)
                     if statistic:
+                        if statistic.get("object") != "review_statistic" or statistic.get("data", {}).get("subject_id") != row["subject_id"]:
+                            raise ValueError("Mismatched statistic")
                         self.store.put(statistic)
                 else:
                     expected = "assignment" if row["kind"] == "lesson" else "study_material"
@@ -252,12 +322,16 @@ class Synchronizer:
                         raise ValueError("Unexpected result")
                     if response.get("data", {}).get("subject_id") != row["subject_id"]:
                         raise ValueError("Mismatched subject")
+                    if row["kind"] == "lesson" and (response.get("id") != body["assignment_id"] or not response["data"].get("started_at")):
+                        raise ValueError("Lesson was not started")
                     self.store.put(response)
                 self.state(row["id"], "confirmed", "Confirmed by WaniKani")
                 if row["kind"] == "material":
                     self.store.set("material_draft_" + str(row["subject_id"]), None)
+            return True
         except (ValueError, KeyError, TypeError):
             self.state(row["id"], "uncertain", "WaniKani replied, but confirmation could not be validated. Refresh before recovery.")
+            return False
 
     def resolve(self, operation_id, action):
         rows = self.store.rows("SELECT * FROM outbox WHERE id=?", (operation_id,))
@@ -276,6 +350,9 @@ class Synchronizer:
 
     def cache_media(self):
         # Bounded incremental prefetch: eligible current/upcoming study first.
+        # Account controls wait for this worker job, so stop starting downloads
+        # after eight seconds. An already-running request keeps its 10s timeout.
+        deadline = time.monotonic() + 8
         rows = self.store.rows("""SELECT s.id FROM resources s LEFT JOIN resources a
           ON a.kind='assignment' AND CAST(json_extract(a.body,'$.data.subject_id') AS INTEGER)=CAST(s.id AS INTEGER)
           WHERE s.kind IN ('radical','kanji','vocabulary','kana_vocabulary')
@@ -287,6 +364,8 @@ class Synchronizer:
         downloaded = attempts = 0
         for row in rows:
             self.check_cancelled()
+            if time.monotonic() >= deadline:
+                break
             subject = self.store.subject(row[0])
             try:
                 self.engine.ensure_access(subject)
@@ -299,6 +378,9 @@ class Synchronizer:
             sounds = sorted(sounds, key=lambda s: s.get("metadata", {}).get("voice_actor_id") != preferred)
             assets += sounds[:1]
             for asset in assets:
+                if time.monotonic() >= deadline:
+                    self.trim_media()
+                    return
                 url = asset.get("url", "")
                 cached = self.store.rows("SELECT path FROM media WHERE url=?", (url,))
                 if cached and Path(cached[0][0]).is_file():
@@ -311,7 +393,7 @@ class Synchronizer:
                     downloaded += 1
                 else:
                     self.store.set(retry_key, self.engine.now() + 3600)
-                if downloaded >= 40 or attempts >= 60:
+                if downloaded >= 40 or attempts >= 60 or time.monotonic() >= deadline:
                     self.trim_media()
                     return
         self.trim_media()

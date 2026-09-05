@@ -4,11 +4,15 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. Version 0.1.0 is a development release; real-account daily-use qualification is still required before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.1.0 is a development release.** Live-account qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ## Install
 
-Publish this repository to your Git host, then install its repository URL with `omarchy plugin add <repository-url> --enable`. The repository root is a valid Omarchy plugin. Runtime requirements are Omarchy 4.0.2+, Quickshell 0.3.1+, Python 3.11+, Qt Multimedia, and a Japanese font (Noto Sans CJK JP recommended). `wl-paste` powers explicit selection lookup; `secret-tool` provides optional secure persistence.
+The current development installation is a Git clone of the local workspace repository. Its `origin` points to that workspace, not to a public GitHub repository. No public repository or contest submission has been published.
+
+The repository root is a valid Omarchy plugin. To install a committed local checkout, run `omarchy plugin add /absolute/path/to/omarchy-wanikani --enable`. After publishing a reviewed copy to your Git host, use its repository URL in the same command. Keep private account state outside the repository; do not copy your state or keyring into a release.
+
+Runtime requirements are Omarchy 4.0.2+, Quickshell 0.3.1+, Python 3.11+, Qt Multimedia, and a Japanese font (Noto Sans CJK JP recommended). `wl-paste` powers explicit selection lookup; `secret-tool` provides optional secure persistence.
 
 Open the crab in your bar. Choose **Try the demo** to explore without an account, or open Settings to connect a WaniKani personal API token. Read-only tokens support lookup and progress; native study needs assignment-start and review-create permissions. Editing notes and synonyms also needs study-material create/update permissions. The token is passed over private process pipes and stored only in your desktop keyring when available. Session-only mode works when the keyring cannot store it.
 
@@ -31,6 +35,7 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Reviews / lessons | `omarchy-shell wanikani reviews` / `omarchy-shell wanikani lessons` |
 | Lookup / Zen | `omarchy-shell wanikani lookup` / `omarchy-shell wanikani zen` |
 | Refresh / status | `omarchy-shell wanikani refresh` / `omarchy-shell wanikani status` |
+| Settings | `omarchy-shell wanikani settings` |
 | Enter / leave demo | `omarchy-shell wanikani demo true` / `omarchy-shell wanikani demo false` |
 
 Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, resume, lookup, zen, settings. Practice accepts an array of subject IDs. Lookup accepts `selection:true`.
@@ -53,6 +58,8 @@ The API does not provide idempotency keys or retrievable individual review histo
 
 Activity charts show only completed subjects and practice recorded by this plugin. They do not reconstruct your all-device review history.
 
+Demo Settings includes **Simulate offline in demo**, **Reconnect demo & sync**, and **Reset demo progress**. This exercises pending submissions using authored fixtures without changing the computer's network connection or contacting WaniKani. It is a demonstration aid; real network recovery is tested separately with a mock API and must still be qualified on a live account.
+
 ## Desktop behavior
 
 The bar shows due items, pending work, or the next-review countdown. Notifications are coalesced, with a default two-hour minimum and quiet hours of 22:00–08:00. They respect Do Not Disturb, lock, vacation, and study. Suppressed reminders are not replayed later.
@@ -69,7 +76,9 @@ Desktop and idle kanji displays are optional. They show learned subjects not due
 
 ## Update and remove
 
-Use `omarchy plugin update io.github.lostandadrift.wanikani` for Git-installed copies. Plugin source contains no generated state.
+Use `omarchy plugin update io.github.lostandadrift.wanikani` for Git-installed copies. This development installation pulls committed changes from its local workspace origin. A future public installation will pull from its published origin. Plugin source contains no generated account state.
+
+On the tested host, hot reload retained durable session state but sometimes kept nested QML components stale. If an update leaves old visuals visible, close the panel and run `omarchy restart shell`; the worker restores the saved session when the shell returns.
 
 Before removing the plugin, remove the optional desktop integration:
 
@@ -87,6 +96,6 @@ python3 -m unittest discover -s tests -v
 omarchy plugin validate .
 ```
 
-See [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), and [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
+See [verification](docs/VERIFICATION.md), [architecture](docs/ARCHITECTURE.md), the [contest demonstration](docs/CONTEST_DEMO.md), and the [implementation checkpoint](docs/IMPLEMENTATION.md). Automated tests use authored fixtures and mock API responses, never real graded submissions. WanaKana is bundled with its MIT notice; no npm installation is needed.
 
 The release gate includes two weeks of personal daily use, checks across desktop configurations, and deliberately answered live lessons/reviews. Those are not replaced by passing automated tests.

@@ -25,6 +25,7 @@ Item {
   property string query: ""
   property var chosenScreen: null
   property bool focusPrimed: false
+  property string integrationNotice: ""
   readonly property var snapshot: service ? service.snapshot : ({
       settings: {},
       outbox: [],
@@ -56,6 +57,8 @@ Item {
       navigate(["dashboard", "lookup", "zen", "settings"].indexOf(requested) >= 0 ? requested : "dashboard")
     if (requested === "lookup" && payload.selection)
       readSelection()
+    else if (requested === "lookup" && typeof payload.text === "string")
+      search(payload.text.slice(0, 256))
   }
   function close() {
     opened = false
@@ -98,14 +101,19 @@ Item {
   function begin(mode, limit, subjects) {
     navigate("study")
     var saved = snapshot.session
-    if (saved && saved.phase !== "complete") {
+    if (mode === "resume" && saved && saved.phase === "complete" && !snapshot.paused_graded && snapshot.reviews === 0) {
+      session = saved
+      Qt.callLater(focusContent)
+      return
+    }
+    if (mode === "resume" && saved && saved.mode !== "practice" && saved.phase !== "complete") {
       session = saved
       Qt.callLater(focusContent)
       return
     }
     session = null
     call("start", {
-      mode: mode === "resume" ? "reviews" : mode,
+      mode: mode,
       limit: limit || snapshot.settings.batch_size || 5,
       subjects: subjects
     }, function (ok, data) {
@@ -156,6 +164,25 @@ Item {
       clipboard.captured = ""
       clipboard.primary = true
       clipboard.running = true
+    }
+  }
+  function desktopIntegration(remove) {
+    if (!service || integration.running)
+      return
+    integrationNotice = ""
+    integration.command = ["python3", "-B", service.sourceDir + "tools/integrate.py", remove ? "remove" : "install"]
+    integration.running = true
+  }
+  Process {
+    id: integration
+    property string result: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: integration.result = text.slice(0, 4096)
+    }
+    onExited: function (exitCode) {
+      root.integrationNotice = exitCode === 0 ? integration.result.trim() || "Desktop integration is up to date." : "Desktop integration could not finish. Existing bindings were preserved; check the dependency guide in the README."
+      integration.result = ""
     }
   }
   Process {
@@ -328,7 +355,11 @@ Item {
             id: content
             width: scroll.availableWidth
             sourceComponent: root.view === "study" ? studyPage : root.view === "lookup" ? lookupPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : dashboardPage
-            onLoaded: Qt.callLater(root.focusContent)
+            onLoaded: {
+              if (scroll.contentItem && scroll.contentItem.contentY !== undefined)
+                scroll.contentItem.contentY = 0
+              Qt.callLater(root.focusContent)
+            }
           }
         }
         RowLayout {

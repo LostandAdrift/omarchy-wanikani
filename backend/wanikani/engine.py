@@ -83,6 +83,16 @@ class Engine:
         if not subject or subject["data"].get("hidden_at") or subject["data"].get("level", 61) > self.max_level():
             raise UserError("This subject is outside your current WaniKani access.", "access_restricted")
 
+    def ensure_study_content(self, subject):
+        self.ensure_access(subject)
+        data = subject["data"]
+        if not any(m.get("accepted_answer") for m in data.get("meanings", [])):
+            raise UserError("Accepted answers are not cached for this subject. Refresh before continuing; your saved answers are retained.", "content_unavailable")
+        if subject["object"] in ("kanji", "vocabulary") and not any(r.get("accepted_answer") for r in data.get("readings", [])):
+            raise UserError("Accepted readings are not cached for this subject. Refresh before continuing; your saved answers are retained.", "content_unavailable")
+        if not data.get("characters") and not self.details(subject["id"], False)["images"]:
+            raise UserError("The radical image is not cached. Refresh before continuing; your saved answers are retained.", "content_unavailable")
+
     def assignments(self, mode="reviews", count_only=False):
         eligibility = """json_extract(a.body,'$.data.started_at') IS NULL
           AND julianday(json_extract(a.body,'$.data.unlocked_at'))<=julianday(?)""" if mode == "lessons" else """
@@ -165,20 +175,34 @@ class Engine:
         rows = self.store.rows(f"""SELECT id,body FROM resources WHERE kind IN {SUBJECTS}
           AND json_extract(body,'$.data.level')<=? AND json_extract(body,'$.data.hidden_at') IS NULL
           AND (json_extract(body,'$.data.characters') LIKE ? ESCAPE '\\'
-            OR json_extract(body,'$.data.meanings') LIKE ? ESCAPE '\\'
-            OR json_extract(body,'$.data.readings') LIKE ? ESCAPE '\\'
+            OR EXISTS(SELECT 1 FROM json_each(json_extract(resources.body,'$.data.meanings')) m
+              WHERE json_extract(m.value,'$.meaning') LIKE ? ESCAPE '\\')
+            OR EXISTS(SELECT 1 FROM json_each(json_extract(resources.body,'$.data.readings')) r
+              WHERE json_extract(r.value,'$.reading') LIKE ? ESCAPE '\\')
             OR (length(json_extract(body,'$.data.characters'))>0 AND instr(?,json_extract(body,'$.data.characters'))>0))
           LIMIT 150""", (self.max_level(), pattern, pattern, pattern, query))
         rows = sorted(rows, key=lambda r: (json.loads(r[1])["data"].get("characters") != query, -len(json.loads(r[1])["data"].get("characters") or "")))
         return [self.details(int(row[0]), False) for row in rows[:limit]]
 
     def start(self, mode="reviews", limit=None, subjects=None):
-        if mode not in ("reviews", "lessons", "practice"):
+        if mode not in ("reviews", "lessons", "practice", "resume"):
             raise UserError("Unknown study mode.")
         with self.store.transaction():
             existing = self.store.session()
-            if existing and existing["phase"] != "complete":
-                return self.session_view(existing)
+            # Each mode keeps its own durable session. Explicit practice can run
+            # while graded work is paused (including during vacation); returning
+            # to reviews/resume restores the exact graded question and draft.
+            if existing:
+                self.store.save_session(existing)
+            reference = self.store.get("practice_session" if mode == "practice" else "graded_session")
+            saved = self.store.session(reference) if reference else None
+            if saved and saved["phase"] != "complete":
+                self.store.save_session(saved)
+                return self.session_view(saved)
+            if mode == "resume":
+                if existing and existing["phase"] != "complete":
+                    return self.session_view(existing)
+                mode = "reviews"
             if not self.user():
                 raise UserError("Connect your account or try the demo first.")
             if mode != "practice" and self.user().get("current_vacation_started_at"):
@@ -203,13 +227,15 @@ class Engine:
             for assignment, subject in candidates:
                 if len(queue) >= count:
                     break
+                try:
+                    self.ensure_study_content(subject)
+                except UserError as error:
+                    if error.code != "content_unavailable":
+                        raise
+                    continue
                 parts = {"meaning": False}
                 if subject["object"] in ("kanji", "vocabulary"):
-                    if not any(r.get("accepted_answer") for r in subject["data"].get("readings", [])):
-                        continue  # incomplete/unknown subject data cannot be graded safely
                     parts["reading"] = False
-                if not subject["data"].get("characters") and not self.details(subject["id"])["images"]:
-                    continue  # image-only radical requires its cached image
                 queue.append({"subject_id": subject["id"], "assignment_id": assignment["id"] if assignment else None,
                     "baseline": baseline(assignment) if assignment else {}, "parts": parts,
                     "errors": {"meaning": 0, "reading": 0}, "done": False})
@@ -225,7 +251,8 @@ class Engine:
         session = self.store.session()
         if not session or session["phase"] == "complete":
             raise UserError("There is no active session.")
-        self.ensure_access(self.store.subject(session["queue"][session["index"]]["subject_id"]))
+        index = session["lesson_index"] if session["phase"] == "lesson" else session["index"]
+        self.ensure_study_content(self.store.subject(session["queue"][index]["subject_id"]))
         return session
 
     def draft(self, text):
@@ -263,6 +290,7 @@ class Engine:
     def correct(self):
         with self.store.transaction():
             session = self.require_session()
+            self.ensure_study_state(session)
             feedback = session.get("feedback") or {}
             if session["phase"] != "feedback" or feedback.get("correct") or feedback.get("retry") or feedback.get("corrected"):
                 raise UserError("Only the current incorrect answer can be corrected before advancing.")
@@ -342,7 +370,7 @@ class Engine:
         if not session:
             return None
         view = {key: session[key] for key in ("id", "mode", "phase", "part", "feedback", "draft", "completed", "overrides", "started_at", "ended_at", "lesson_index")}
-        view["total"] = len(session["queue"])
+        view["total"] = min(len(session["queue"]), session.get("finish_at", len(session["queue"])))
         view["finishing"] = "finish_at" in session
         view["invalidated"] = session.get("invalidated", "")
         view["errors"] = sum(sum(item["errors"].values()) for item in session["queue"])
@@ -350,9 +378,14 @@ class Engine:
         view["subject"] = None
         if session["phase"] != "complete" and index < len(session["queue"]):
             try:
-                view["subject"] = self.details(session["queue"][index]["subject_id"])
-            except UserError:
-                view["restricted"] = True
+                subject = self.store.subject(session["queue"][index]["subject_id"])
+                self.ensure_study_content(subject)
+                view["subject"] = self.details(subject["id"])
+            except UserError as error:
+                if error.code == "access_restricted":
+                    view["restricted"] = True
+                else:
+                    view["unavailable"] = str(error)
         return view
 
     def confirm_demo(self):
@@ -461,12 +494,15 @@ class Engine:
         media = self.store.rows("SELECT COUNT(*),COALESCE(SUM(size),0) FROM media")[0]
         cached_subjects = self.store.rows(f"SELECT COUNT(*) FROM resources WHERE kind IN {SUBJECTS} AND json_extract(body,'$.data.level')<=? AND json_extract(body,'$.data.hidden_at') IS NULL", (self.max_level(),))[0][0]
         session = self.session_view()
+        graded_id = self.store.get("graded_session")
+        graded = self.store.session(graded_id) if graded_id and (not session or graded_id != session["id"]) else None
         return {"demo": self.demo, "status": self.status, "message": self.message, "connected": self.connected,
             "syncing": self.syncing, "username": self.user().get("username", ""), "level": level,
             "max_level": self.max_level(), "vacation": bool(self.user().get("current_vacation_started_at")),
             "reviews": due, "lessons": lessons, "next_reviews_at": stamp(next_at) if next_at else None,
             "forecast": forecast, "level_total": counts[0], "level_passed": counts[1] or 0,
-            "activity": activity, "session": session, "pending": len([x for x in outbox if x["state"] in ("pending", "inflight", "blocked")]),
+            "activity": activity, "session": session, "paused_graded": bool(graded and graded["phase"] != "complete"),
+            "pending": len([x for x in outbox if x["state"] in ("pending", "inflight", "blocked")]),
             "attention": len([x for x in outbox if x["state"] in ("uncertain", "conflicted", "blocked")]),
             "outbox": outbox, "last_sync": self.store.get("last_sync"), "settings": self.settings(),
             "cache": {"files": media[0], "bytes": media[1], "subjects": cached_subjects}, "difficult": self.difficult(), "now": now,

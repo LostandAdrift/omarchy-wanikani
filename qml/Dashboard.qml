@@ -88,10 +88,10 @@ ColumnLayout {
     spacing: Style.space(8)
     visible: !!s.username
     Action {
-      text: root.s.session && root.s.session.phase !== "complete" ? "Resume your session →" : "Five reviews →"
+      text: root.s.paused_graded || (root.s.session && root.s.session.phase !== "complete") ? "Resume your session →" : root.s.reviews > 0 ? "Five reviews →" : "Reviews complete"
       selected: true
-      enabled: !root.controller.busy
-      onClicked: root.controller.begin("reviews", 5)
+      enabled: !root.controller.busy && (root.s.paused_graded || (root.s.session && root.s.session.phase !== "complete") || root.s.reviews > 0)
+      onClicked: root.controller.begin(root.s.paused_graded || (root.s.session && root.s.session.phase !== "complete") ? "resume" : "reviews", 5)
     }
     Action {
       text: "Learn something new"

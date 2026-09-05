@@ -46,11 +46,16 @@ ColumnLayout {
     spacing: Style.space(8)
     Action {
       text: root.snapshot.settings.demo_offline ? "Reconnect demo & sync" : "Simulate offline in demo"
-      onClicked: root.controller.service.saveSettings({demo_offline: !root.snapshot.settings.demo_offline})
+      onClicked: root.controller.service.saveSettings({
+        demo_offline: !root.snapshot.settings.demo_offline
+      })
     }
     Action {
       text: "Reset demo progress"
-      onClicked: root.controller.call("delete_data", {confirmation: "DELETE", discard_pending: true})
+      onClicked: root.controller.call("delete_data", {
+        confirmation: "DELETE",
+        discard_pending: true
+      })
     }
   }
   ColumnLayout {
@@ -87,7 +92,7 @@ ColumnLayout {
             remember: root.remember
           }, function (ok, data) {
             if (ok)
-              root.notice = data.remembered ? "Token saved in your keyring." : "Connected for this session. The token was not stored."
+              root.notice = data.credential_cleanup_needed ? "Connected for this session. Unlock the keyring and disconnect again to remove an older saved token." : data.remembered ? "Token saved in your keyring." : "Connected for this session. The token was not stored."
           })
           secret = ""
         }
@@ -170,9 +175,11 @@ ColumnLayout {
       from: 1
       to: 20
       value: root.snapshot.settings.batch_size || 5
-      onModified: root.controller.service.saveSettings({
-        batch_size: value
-      })
+      onModified: function (value) {
+        root.controller.service.saveSettings({
+          batch_size: value
+        })
+      }
     }
   }
   RowLayout {
@@ -185,9 +192,11 @@ ColumnLayout {
       from: 0
       to: 23
       value: root.snapshot.settings.quiet_start === undefined ? 22 : root.snapshot.settings.quiet_start
-      onModified: root.controller.service.saveSettings({
-        quiet_start: value
-      })
+      onModified: function (value) {
+        root.controller.service.saveSettings({
+          quiet_start: value
+        })
+      }
     }
     Label {
       text: "to"
@@ -196,9 +205,11 @@ ColumnLayout {
       from: 0
       to: 23
       value: root.snapshot.settings.quiet_end === undefined ? 8 : root.snapshot.settings.quiet_end
-      onModified: root.controller.service.saveSettings({
-        quiet_end: value
-      })
+      onModified: function (value) {
+        root.controller.service.saveSettings({
+          quiet_end: value
+        })
+      }
     }
   }
   RowLayout {
@@ -211,9 +222,11 @@ ColumnLayout {
       from: 1
       to: 24
       value: Math.round((root.snapshot.settings.reminder_interval || 7200) / 3600)
-      onModified: root.controller.service.saveSettings({
-        reminder_interval: value * 3600
-      })
+      onModified: function (value) {
+        root.controller.service.saveSettings({
+          reminder_interval: value * 3600
+        })
+      }
     }
   }
   RowLayout {
@@ -226,9 +239,11 @@ ColumnLayout {
       from: 1
       to: 100
       value: root.snapshot.settings.voice_actor_id || 1
-      onModified: root.controller.service.saveSettings({
-        voice_actor_id: value
-      })
+      onModified: function (value) {
+        root.controller.service.saveSettings({
+          voice_actor_id: value
+        })
+      }
     }
   }
   Label {
@@ -252,9 +267,11 @@ ColumnLayout {
       to: 1024
       stepSize: 32
       value: root.snapshot.settings.cache_limit_mb || 256
-      onModified: root.controller.service.saveSettings({
-        cache_limit_mb: value
-      })
+      onModified: function (value) {
+        root.controller.service.saveSettings({
+          cache_limit_mb: value
+        })
+      }
     }
   }
   Flow {
@@ -323,9 +340,28 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "Shortcuts: Super+Alt+W for study; Super+Alt+Shift+W for selection lookup. Run tools/integrate.py install from the plugin folder to add launcher entries and available shortcuts. Existing bindings are preserved."
+    text: "Super+Alt+W opens study; Super+Alt+Shift+W looks up selected text. Add the available shortcuts and Study/Lookup launcher entries here. Existing bindings are preserved."
     color: Qt.alpha(Color.foreground, 0.76)
     font.pixelSize: Style.font.bodySmall
+  }
+  Flow {
+    Layout.fillWidth: true
+    spacing: Style.space(8)
+    Action {
+      text: "Install shortcuts & launchers"
+      onClicked: root.controller.desktopIntegration(false)
+    }
+    Action {
+      text: "Remove shortcuts & launchers"
+      onClicked: root.controller.desktopIntegration(true)
+    }
+  }
+  Label {
+    Layout.fillWidth: true
+    visible: root.controller.integrationNotice !== ""
+    text: root.controller.integrationNotice
+    font.pixelSize: Style.font.bodySmall
+    color: Qt.alpha(Color.foreground, 0.76)
   }
   Action {
     text: showDeletion ? "Cancel data deletion" : "Remove local account data…"

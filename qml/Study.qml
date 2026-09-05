@@ -29,7 +29,7 @@ ColumnLayout {
       input.text = session.draft || ""
       converting = false
       Qt.callLater(focusInput)
-      if (session.phase === "feedback" && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
+      if (session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
         controller.play(subject)
     }
   }
@@ -85,6 +85,12 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.session && root.session.restricted === true
     text: "This subject is no longer accessible with the current account. Your saved answers are retained; refresh your account in Settings."
+    color: Color.urgent
+  }
+  Label {
+    Layout.fillWidth: true
+    visible: !!(root.session && root.session.unavailable)
+    text: root.session ? root.session.unavailable || "" : ""
     color: Color.urgent
   }
   RowLayout {
@@ -198,21 +204,10 @@ ColumnLayout {
           horizontalAlignment: Text.AlignHCenter
           font.letterSpacing: 2
         }
-        Label {
+        SubjectGlyph {
           width: parent.width
-          visible: root.subject && root.subject.characters !== ""
-          text: root.subject ? root.subject.characters : ""
-          font.family: "Noto Sans CJK JP"
-          font.pixelSize: Style.space(root.subject && root.subject.characters.length > 5 ? 62 : 94)
-          horizontalAlignment: Text.AlignHCenter
-        }
-        Image {
-          anchors.horizontalCenter: parent.horizontalCenter
-          visible: root.subject && !root.subject.characters
-          source: root.subject && root.subject.images.length ? root.subject.images[0] : ""
-          width: Style.space(90)
-          height: Style.space(90)
-          fillMode: Image.PreserveAspectFit
+          subject: root.subject
+          pixelSize: Style.space(root.subject && root.subject.characters.length > 5 ? 62 : 94)
         }
         Label {
           width: parent.width
@@ -247,7 +242,7 @@ ColumnLayout {
     }
     Label {
       Layout.fillWidth: true
-      visible: root.feedback && root.session.feedback && !root.session.feedback.correct
+      visible: root.feedback && root.session && root.session.feedback && root.session.feedback && !root.session.feedback.correct
       text: root.session && root.session.feedback ? root.session.feedback.accepted.join(" · ") : ""
       horizontalAlignment: Text.AlignHCenter
       font.pixelSize: Style.font.title
@@ -264,7 +259,7 @@ ColumnLayout {
       }
       Action {
         text: "I made a typo"
-        visible: root.feedback && root.session.feedback && !root.session.feedback.correct
+        visible: root.feedback && root.session && root.session.feedback && root.session.feedback && !root.session.feedback.correct
         enabled: !root.controller.busy
         onClicked: root.controller.studyAction("correct", {})
       }
@@ -283,7 +278,7 @@ ColumnLayout {
       Layout.fillWidth: true
       subject: root.subject
       controller: root.controller
-      visible: root.session && (root.session.phase === "lesson" || (root.feedback && !root.session.feedback.correct))
+      visible: root.session && (root.session.phase === "lesson" || (root.feedback && root.session && root.session.feedback && !root.session.feedback.correct))
       showMeaning: root.session && (root.session.phase === "lesson" || root.session.part === "meaning")
       showReading: root.session && (root.session.phase === "lesson" || root.session.part === "reading")
     }

@@ -10,7 +10,7 @@ import threading
 import time
 from pathlib import Path
 from wanikani import VERSION
-from wanikani.api import Api, ApiError
+from wanikani.api import Api, ApiError, validate_user
 from wanikani.common import UserError, private_dir, stamp, state_home
 from wanikani.credentials import Keyring
 from wanikani.engine import Engine
@@ -60,7 +60,7 @@ class Worker:
     def startup(self):
         if self.engine.demo:
             return
-        if self.engine.store.get("credential_storage") == "session":
+        if self.engine.store.get("credential_storage") in ("session", "disconnected"):
             return
         token = self.keyring.get(self.engine.store.get("account_id"))
         if token:
@@ -103,24 +103,28 @@ class Worker:
             raise UserError("Enter a valid personal API token.")
         api = Api(token)
         user, _ = api.request("user")
+        validate_user(user)
         account = self.engine.store.get("account_id")
         if account and account != user.get("id"):
             raise UserError("Local study data belongs to another account. Remove that account's local data before switching.", "account_mismatch")
-        if not user.get("id") or user.get("object") != "user":
-            raise UserError("WaniKani returned an invalid account response.")
         self.engine.store.set("account_id", user["id"])
         self.engine.store.set("user", user)
         if self.engine.store.get("settings") is None:
             preferences = user["data"].get("preferences", {})
             self.engine.set_settings({"autoplay_audio": bool(preferences.get("reviews_autoplay_audio", False))})
-        saved = bool(args.get("remember", True)) and self.keyring.set(user["id"], token)
+        remember = bool(args.get("remember", True))
+        saved = remember and self.keyring.set(user["id"], token)
+        # An older credential must not silently reconnect a session-only login.
+        # The persisted storage mode remains authoritative if the keyring is
+        # temporarily unavailable while clearing that previous credential.
+        cleared_previous = True if saved else self.keyring.delete(user["id"])
         self.engine.store.set("credential_storage", "keyring" if saved else "session")
         self.configure_sync(token)
         # A newly supplied credential may repair a definite permission denial;
         # uncertain operations are never returned to pending here.
         self.engine.store.execute("UPDATE outbox SET state='pending',detail='Rechecking with new credentials' WHERE state='blocked'")
         self.sync.run()
-        return {"connected": True, "remembered": saved}
+        return {"connected": True, "remembered": saved, "credential_cleanup_needed": not cleared_previous}
 
     def handle(self, request):
         if not isinstance(request, dict) or request.get("v") != 1:
@@ -182,12 +186,14 @@ class Worker:
                     self.job(None, self.startup)
                 result = {"demo": self.engine.demo}
             elif method == "disconnect":
-                if not self.keyring.delete(self.engine.store.get("account_id")):
-                    raise UserError("The keyring could not be updated. Unlock it and try again.")
                 self.sync = None
                 self.token = None
                 self.engine.connected = False
                 self.engine.status = "disconnected"
+                self.engine.store.set("credential_storage", "disconnected")
+                if not self.keyring.delete(self.engine.store.get("account_id")):
+                    self.changed()
+                    raise UserError("Disconnected. The old token could not be removed from the keyring; unlock it and disconnect again to remove it.")
                 result = {"disconnected": True}
             elif method == "clear_cache":
                 cleaner = self.sync or Synchronizer(self.engine, None, self.directory / "media")
@@ -206,6 +212,11 @@ class Worker:
                         self.engine.store.execute("DELETE FROM " + table)
                 cleaner = self.sync or Synchronizer(self.engine, None, self.directory / "media")
                 cleaner.clear_media()
+                # DELETE alone leaves personal data in free SQLite pages and
+                # the WAL. Compact and truncate after explicit deletion.
+                self.engine.store.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                self.engine.store.execute("VACUUM")
+                self.engine.store.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self.select_mode(self.engine.demo)
                 result = {"deleted": True}
             else:
