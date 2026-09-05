@@ -1,6 +1,6 @@
 # What comes next
 
-The first daily-use feedback reprioritized the next iteration around audible pronunciation, explicit reviews versus lessons, and meaningful level progress. Follow [the learning upgrade plan](LEARNING_UPGRADE_PLAN.md) first. The exploratory extensions below remain later proposals.
+The daily-use feedback reprioritized the next iteration around audible pronunciation, explicit reviews versus lessons, meaningful level progress, audio-led listening practice, periodic study reminders, and live support for every Omarchy theme. Follow [the learning upgrade plan](LEARNING_UPGRADE_PLAN.md) first. Listening and study rhythm are now core deliverables; the exploratory extensions below remain later proposals.
 
 The current implementation covers the original native study workflow and adds a practice library, batch recaps, kanji comparisons, personal notes in lessons and feedback, a selectable review forecast, quiet recall, and a local reading trail. The next iteration should deepen the learning experience while preserving the short-session habit.
 
@@ -35,4 +35,4 @@ Make subject relationships easier to understand through a small visual path: com
 
 ## Release order
 
-First use the installed client for deliberate real lessons and reviews and record any recovery or desktop interference. Fix those observed issues before starting a larger feature. Then extend the reading trail into explicit practice selection, followed by contrast practice and the lesson path. Keep performance checks focused on any new user-visible delay; avoid spending the iteration on measurements when the learning UI needs attention.
+Follow passes A–E in the learning upgrade plan: fix mode clarity and pronunciation, build useful progress, add listening and study rhythm, then deepen lessons and other practice. Apply theme and interaction polish throughout. Use deliberate real sessions to record recovery or desktop interference, and fix observed issues promptly. Reading-trail extensions follow those priorities. Keep performance checks focused on new visible delay; avoid spending the iteration on measurements when the learning UI needs attention.
