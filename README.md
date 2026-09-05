@@ -6,6 +6,10 @@ A native WaniKani study companion for Omarchy 4: lessons, reviews, offline sessi
 
 This is an independent community client, not a Tofugu product. **Version 0.1.0 is a development release.** Live-account qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
+![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
+
+The same lookup follows [Tokyo Night](docs/screenshots/lookup-dark.png) and [Flexoki Light](docs/screenshots/lookup-light.png). See the [kanji gallery and companion](docs/screenshots/zen-dark.png). These are captures of the installed plugin, using independently authored demo content.
+
 ## Install
 
 The current development installation is a Git clone of the local workspace repository. Its `origin` points to that workspace, not to a public GitHub repository. No public repository or contest submission has been published.
@@ -16,7 +20,7 @@ Runtime requirements are Omarchy 4.0.2+, Quickshell 0.3.1+, Python 3.11+, Qt Mul
 
 Open the crab in your bar. Choose **Try the demo** to explore without an account, or open Settings to connect a WaniKani personal API token. Read-only tokens support lookup and progress; native study needs assignment-start and review-create permissions. Editing notes and synonyms also needs study-material create/update permissions. The token is passed over private process pipes and stored only in your desktop keyring when available. Session-only mode works when the keyring cannot store it.
 
-From the installed plugin directory, optionally run:
+Settings includes **Install shortcuts & launchers** and **Remove shortcuts & launchers**. From the installed plugin directory, the same optional setup is available with:
 
 ```sh
 python3 tools/integrate.py check
@@ -38,7 +42,7 @@ This adds Study and Lookup launchers and available shortcuts, backing up your bi
 | Settings | `omarchy-shell wanikani settings` |
 | Enter / leave demo | `omarchy-shell wanikani demo true` / `omarchy-shell wanikani demo false` |
 
-Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, resume, lookup, zen, settings. Practice accepts an array of subject IDs. Lookup accepts `selection:true`.
+Shell payloads also work: `omarchy-shell shell summon io.github.lostandadrift.wanikani '{"view":"reviews","limit":5}'`. Supported views: dashboard, reviews, lessons, practice, resume, lookup, zen, settings. Practice accepts `subjects:[1,2]`. Lookup accepts `selection:true` or `text:"山"`.
 
 ## How study works
 
@@ -46,7 +50,7 @@ Sessions contain five subjects by default. Lessons introduce the subjects before
 
 **I made a typo** is available only on the current incorrect feedback screen. Corrections are recorded locally. A finished subject enters the submission queue only after you acknowledge its last feedback screen. Already committed WaniKani progress is never retroactively overridden.
 
-Escape preserves the exact session, draft answer, and question. Expand changes the presentation without restarting. Practice is ungraded and never changes your account's schedule.
+Escape preserves the exact session, draft answer, and question. Expand changes the presentation without restarting. Practice is ungraded and never changes your account's schedule. You can practice independently while a graded session is paused; Resume returns to that saved graded session first.
 
 ## Offline behavior and recovery
 
@@ -64,7 +68,7 @@ Demo Settings includes **Simulate offline in demo**, **Reconnect demo & sync**, 
 
 The bar shows due items, pending work, or the next-review countdown. Notifications are coalesced, with a default two-hour minimum and quiet hours of 22:00–08:00. They respect Do Not Disturb, lock, vacation, and study. Suppressed reminders are not replayed later.
 
-Desktop and idle kanji displays are optional. They show learned subjects not due in the next day, stop on activity/fullscreen/study/lock, and give way before Omarchy's configured screensaver deadline. The plugin never owns or changes your system lock. Companion animation and reduced motion have separate controls.
+Desktop and idle kanji displays are optional. The desktop card appears after ten seconds without activity. They show learned subjects not due in the next day, stop on activity/fullscreen/study/lock, and give way before Omarchy's configured screensaver deadline. Automatic idle gallery display respects Omarchy's stay-awake mode and disables itself when the configured interval is too short. The plugin never owns or changes your system lock. Companion animation and reduced motion have separate controls.
 
 ## Your data
 

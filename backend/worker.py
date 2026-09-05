@@ -64,8 +64,17 @@ class Worker:
             return
         token = self.keyring.get(self.engine.store.get("account_id"))
         if token:
+            self.engine.store.set("credential_may_exist", True)
             self.configure_sync(token)
             self.sync.run()
+
+    def credential_may_exist(self):
+        known = self.engine.store.get("credential_may_exist")
+        if known is not None:
+            return bool(known)
+        # Migrate prior storage modes conservatively when they refer to a saved
+        # credential. Fresh session-only accounts never require Secret Service.
+        return self.engine.store.get("credential_storage") in ("keyring", "disconnected")
 
     def job(self, request_id, fn):
         if not self.job_lock.acquire(blocking=False):
@@ -113,12 +122,22 @@ class Worker:
             preferences = user["data"].get("preferences", {})
             self.engine.set_settings({"autoplay_audio": bool(preferences.get("reviews_autoplay_audio", False))})
         remember = bool(args.get("remember", True))
-        saved = remember and self.keyring.set(user["id"], token)
+        may_exist = self.credential_may_exist()
+        # Disable automatic restoration before touching the keyring so a crash
+        # during a switch to session-only authentication cannot restore old auth.
+        self.engine.store.set("credential_storage", "session")
+        saved = False
+        if remember:
+            self.engine.store.set("credential_may_exist", True)
+            saved = self.keyring.set(user["id"], token)
+            may_exist = may_exist or self.keyring.may_have_written
         # An older credential must not silently reconnect a session-only login.
         # The persisted storage mode remains authoritative if the keyring is
         # temporarily unavailable while clearing that previous credential.
-        cleared_previous = True if saved else self.keyring.delete(user["id"])
-        self.engine.store.set("credential_storage", "keyring" if saved else "session")
+        cleared_previous = saved or not may_exist or self.keyring.delete(user["id"])
+        with self.engine.store.transaction():
+            self.engine.store.set("credential_storage", "keyring" if saved else "session")
+            self.engine.store.set("credential_may_exist", bool(saved or (may_exist and not cleared_previous)))
         self.configure_sync(token)
         # A newly supplied credential may repair a definite permission denial;
         # uncertain operations are never returned to pending here.
@@ -186,14 +205,17 @@ class Worker:
                     self.job(None, self.startup)
                 result = {"demo": self.engine.demo}
             elif method == "disconnect":
+                may_exist = self.credential_may_exist()
                 self.sync = None
                 self.token = None
                 self.engine.connected = False
                 self.engine.status = "disconnected"
                 self.engine.store.set("credential_storage", "disconnected")
-                if not self.keyring.delete(self.engine.store.get("account_id")):
+                self.engine.store.set("credential_may_exist", may_exist)
+                if may_exist and not self.keyring.delete(self.engine.store.get("account_id")):
                     self.changed()
-                    raise UserError("Disconnected. The old token could not be removed from the keyring; unlock it and disconnect again to remove it.")
+                    raise UserError("Disconnected. A saved token may remain in the keyring; unlock it and disconnect again to remove it.")
+                self.engine.store.set("credential_may_exist", False)
                 result = {"disconnected": True}
             elif method == "clear_cache":
                 cleaner = self.sync or Synchronizer(self.engine, None, self.directory / "media")
@@ -205,8 +227,11 @@ class Worker:
                 pending = self.engine.store.rows("SELECT COUNT(*) FROM outbox WHERE state NOT IN ('confirmed','discarded')")[0][0]
                 if pending and not args.get("discard_pending"):
                     raise UserError("Resolve pending work first, or explicitly choose to discard it.")
-                if not self.engine.demo and not self.keyring.delete(self.engine.store.get("account_id")):
-                    raise UserError("Could not remove the token from the keyring.")
+                cleanup_needed = (not self.engine.demo and self.credential_may_exist()
+                    and not self.keyring.delete(self.engine.store.get("account_id")))
+                self.sync = None
+                self.token = None
+                self.engine.connected = False
                 with self.engine.store.transaction():
                     for table in ("meta", "resources", "sessions", "outbox", "events", "commands"):
                         self.engine.store.execute("DELETE FROM " + table)
@@ -218,7 +243,13 @@ class Worker:
                 self.engine.store.execute("VACUUM")
                 self.engine.store.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self.select_mode(self.engine.demo)
-                result = {"deleted": True}
+                if not self.engine.demo:
+                    self.engine.store.set("credential_storage", "disconnected")
+                    self.engine.store.set("credential_may_exist", False)
+                result = {"deleted": True, "credential_cleanup_needed": bool(cleanup_needed)}
+                if cleanup_needed:
+                    result["warning"] = "Local data was deleted. A saved token may remain in the keyring; remove the WaniKani for Omarchy credential after unlocking it. Automatic reconnect is disabled."
+                    self.engine.message = result["warning"]
             else:
                 resolver = self.sync or Synchronizer(self.engine, None, self.directory / "media")
                 result = resolver.resolve(args["id"], args.get("action", "keep_remote"))

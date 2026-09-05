@@ -98,9 +98,12 @@ ColumnLayout {
         }
       }
       Action {
-        text: "Disconnect"
-        enabled: root.snapshot.connected && !root.snapshot.syncing
-        onClicked: root.controller.call("disconnect", {})
+        text: !root.snapshot.connected && root.snapshot.credential_cleanup_needed ? "Retry token removal" : "Disconnect"
+        enabled: (root.snapshot.connected || root.snapshot.credential_cleanup_needed) && !root.snapshot.syncing && !root.controller.busy
+        onClicked: root.controller.call("disconnect", {}, function (ok) {
+          if (ok)
+            root.notice = "Disconnected."
+        })
       }
     }
   }
@@ -109,6 +112,12 @@ ColumnLayout {
     visible: notice !== ""
     text: notice
     color: Color.accent
+  }
+  Label {
+    Layout.fillWidth: true
+    visible: root.snapshot.credential_cleanup_needed === true && root.notice === ""
+    text: "An older saved token still needs removal. Unlock the keyring, then use Disconnect or Retry token removal."
+    color: Color.urgent
   }
   Label {
     text: "Study & atmosphere"
@@ -393,10 +402,11 @@ ColumnLayout {
       onClicked: root.controller.call("delete_data", {
         confirmation: confirmation.text,
         discard_pending: root.discardPending
-      }, function (ok) {
+      }, function (ok, data) {
         if (ok) {
           root.showDeletion = false
           confirmation.text = ""
+          root.notice = data.credential_cleanup_needed ? (data.warning || "Local data was deleted. A saved token may remain in the keyring; remove the WaniKani for Omarchy credential after unlocking it.") : "Local data deleted."
         }
       })
     }

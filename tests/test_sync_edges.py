@@ -3,6 +3,7 @@ import copy
 import http.client
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 import urllib.error
@@ -12,6 +13,7 @@ from unittest.mock import Mock, patch
 from test_backend import EngineFixture, FakeApi, NOW
 from wanikani.api import Api, ApiError
 from wanikani.common import UserError, stamp
+from wanikani.credentials import Keyring
 from wanikani.demo import populate
 from wanikani.sync import Synchronizer
 from worker import Worker
@@ -271,6 +273,7 @@ class TransportEdgeTests(unittest.TestCase):
         with patch.object(api.opener, "open", side_effect=response):
             with self.assertRaises(ApiError) as failure:
                 api.request("reviews", "POST", {"review": {}})
+        response.close()
         self.assertTrue(failure.exception.uncertain)
 
     def test_truncated_response_is_uncertain_for_writes(self):
@@ -287,6 +290,7 @@ class TransportEdgeTests(unittest.TestCase):
         with patch.object(api.opener, "open", side_effect=response):
             with self.assertRaises(ApiError) as failure:
                 api.request("reviews", "POST", {"review": {}})
+        response.close()
         self.assertTrue(failure.exception.uncertain)
 
     def test_malformed_pagination_fails_without_following_it(self):
@@ -313,6 +317,7 @@ class CredentialStateTests(unittest.TestCase):
 
     def test_locked_keyring_does_not_prevent_disconnect_or_reconnect_later(self):
         worker = self.worker
+        worker.engine.store.set("credential_storage", "keyring")
         worker.engine.connected = True
         worker.token = "fixture-only-token"
         worker.keyring.delete.return_value = False
@@ -326,6 +331,7 @@ class CredentialStateTests(unittest.TestCase):
 
     def test_session_only_authentication_clears_older_keyring_token(self):
         worker = self.worker
+        worker.engine.store.set("credential_storage", "keyring")
         api = FakeApi(worker.engine.store)
         worker.keyring.delete.return_value = True
         with patch("worker.Api", return_value=api), patch.object(Synchronizer, "run", return_value=True):
@@ -334,6 +340,84 @@ class CredentialStateTests(unittest.TestCase):
         worker.keyring.delete.assert_called_once_with(api.user["id"])
         self.assertFalse(response["remembered"])
         self.assertEqual("session", worker.engine.store.get("credential_storage"))
+
+    def test_fresh_session_only_authentication_needs_no_keyring_cleanup(self):
+        worker = self.worker
+        api = FakeApi(worker.engine.store)
+        worker.keyring.delete.return_value = False
+        with patch("worker.Api", return_value=api), patch.object(Synchronizer, "run", return_value=True):
+            result = worker.authenticate({"token": "fixture-session-token", "remember": False})
+        self.assertFalse(result["credential_cleanup_needed"])
+        self.assertFalse(worker.engine.store.get("credential_may_exist"))
+        worker.handle({"v": 1, "id": "disconnect", "method": "disconnect"})
+        worker.keyring.delete.assert_not_called()
+        self.assertEqual("disconnected", worker.engine.status)
+
+    def test_missing_secret_tool_fallback_needs_no_keyring_cleanup(self):
+        worker = self.worker
+        worker.keyring = Keyring()
+        api = FakeApi(worker.engine.store)
+        with patch("worker.Api", return_value=api), patch.object(Synchronizer, "run", return_value=True), \
+                patch("wanikani.credentials.subprocess.run", side_effect=FileNotFoundError), \
+                patch.object(worker.keyring, "delete", wraps=worker.keyring.delete) as delete:
+            result = worker.authenticate({"token": "fixture-session-token", "remember": True})
+            worker.handle({"v": 1, "id": "disconnect", "method": "disconnect"})
+            delete.assert_not_called()
+        self.assertFalse(result["remembered"])
+        self.assertFalse(result["credential_cleanup_needed"])
+        self.assertFalse(worker.engine.store.get("credential_may_exist"))
+
+    def test_timed_out_keyring_write_keeps_cleanup_warning_without_auto_reconnect(self):
+        worker = self.worker
+        worker.keyring = Keyring()
+        api = FakeApi(worker.engine.store)
+        with patch("worker.Api", return_value=api), patch.object(Synchronizer, "run", return_value=True), \
+                patch("wanikani.credentials.subprocess.run", side_effect=subprocess.TimeoutExpired("secret-tool", 30)):
+            result = worker.authenticate({"token": "fixture-session-token", "remember": True})
+        self.assertTrue(result["credential_cleanup_needed"])
+        self.assertTrue(worker.engine.store.get("credential_may_exist"))
+        self.assertEqual("session", worker.engine.store.get("credential_storage"))
+        with patch.object(worker.keyring, "get") as lookup:
+            worker.startup()
+            lookup.assert_not_called()
+
+    def test_session_only_local_deletion_succeeds_without_secret_service(self):
+        worker = self.worker
+        worker.engine.store.set("credential_storage", "session")
+        worker.engine.store.set("credential_may_exist", False)
+        worker.keyring.delete.return_value = False
+        worker.handle({"v": 1, "id": "delete", "method": "delete_data", "args": {"confirmation": "DELETE"}})
+        worker.keyring.delete.assert_not_called()
+        response = next(message["data"] for message in self.messages if message.get("id") == "delete")
+        self.assertTrue(response["deleted"])
+        self.assertFalse(response["credential_cleanup_needed"])
+        self.assertIsNone(worker.engine.store.get("account_id"))
+
+    def test_local_deletion_proceeds_with_honest_warning_if_saved_token_cannot_clear(self):
+        worker = self.worker
+        worker.engine.store.set("credential_storage", "keyring")
+        worker.keyring.delete.return_value = False
+        worker.handle({"v": 1, "id": "delete", "method": "delete_data", "args": {"confirmation": "DELETE"}})
+        response = next(message["data"] for message in self.messages if message.get("id") == "delete")
+        self.assertTrue(response["deleted"])
+        self.assertTrue(response["credential_cleanup_needed"])
+        self.assertIn("keyring", response["warning"])
+        self.assertIsNone(worker.engine.store.get("account_id"))
+        self.assertIsNone(worker.token)
+        worker.startup()
+        worker.keyring.get.assert_not_called()
+
+    def test_local_deletion_still_requires_explicit_consent_for_pending_work(self):
+        worker = self.worker
+        worker.engine.set_material(2, {"meaning_synonyms": ["fixture peak"]})
+        worker.keyring.delete.return_value = False
+        with self.assertRaises(UserError):
+            worker.handle({"v": 1, "id": "delete", "method": "delete_data", "args": {"confirmation": "DELETE"}})
+        self.assertIsNotNone(worker.engine.store.get("account_id"))
+        self.assertEqual(1, worker.engine.snapshot()["pending"])
+        worker.keyring.delete.assert_not_called()
+        worker.handle({"v": 1, "id": "delete-agreed", "method": "delete_data", "args": {"confirmation": "DELETE", "discard_pending": True}})
+        self.assertIsNone(worker.engine.store.get("account_id"))
 
     def test_explicit_deletion_removes_recoverable_sqlite_pages(self):
         worker = self.worker

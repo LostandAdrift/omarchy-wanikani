@@ -506,7 +506,8 @@ class Engine:
             "attention": len([x for x in outbox if x["state"] in ("uncertain", "conflicted", "blocked")]),
             "outbox": outbox, "last_sync": self.store.get("last_sync"), "settings": self.settings(),
             "cache": {"files": media[0], "bytes": media[1], "subjects": cached_subjects}, "difficult": self.difficult(), "now": now,
-            "credential_storage": self.store.get("credential_storage", "session")}
+            "credential_storage": self.store.get("credential_storage", "session"),
+            "credential_cleanup_needed": bool(self.store.get("credential_may_exist", False)) and self.store.get("credential_storage") in ("session", "disconnected")}
 
     def command(self, request_id, method, args):
         handlers = {"start": lambda: self.start(args.get("mode", "reviews"), args.get("limit"), args.get("subjects")),

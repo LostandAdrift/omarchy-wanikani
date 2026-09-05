@@ -102,17 +102,18 @@ ColumnLayout {
   Label {
     text: "Related subjects"
     font.bold: true
-    visible: root.editable && root.subject && root.subject.related.length > 0
+    visible: root.showMeaning && root.showReading && root.subject && root.subject.related.length > 0
   }
   Flow {
     Layout.fillWidth: true
     spacing: Style.space(6)
-    visible: root.editable
+    visible: root.showMeaning && root.showReading
     Repeater {
       model: root.subject ? root.subject.related : []
       Action {
         required property var modelData
         text: modelData.characters + " · " + modelData.meaning
+        enabled: root.editable
         onClicked: root.controller.showSubject(modelData.id)
       }
     }

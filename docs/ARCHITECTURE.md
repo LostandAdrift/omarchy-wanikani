@@ -19,6 +19,8 @@ Reviews and practice: question → feedback → next question / completed subjec
 
 Each subject stores required parts, completed parts, and error counts independently. An incorrect answer increments the relevant count. A typo correction can decrement that one current error and marks feedback corrected. `advance` applies accepted feedback and creates the outbox item only after every required part is complete. `draft` is persisted during input. Hiding a panel does not finish a session.
 
+Practice and graded sessions have independent saved state. Explicit practice can run while a graded session is paused; Resume prioritizes that graded session. Practice never creates submission operations and remains available for subjects with pending graded work.
+
 ## Submission state machine
 
 Pending → preflight GET → in-flight → confirmed.
@@ -26,6 +28,8 @@ Pending → preflight GET → in-flight → confirmed.
 Preflight conflicts preserve the result as conflicted. Permission failures are blocked; a newly supplied token allows a fresh permission check. A response lost after a send, malformed successful response, or restart with an in-flight row becomes uncertain. Uncertain writes never reenter the automatic send path. Remote changes become conflicts, not guessed acknowledgments. Explicit recovery archives the local operation and keeps remote progress.
 
 The local operation ID is not sent as an assumed server idempotency mechanism. WaniKani remains authoritative for scheduling and unlocks; pending assignments cannot be reviewed again. Lesson completion uses assignment start, and review completion uses POST reviews. The returned review ID is not used as a persistence key because it may be zero.
+
+After confirming writes, synchronization refreshes user, assignment, and summary resources so newly unlocked work becomes available immediately. Reset reconciliation atomically invalidates affected assignments and their cursors; partial collection downloads do not advance a cursor past unseen changes.
 
 ## Boundaries
 

@@ -1,6 +1,6 @@
 # Implementation checkpoint
 
-User authorized the complete researched plan on 2026-09-04. They warned that a Codex reset is incoming. Continue implementation autonomously; the work is not complete.
+User authorized the complete researched plan on 2026-09-04 and resumed work after a Codex reset. The development implementation is installed locally. Continue from the factual status and remaining qualification gates below; do not redo completed setup or discard the saved study session.
 
 ## Accepted product
 
@@ -15,7 +15,7 @@ Full native WaniKani lessons/reviews, offline sessions, guarded current-answer t
 - Panel entry root exposes `open(payloadJson)`, `close()`, and `opened`. shell.summon queues payload and calls open; shell.hide calls close. keepLoaded true supported.
 - Native `qs.Ui.BarWidget`, WidgetButton, TextField, Button, BorderSurface; `qs.Commons.Color`, Style, Border. Native PanelWindow follows emojis/Emojis.qml. Single shared service owns Python worker via stdin/stdout JSON; no second Quickshell process.
 - Current bar top; idle screensaver 150s / lock 1800s. Idle service owns these; ambient must give way before deadline. shell.serviceFor('omarchy.lock').locked and notifications service DND available. Desktop notifications must set custom app name because default omarchy-action bypasses DND.
-- Proposed free keys Super+Alt+W (study), Super+Alt+Shift+W (lookup); inspect before installation. Preserve existing config. No packaged-file edits.
+- Installed keys Super+Alt+W (study), Super+Alt+Shift+W (lookup), verified in live Hyprland bindings. The reversible integration helper preserves conflicts and unrelated configuration. No packaged-file edits.
 
 ## Backend requirements
 
@@ -45,10 +45,12 @@ Test graders, all types, kana inputs, correction timing, crash persistence bound
 - Installed through `omarchy plugin add` from this local Git repository. Installed origin points here; updates use the normal manager. No public Git remote or publication yet.
 - Shortcuts and Study/Lookup launchers installed with reversible helper. Existing bindings preserved; Hyprland config validation clean.
 - Authored demo only. No real token accessed, no live WaniKani writes.
-- 40 Python tests passed, including 12 actual subprocess crash boundaries. 11 Qt kana checks passed. Manifest validates. Native dashboard and review surfaces rendered in the running shell.
-- Full fixture catalogue: 9,016 subjects, dashboard snapshot median ~93 ms, search ~3 ms, answer-and-advance ~12 ms. Numeric JSON indexes are essential; without them SQLite chose quadratic joins.
+- 89 Python tests passed, including 12 actual subprocess crash boundaries. 44 Qt kana/desktop-policy checks passed. Manifest and both installed desktop launchers validate; Hyprland has no configuration errors.
+- Native dashboard, study, lookup, Settings, and Zen inspected. Screenshots in docs/screenshots show authored demo content in Tokyo Night and Flexoki Light. All four bar positions exercised across three monitors; original top bar, theme and background restored.
+- Full fixture catalogue: 9,016 subjects, latest dashboard snapshot median 91.4 ms, search 2.3 ms, durable answer-and-advance 11.3 ms. Numeric JSON indexes are essential; without them SQLite chose quadratic joins. Warm study mapped in 73.9 ms. Idle worker measured 0% at process-tick resolution over 45 seconds, RSS 30.2 MiB/PSS 17.7 MiB; incremental QML overhead is not isolated.
 - Shell hot reload retained durable demo state but left nested QML components stale; a full shell restart picked up visual changes. Document this installed-host limitation. Do not edit packaged shell code.
-- Still finishing final desktop QA, screenshots, current changes, remaining edge tests, and documentation. Do not declare task complete until those are done. Two weeks personal use, live account/audio, suspend/lock/idle handoff remain explicit release qualification gates.
+- docs/VERIFICATION.md records actual automated/native outcomes and outstanding qualification. Two weeks of personal daily use, live account/media, fractional scaling, accessibility, suspend/lock/idle handoff and isolated shared-shell performance remain release gates. No contest-ready 1.0 claim is warranted yet.
+- The three-minute contest demonstration script is prepared in docs/CONTEST_DEMO.md. Simulated offline controls operate only on authored demo fixtures and never change machine networking.
 - Current demo has a partially completed first five-review session; preserve it for resume checks. State is private, outside source.
 
 ## Sources
