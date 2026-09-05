@@ -198,6 +198,13 @@ Rectangle {
       compare(owner.plays,[101]);page.restoreInput();wait(1);compare(owner.plays,[101])
       click("lesson-next");setStep("context");compare(owner.plays,[101])
     }
+    function test_kanji_discovery_and_feedback_do_not_request_ordinary_recordings() {
+      make(state("meaning","kanji"));click("lesson-next");setStep("reading","kanji");compare(owner.plays.length,0)
+      owner.snapshot={settings:{autoplay_lessons:true,autoplay_audio:true},pending:0,demo:true}
+      focusSink.forceActiveFocus()
+      owner.session=Object.assign({},owner.session,{phase:"feedback",part:"reading",feedback:{correct:true,retry:false,message:"Correct reading.",accepted:["かざん"]}})
+      wait(1);compare(owner.plays.length,0);compare(backend.writes.length,0)
+    }
     function test_disabled_autoplay_and_failed_navigation_never_play() {
       make();owner.snapshot={settings:{autoplay_lessons:false,autoplay_audio:false},pending:0,demo:true}
       click("lesson-next");setStep("reading");compare(owner.plays.length,0)

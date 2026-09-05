@@ -444,6 +444,11 @@ class Worker:
             from wanikani.recovery import catalogue
             result = catalogue(self.engine, state=args.get("state", "open"), kind=args.get("kind", "all"),
                 offset=args.get("offset", 0), limit=args.get("limit", 30))
+        elif method == "level_history":
+            from wanikani.level_history import catalogue
+            if set(args) - {"offset", "limit"}:
+                raise UserError("Choose only a page of cached level history.")
+            result = catalogue(self.engine, offset=args.get("offset", 0), limit=args.get("limit", 20))
         elif method == "kanji_examples":
             from wanikani.kanji_examples import catalogue
             result = catalogue(self.engine, args)
@@ -617,7 +622,7 @@ class Worker:
                 and current["completed"] == previous_session["completed"])
         if session_only:
             self.session_changed()
-        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "progress", "learning_insights", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
+        elif method not in ("snapshot", "readiness", "draft", "editor_draft", "editor_discard", "search", "reading_trail", "practice_catalogue", "recovery", "voices", "pronunciation", "pronunciation_sample", "kanji_examples", "rhythm_preview", "rhythm_claim", "rhythm_configure", "lesson_catalogue", "lesson_preview", "listen_state", "listen_prepare_cancel", "listen", "listen_media", "progress", "learning_insights", "level_history", "level_board", "subject_status", "session_report", "details", "ambient", "session", "tick", "diagnostics"):
             self.changed(refresh_readiness=method in ("advance", "settings", "resolve", "clear_cache", "disconnect", "delete_data", "use_demo"))
         if (method in ("advance", "set_material") and self.sync and not self.job_lock.locked()
                 and self.engine.store.rows("SELECT 1 FROM outbox WHERE state='pending' LIMIT 1")):

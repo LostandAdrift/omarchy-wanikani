@@ -59,7 +59,7 @@ Card {
         width: parent.width * parent.value
         height: parent.height
         radius: parent.radius
-        color: Theme.indicator(Color.accent, root.color, Color.foreground)
+        color: Theme.indicator(Color.accent, parent.color, Color.foreground)
       }
     }
     Label {

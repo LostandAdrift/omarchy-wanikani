@@ -25,6 +25,7 @@ REQUIRED_RUNTIME = ("manifest.json", "Service.qml", "Panel.qml", "backend/worker
     "backend/wanikani/listening.py", "backend/wanikani/lessons.py", "backend/wanikani/reminders.py",
     "backend/wanikani/listening_preparation.py", "backend/wanikani/lesson_flow.py",
     "backend/wanikani/kanji_examples.py", "qml/KanjiExamples.qml",
+    "backend/wanikani/level_history.py", "qml/LevelHistory.qml",
     "backend/wanikani/insights.py", "qml/LearningActivity.qml",
     "qml/Listening.qml", "qml/StudyOverview.qml", "qml/StudyRhythm.qml")
 

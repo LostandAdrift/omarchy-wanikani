@@ -185,7 +185,7 @@ class LearningProgressRenderingTests(unittest.TestCase):
             directory = Path(temporary)
             qml = directory / "qml"
             qml.mkdir()
-            for name in ("LevelProgress.qml", "Progress.qml", "Card.qml", "Label.qml", "Theme.mjs"):
+            for name in ("LevelProgress.qml", "Progress.qml", "LevelHistory.qml", "Card.qml", "Label.qml", "Theme.mjs"):
                 shutil.copyfile(ROOT / "qml" / name, qml / name)
             (qml / "Action.qml").write_text('import QtQuick\nimport QtQuick.Controls\nButton {\n'
                 'property bool selected: false\nproperty string accessibleName: text\n'

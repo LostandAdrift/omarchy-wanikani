@@ -50,6 +50,21 @@ def populate(store, now):
                 "reading_correct": 7, "reading_incorrect": 2 if sid == 4 else 0, "percentage_correct": 70 if sid in (3, 4) else 100,
                 "hidden": False,
             }})
+        # Authored visits illustrate a reset without inventing completion or
+        # changing any existing demo. The early demo_seeded return above also
+        # preserves old installations that have no illustrative history.
+        visits = [(1, 40, 32, None), (2, 32, 22, None), (3, 22, None, 18),
+                  (1, 18, 11, None), (2, 11, 4, None), (3, 4, None, None)]
+        for index, (level, unlocked_days, passed_days, abandoned_days) in enumerate(visits):
+            unlocked = now - unlocked_days * 86400
+            store.put({"id": 301 + index, "object": "level_progression", "data_updated_at": stamp(now), "data": {
+                "level": level, "created_at": stamp(unlocked), "unlocked_at": stamp(unlocked),
+                "started_at": stamp(unlocked + 3600),
+                "passed_at": stamp(now - passed_days * 86400) if passed_days is not None else None,
+                "completed_at": None,
+                "abandoned_at": stamp(now - abandoned_days * 86400) if abandoned_days is not None else None,
+            }})
+        store.set("cursor_level_progressions", stamp(now))
         store.set("account_id", "demo")
         store.set("demo_seeded", True)
         store.set("last_sync", stamp(now))

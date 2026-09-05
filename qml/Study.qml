@@ -53,9 +53,9 @@ ColumnLayout {
       input.text = session.draft || ""
       converting = false
       Qt.callLater(focusInput)
-      if (interactive && session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
+      if (interactive && subject.audio_available === true && session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
         controller.play(subject)
-      else if (interactive && session.phase === "lesson" && controller.snapshot.settings.autoplay_lessons && (!lessonFlow || (lessonAudio && lessonSection === "reading" && session.id === lessonAudio.sessionId && session.revision > lessonAudio.revision && subject.id === lessonAudio.subjectId && (controller.contentAccess || "") === lessonAudio.access)))
+      else if (interactive && subject.audio_available === true && session.phase === "lesson" && controller.snapshot.settings.autoplay_lessons && (!lessonFlow || (lessonAudio && lessonSection === "reading" && session.id === lessonAudio.sessionId && session.revision > lessonAudio.revision && subject.id === lessonAudio.subjectId && (controller.contentAccess || "") === lessonAudio.access)))
         controller.play(subject)
     }
   }
@@ -188,15 +188,18 @@ ColumnLayout {
     }
   }
   Rectangle {
+    objectName: "study-completion-meter"
     Layout.fillWidth: true
-    height: Style.space(5)
-    color: Qt.alpha(Color.foreground, 0.1)
+    implicitHeight: Style.space(5)
+    color: Theme.tint(Color.foreground, Theme.surface(parent, Color.background), 0.1)
     radius: 2
     visible: root.session !== null && !root.lessonFlow
+    Accessible.role: Accessible.ProgressBar
+    Accessible.name: root.session ? root.session.completed + " of " + root.session.total + " subjects completed" : "Session progress"
     Rectangle {
       height: parent.height
       width: parent.width * (root.session ? root.session.completed / Math.max(1, root.session.total) : 0)
-      color: Color.accent
+      color: Theme.indicator(Color.accent, parent.color, Color.foreground)
       radius: 2
     }
   }

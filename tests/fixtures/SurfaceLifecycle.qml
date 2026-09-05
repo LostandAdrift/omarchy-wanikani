@@ -231,7 +231,7 @@ TestCase {
     item.opened=false;service.reply();compare(item.results.length,0)
   }
   function session(phase,part) {
-    return {id:"fixture",phase:phase,part:part,draft:"",subject:{id:2,type:"kanji",audio:[{url:"file:///fixture.wav"}]},feedback:{correct:true},lesson_index:0}
+    return {id:"fixture",phase:phase,part:part,draft:"",subject:{id:2,type:"vocabulary",audio_available:true,audio:[{url:"file:///fixture.wav"}]},feedback:{correct:true},lesson_index:0}
   }
   function test_late_feedback_does_not_play_after_close_or_lock() {
     make("Study");controller.opened=false;controller.session=session("feedback","reading")

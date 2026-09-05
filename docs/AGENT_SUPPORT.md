@@ -18,6 +18,8 @@ That is a shortened, authored example. Actual status also includes supported agg
 
 When supplied by the installed service, `learning_progress` reports the current level's `passed`, `required`, and `remaining` counts with completeness and pending/attention flags. For example, 24 passed of 27 required means three more are needed; incomplete cache data leaves the requirement unknown. `saved_sessions` exposes only review/lesson/practice presence. `panel_open` and `studying` describe native UI state. `reminders` exposes its suppression status, next opportunity, and remaining daily budget. Optional `last_sync` and `next_reviews_at` are validated ISO timestamps. These fields support both learning suggestions and an operational handoff without exposing personal study content.
 
+For account milestones, open Progress and choose **Level history**. It shows separate recorded visits and dated passing/burned milestones from the accessible account cache. Older history can be absent even after synchronization completes. **Activity** remains the separate record of work done in this client. The helper does not export individual history records or submit their private worker requests; see [history scope](LEVEL_HISTORY.md).
+
 ## Optional agent playbook
 
 The repository includes [skills/omarchy-wanikani/SKILL.md](../skills/omarchy-wanikani/SKILL.md) and its agent display metadata. It is an optional operating guide, not a plugin-development skill. An agent can read it directly from the repository to locate the installed client, check its manifest identity, use the bounded helper, and interpret local progress and recovery states.

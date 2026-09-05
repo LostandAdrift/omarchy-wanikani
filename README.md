@@ -4,7 +4,7 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.2.3 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.4 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
@@ -61,6 +61,8 @@ The lesson overview lets you browse confirmed unlocked subjects by type, preview
 **Activity** shows the last seven or thirty local calendar days of completed subjects, finished batches, listening ratings, and guarded typo corrections. Current submission confirmations and items needing attention remain separate. Suggestions open the appropriate overview without starting study. Records retained across an account reset still describe work you did here; activity from other devices is not reconstructed.
 
 **Progress** shows confirmed first passing toward the current level’s 90% kanji requirement, pending submissions separately, current SRS distribution, and a paged level board with prerequisites and known review times. Incomplete account data is labeled explicitly. Unrevealed subjects in unfinished graded work stay protected on the board.
+
+Choose **Level history** within Progress for account milestones, separate recorded visits after resets, elapsed calendar durations and expandable dates. Passing a level stays distinct from burning all its subjects. Older API history may be missing even after a complete sync. [History scope and behavior](docs/LEVEL_HISTORY.md)
 
 Vocabulary pronunciation has visible replay/stop and download/error states. An explicitly requested recording can download without holding up answers. Settings includes separate lesson/review autoplay and **Test selected voice**, using a safe learned sample. A downloaded alternate voice remains usable when the preferred voice is missing offline. Recordings stop when the surface, subject, account or study question changes.
 

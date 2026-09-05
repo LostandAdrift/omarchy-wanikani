@@ -7,11 +7,17 @@ ColumnLayout {
   id: root
   required property var controller
   property int selectedLevel: 0
+  property bool historyOpen: false
   property string subjectType: ""
   property int offset: 0
   readonly property int pageSize: 24
   property var overview: null
-  property var page: ({items: [], total: 0, has_more: false, complete: false})
+  property var page: ({
+      items: [],
+      total: 0,
+      has_more: false,
+      complete: false
+    })
   property bool loading: false
   property bool fetching: false
   property bool dirty: true
@@ -19,10 +25,8 @@ ColumnLayout {
   property int serial: 0
   property string notice: ""
   readonly property string contentAccess: controller.contentAccess || ""
-  readonly property bool active: controller.opened && controller.service && controller.service.ready && !controller.service.locked
-  readonly property string contextKey: JSON.stringify([controller.contentAccess || "", controller.snapshot.last_sync,
-    controller.snapshot.session_epoch, controller.snapshot.session_revision, controller.snapshot.pending,
-    controller.snapshot.attention, controller.snapshot.level])
+  readonly property bool active: visible && !historyOpen && controller.opened && controller.service && controller.service.ready && !controller.service.locked
+  readonly property string contextKey: JSON.stringify([controller.contentAccess || "", controller.snapshot.last_sync, controller.snapshot.session_epoch, controller.snapshot.session_revision, controller.snapshot.pending, controller.snapshot.attention, controller.snapshot.level])
   readonly property int currentLevel: overview && overview.current && Number.isInteger(overview.current.level) ? overview.current.level : (controller.snapshot.level || 0)
   readonly property int boardLevel: selectedLevel || currentLevel
   readonly property int maximumLevel: Math.min(currentLevel, controller.snapshot.max_level || currentLevel)
@@ -38,7 +42,12 @@ ColumnLayout {
     serial++
     dirty = true
     loading = false
-    page = {items: [], total: 0, has_more: false, complete: false}
+    page = {
+      items: [],
+      total: 0,
+      has_more: false,
+      complete: false
+    }
     if (clearOverview)
       overview = null
     if (active && initialized)
@@ -65,22 +74,14 @@ ColumnLayout {
     invalidate(false)
   }
   function validCard(card, nested) {
-    return card && typeof card === "object" && Number.isSafeInteger(card.id) && card.id > 0
-      && Number.isInteger(card.level) && card.level >= 1 && card.level <= (controller.snapshot.max_level || 0)
-      && ["radical", "kanji", "vocabulary", "kana_vocabulary"].indexOf(card.type) >= 0
-      && typeof card.characters === "string" && typeof card.meaning === "string"
-      && typeof card.can_open === "boolean" && typeof card.spoilers_hidden === "boolean"
-      && card.status && typeof card.status === "object"
-      && (!card.spoilers_hidden || (card.can_open === false && card.meaning === ""
-        && (nested || (Array.isArray(card.prerequisites) && card.prerequisites.length === 0))))
-      && (nested || (Array.isArray(card.prerequisites) && card.prerequisites.length <= 60
-        && card.prerequisites.every(function (item) { return validCard(item, true) })))
+    return card && typeof card === "object" && Number.isSafeInteger(card.id) && card.id > 0 && Number.isInteger(card.level) && card.level >= 1 && card.level <= (controller.snapshot.max_level || 0) && ["radical", "kanji", "vocabulary", "kana_vocabulary"].indexOf(card.type) >= 0 && typeof card.characters === "string" && typeof card.meaning === "string" && typeof card.can_open === "boolean" && typeof card.spoilers_hidden === "boolean" && card.status && typeof card.status === "object" && (!card.spoilers_hidden || (card.can_open === false && card.meaning === "" && (nested || (Array.isArray(card.prerequisites) && card.prerequisites.length === 0)))) && (nested || (Array.isArray(card.prerequisites) && card.prerequisites.length <= 60 && card.prerequisites.every(function (item) {
+          return validCard(item, true)
+        })))
   }
   function validPage(data, level, type, start) {
-    return data && data.level === level && data.subject_type === (type || null) && data.offset === start
-      && Number.isInteger(data.total) && data.total >= 0 && typeof data.has_more === "boolean"
-      && Array.isArray(data.items) && data.items.length <= pageSize
-      && data.items.every(function (item) { return validCard(item, false) && item.level === level && (!type || item.type === type) })
+    return data && data.level === level && data.subject_type === (type || null) && data.offset === start && Number.isInteger(data.total) && data.total >= 0 && typeof data.has_more === "boolean" && Array.isArray(data.items) && data.items.length <= pageSize && data.items.every(function (item) {
+      return validCard(item, false) && item.level === level && (!type || item.type === type)
+    })
   }
   function fetch() {
     if (!active || !dirty || fetching || !initialized)
@@ -110,7 +111,12 @@ ColumnLayout {
         finishFetch()
         return
       }
-      controller.service.request("level_board", {level: level, subject_type: type || null, offset: start, limit: pageSize}, function (boardOk, board, boardMessage) {
+      controller.service.request("level_board", {
+        level: level,
+        subject_type: type || null,
+        offset: start,
+        limit: pageSize
+      }, function (boardOk, board, boardMessage) {
         if (current(request, context)) {
           if (boardOk && validPage(board, level, type, start))
             page = board
@@ -138,7 +144,9 @@ ColumnLayout {
       matches.push(page.items[i])
       matches = matches.concat(page.items[i].prerequisites || [])
     }
-    if (matches.some(function (item) { return item.id === id && item.can_open === true && item.spoilers_hidden === false }))
+    if (matches.some(function (item) {
+      return item.id === id && item.can_open === true && item.spoilers_hidden === false
+    }))
       controller.showSubject(id)
   }
   function statusLabel(item) {
@@ -216,206 +224,255 @@ ColumnLayout {
     text: root.notice
     textColor: Color.urgent
   }
-  Label {
-    text: "Your learning, now"
-    font.bold: true
-  }
-  Label {
-    Layout.fillWidth: true
-    text: root.overview && root.overview.distribution.complete ? "Current retention across accessible cached subjects. First passing stays recorded even when a subject needs more practice." : "Some account progress is still being cached. These counts show what is available so far."
-    secondary: true
-    font.pixelSize: Style.font.bodySmall
-  }
   Flow {
-    id: distributionFlow
     Layout.fillWidth: true
     spacing: Style.space(8)
+    Action {
+      objectName: "progress-subjects-tab"
+      text: "Subjects & unlocks"
+      selected: !root.historyOpen
+      onClicked: root.historyOpen = false
+    }
+    Action {
+      objectName: "progress-history-tab"
+      text: "Level history"
+      selected: root.historyOpen
+      onClicked: root.historyOpen = true
+    }
+  }
+  LevelHistory {
+    Layout.fillWidth: true
+    controller: root.controller
+    visible: root.historyOpen
+  }
+  ColumnLayout {
+    Layout.fillWidth: true
+    visible: !root.historyOpen
+    spacing: Style.space(16)
+    Label {
+      text: "Your learning, now"
+      font.bold: true
+    }
+    Label {
+      Layout.fillWidth: true
+      text: root.overview && root.overview.distribution.complete ? "Current retention across accessible cached subjects. First passing stays recorded even when a subject needs more practice." : "Some account progress is still being cached. These counts show what is available so far."
+      secondary: true
+      font.pixelSize: Style.font.bodySmall
+    }
+    Flow {
+      id: distributionFlow
+      Layout.fillWidth: true
+      spacing: Style.space(8)
+      Repeater {
+        model: root.groups
+        Card {
+          id: distributionCard
+          required property int index
+          readonly property var group: root.groups[index]
+          width: Math.max(90, (distributionFlow.width - distributionFlow.spacing * (distributionFlow.width < 500 ? 2 : 3)) / (distributionFlow.width < 500 ? 3 : 4))
+          height: groupContent.implicitHeight + Style.space(20)
+          ColumnLayout {
+            id: groupContent
+            anchors.fill: parent
+            anchors.margins: Style.space(10)
+            spacing: Style.space(4)
+            Label {
+              Layout.fillWidth: true
+              text: distributionCard.group.label || "Unknown"
+              surfaceColor: distributionCard.color
+              secondary: true
+              font.pixelSize: Style.font.bodySmall
+            }
+            Label {
+              text: String(distributionCard.group.count || 0)
+              surfaceColor: distributionCard.color
+              textColor: Color.accent
+              font.pixelSize: Style.space(25)
+              font.bold: true
+            }
+          }
+        }
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: "Level " + (root.boardLevel || "—") + " subjects"
+      font.bold: true
+      font.pixelSize: Style.font.title
+    }
+    Flow {
+      Layout.fillWidth: true
+      spacing: Style.space(8)
+      Action {
+        text: "← Previous level"
+        enabled: !root.loading && root.boardLevel > 1
+        onClicked: root.chooseLevel(root.boardLevel - 1)
+      }
+      Action {
+        text: "Current level"
+        selected: root.boardLevel === root.currentLevel
+        enabled: !root.loading && root.currentLevel <= root.maximumLevel
+        onClicked: root.chooseLevel(root.currentLevel)
+      }
+      Action {
+        text: "Next level →"
+        enabled: !root.loading && root.boardLevel < root.maximumLevel
+        onClicked: root.chooseLevel(root.boardLevel + 1)
+      }
+    }
+    Flow {
+      Layout.fillWidth: true
+      spacing: Style.space(6)
+      Repeater {
+        model: [
+          {
+            key: "",
+            label: "All subjects"
+          },
+          {
+            key: "radical",
+            label: "Radicals"
+          },
+          {
+            key: "kanji",
+            label: "Kanji"
+          },
+          {
+            key: "vocabulary",
+            label: "Vocabulary"
+          },
+          {
+            key: "kana_vocabulary",
+            label: "Kana vocabulary"
+          }
+        ]
+        Action {
+          required property var modelData
+          text: modelData.label
+          selected: root.subjectType === modelData.key
+          onClicked: root.chooseType(modelData.key)
+        }
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: root.loading ? "Loading this level…" : root.page.items.length ? (root.offset + 1) + "–" + (root.offset + root.page.items.length) + " of " + root.page.total + " subjects" + (root.page.complete ? "" : " · partial cache") : "No subjects are cached for this selection. Refresh your account or choose another subject type."
+      secondary: true
+      font.pixelSize: Style.font.bodySmall
+    }
     Repeater {
-      model: root.groups
+      model: root.page.items
       Card {
-        id: distributionCard
+        id: subjectCard
         required property int index
-        readonly property var group: root.groups[index]
-        width: Math.max(90, (distributionFlow.width - distributionFlow.spacing * (distributionFlow.width < 500 ? 2 : 3)) / (distributionFlow.width < 500 ? 3 : 4))
-        height: groupContent.implicitHeight + Style.space(20)
+        readonly property var subject: root.page.items[index]
+        Layout.fillWidth: true
+        Layout.preferredHeight: subjectContent.implicitHeight + Style.space(24)
         ColumnLayout {
-          id: groupContent
+          id: subjectContent
           anchors.fill: parent
-          anchors.margins: Style.space(10)
-          spacing: Style.space(4)
+          anchors.margins: Style.space(12)
+          spacing: Style.space(8)
+          RowLayout {
+            Layout.fillWidth: true
+            spacing: Style.space(14)
+            Label {
+              Layout.preferredWidth: Style.space(100)
+              text: subjectCard.subject.characters || "◇"
+              font.family: "Noto Sans CJK JP"
+              font.pixelSize: Style.space(34)
+              surfaceColor: subjectCard.color
+            }
+            ColumnLayout {
+              Layout.fillWidth: true
+              Label {
+                Layout.fillWidth: true
+                text: subjectCard.subject.meaning || (subjectCard.subject.spoilers_hidden ? "Answer kept for your saved session" : "Subject details")
+                surfaceColor: subjectCard.color
+                font.bold: true
+              }
+              Label {
+                Layout.fillWidth: true
+                text: subjectCard.subject.type.replace("_", " ") + " · " + root.statusLabel(subjectCard.subject)
+                surfaceColor: subjectCard.color
+                secondary: true
+                font.pixelSize: Style.font.bodySmall
+              }
+            }
+          }
           Label {
             Layout.fillWidth: true
-            text: distributionCard.group.label || "Unknown"
-            surfaceColor: distributionCard.color
+            text: root.reviewLabel(subjectCard.subject)
+            visible: text.length > 0
+            surfaceColor: subjectCard.color
             secondary: true
             font.pixelSize: Style.font.bodySmall
           }
           Label {
-            text: String(distributionCard.group.count || 0)
-            surfaceColor: distributionCard.color
-            textColor: Color.accent
-            font.pixelSize: Style.space(25)
+            Layout.fillWidth: true
+            visible: subjectCard.subject.prerequisites.length > 0
+            text: "Prerequisites · " + subjectCard.subject.prerequisites.filter(function (part) {
+              return part.required
+            }).length + " still to pass"
+            surfaceColor: subjectCard.color
+            font.pixelSize: Style.font.bodySmall
             font.bold: true
           }
-        }
-      }
-    }
-  }
-  Label {
-    Layout.fillWidth: true
-    text: "Level " + (root.boardLevel || "—") + " subjects"
-    font.bold: true
-    font.pixelSize: Style.font.title
-  }
-  Flow {
-    Layout.fillWidth: true
-    spacing: Style.space(8)
-    Action {
-      text: "← Previous level"
-      enabled: !root.loading && root.boardLevel > 1
-      onClicked: root.chooseLevel(root.boardLevel - 1)
-    }
-    Action {
-      text: "Current level"
-      selected: root.boardLevel === root.currentLevel
-      enabled: !root.loading && root.currentLevel <= root.maximumLevel
-      onClicked: root.chooseLevel(root.currentLevel)
-    }
-    Action {
-      text: "Next level →"
-      enabled: !root.loading && root.boardLevel < root.maximumLevel
-      onClicked: root.chooseLevel(root.boardLevel + 1)
-    }
-  }
-  Flow {
-    Layout.fillWidth: true
-    spacing: Style.space(6)
-    Repeater {
-      model: [{key: "", label: "All subjects"}, {key: "radical", label: "Radicals"}, {key: "kanji", label: "Kanji"}, {key: "vocabulary", label: "Vocabulary"}, {key: "kana_vocabulary", label: "Kana vocabulary"}]
-      Action {
-        required property var modelData
-        text: modelData.label
-        selected: root.subjectType === modelData.key
-        onClicked: root.chooseType(modelData.key)
-      }
-    }
-  }
-  Label {
-    Layout.fillWidth: true
-    text: root.loading ? "Loading this level…" : root.page.items.length ? (root.offset + 1) + "–" + (root.offset + root.page.items.length) + " of " + root.page.total + " subjects" + (root.page.complete ? "" : " · partial cache") : "No subjects are cached for this selection. Refresh your account or choose another subject type."
-    secondary: true
-    font.pixelSize: Style.font.bodySmall
-  }
-  Repeater {
-    model: root.page.items
-    Card {
-      id: subjectCard
-      required property int index
-      readonly property var subject: root.page.items[index]
-      Layout.fillWidth: true
-      Layout.preferredHeight: subjectContent.implicitHeight + Style.space(24)
-      ColumnLayout {
-        id: subjectContent
-        anchors.fill: parent
-        anchors.margins: Style.space(12)
-        spacing: Style.space(8)
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(14)
-          Label {
-            Layout.preferredWidth: Style.space(100)
-            text: subjectCard.subject.characters || "◇"
-            font.family: "Noto Sans CJK JP"
-            font.pixelSize: Style.space(34)
-            surfaceColor: subjectCard.color
-          }
-          ColumnLayout {
+          Flow {
             Layout.fillWidth: true
-            Label {
-              Layout.fillWidth: true
-              text: subjectCard.subject.meaning || (subjectCard.subject.spoilers_hidden ? "Answer kept for your saved session" : "Subject details")
-              surfaceColor: subjectCard.color
-              font.bold: true
-            }
-            Label {
-              Layout.fillWidth: true
-              text: subjectCard.subject.type.replace("_", " ") + " · " + root.statusLabel(subjectCard.subject)
-              surfaceColor: subjectCard.color
-              secondary: true
-              font.pixelSize: Style.font.bodySmall
-            }
-          }
-        }
-        Label {
-          Layout.fillWidth: true
-          text: root.reviewLabel(subjectCard.subject)
-          visible: text.length > 0
-          surfaceColor: subjectCard.color
-          secondary: true
-          font.pixelSize: Style.font.bodySmall
-        }
-        Label {
-          Layout.fillWidth: true
-          visible: subjectCard.subject.prerequisites.length > 0
-          text: "Prerequisites · " + subjectCard.subject.prerequisites.filter(function (part) { return part.required }).length + " still to pass"
-          surfaceColor: subjectCard.color
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-        }
-        Flow {
-          Layout.fillWidth: true
-          spacing: Style.space(6)
-          visible: subjectCard.subject.prerequisites.length > 0
-          Repeater {
-            model: subjectCard.subject.prerequisites
-            Action {
-              required property int index
-              readonly property var prerequisite: subjectCard.subject.prerequisites[index]
-              text: (prerequisite.characters || "◇") + " · " + (prerequisite.status.passed ? "Passed" : root.statusLabel(prerequisite))
-              accessibleName: (prerequisite.characters || "Radical") + ", prerequisite, " + root.statusLabel(prerequisite)
-              enabled: prerequisite.can_open === true && !prerequisite.spoilers_hidden
-              surfaceColor: subjectCard.color
-              onClicked: root.openSubject(prerequisite.id)
+            spacing: Style.space(6)
+            visible: subjectCard.subject.prerequisites.length > 0
+            Repeater {
+              model: subjectCard.subject.prerequisites
+              Action {
+                required property int index
+                readonly property var prerequisite: subjectCard.subject.prerequisites[index]
+                text: (prerequisite.characters || "◇") + " · " + (prerequisite.status.passed ? "Passed" : root.statusLabel(prerequisite))
+                accessibleName: (prerequisite.characters || "Radical") + ", prerequisite, " + root.statusLabel(prerequisite)
+                enabled: prerequisite.can_open === true && !prerequisite.spoilers_hidden
+                surfaceColor: subjectCard.color
+                onClicked: root.openSubject(prerequisite.id)
+              }
             }
           }
-        }
-        Label {
-          Layout.fillWidth: true
-          text: root.prerequisiteSchedule(subjectCard.subject)
-          visible: text.length > 0
-          surfaceColor: subjectCard.color
-          secondary: true
-          font.pixelSize: Style.font.bodySmall
-        }
-        Label {
-          Layout.fillWidth: true
-          visible: subjectCard.subject.prerequisites_complete === false
-          text: "Some prerequisite information is unavailable in the current cache."
-          surfaceColor: subjectCard.color
-          secondary: true
-          font.pixelSize: Style.font.bodySmall
-        }
-        Action {
-          text: subjectCard.subject.spoilers_hidden ? "Protected while graded study is saved" : "Open subject →"
-          enabled: subjectCard.subject.can_open === true && !subjectCard.subject.spoilers_hidden
-          surfaceColor: subjectCard.color
-          onClicked: root.openSubject(subjectCard.subject.id)
+          Label {
+            Layout.fillWidth: true
+            text: root.prerequisiteSchedule(subjectCard.subject)
+            visible: text.length > 0
+            surfaceColor: subjectCard.color
+            secondary: true
+            font.pixelSize: Style.font.bodySmall
+          }
+          Label {
+            Layout.fillWidth: true
+            visible: subjectCard.subject.prerequisites_complete === false
+            text: "Some prerequisite information is unavailable in the current cache."
+            surfaceColor: subjectCard.color
+            secondary: true
+            font.pixelSize: Style.font.bodySmall
+          }
+          Action {
+            text: subjectCard.subject.spoilers_hidden ? "Protected while graded study is saved" : "Open subject →"
+            enabled: subjectCard.subject.can_open === true && !subjectCard.subject.spoilers_hidden
+            surfaceColor: subjectCard.color
+            onClicked: root.openSubject(subjectCard.subject.id)
+          }
         }
       }
     }
-  }
-  Flow {
-    Layout.fillWidth: true
-    spacing: Style.space(8)
-    Action {
-      text: "← Previous page"
-      enabled: !root.loading && root.offset > 0
-      onClicked: root.changePage(Math.max(0, root.offset - root.pageSize))
-    }
-    Action {
-      text: "Next page →"
-      enabled: !root.loading && root.page.has_more === true
-      onClicked: root.changePage(root.page.next_offset)
+    Flow {
+      Layout.fillWidth: true
+      spacing: Style.space(8)
+      Action {
+        text: "← Previous page"
+        enabled: !root.loading && root.offset > 0
+        onClicked: root.changePage(Math.max(0, root.offset - root.pageSize))
+      }
+      Action {
+        text: "Next page →"
+        enabled: !root.loading && root.page.has_more === true
+        onClicked: root.changePage(root.page.next_offset)
+      }
     }
   }
 }
