@@ -37,7 +37,8 @@ def integrate(home, source, remove=False, runtime=True):
             elif item.exists():
                 messages.append("Preserved edited file " + str(item))
         if cleaned != text:
-            bindings.write_text(cleaned)
+            original = previous.get("bindings_original")
+            bindings.write_text(original if original is not None and digest(text) == previous.get("bindings_installed") else cleaned)
         journal.unlink(missing_ok=True)
     else:
         live = []
@@ -65,7 +66,10 @@ def integrate(home, source, remove=False, runtime=True):
                 backup = state / ("bindings-before-" + str(int(time.time())) + ".lua")
                 backup.write_text(text)
                 previous["bindings_backup"] = str(backup)
-            bindings.write_text(cleaned.rstrip() + "\n\n" + START + "\n" + "\n".join(lines) + "\n" + END + "\n")
+            previous.setdefault("bindings_original", text)
+            updated = cleaned.rstrip() + "\n\n" + START + "\n" + "\n".join(lines) + "\n" + END + "\n"
+            bindings.write_text(updated)
+            previous["bindings_installed"] = digest(updated)
         applications = home / ".local/share/applications"
         applications.mkdir(parents=True, exist_ok=True)
         owned = previous.get("files", {})

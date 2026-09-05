@@ -95,6 +95,10 @@ class Synchronizer:
             engine.status = error.code
             engine.message = str(error)
             return False
+        except Exception:
+            engine.status = "sync_error"
+            engine.message = "Synchronization stopped on an unexpected response. Saved answers were retained; refresh to reconcile."
+            return False
         finally:
             engine.syncing = False
             self.lock.release()
@@ -184,7 +188,13 @@ class Synchronizer:
                 if not existing:
                     payload["study_material"]["subject_id"] = row["subject_id"]
             else:
-                remote = self.fetch_assignment(body)
+                try:
+                    remote = self.fetch_assignment(body)
+                except ApiError as error:
+                    if error.status == 404:
+                        self.state(row["id"], "conflicted", "The remote assignment no longer exists. The local result was retained.")
+                        continue
+                    raise
                 if baseline(remote) != body["baseline"]:
                     self.state(row["id"], "conflicted", "Progress changed on another client. Kept its result without submitting this stale result.")
                     continue
@@ -212,6 +222,9 @@ class Synchronizer:
                     self.state(row["id"], "conflicted", str(error))
                 if error.status in (0, 401, 403, 429) or error.status >= 500:
                     raise
+            except Exception:
+                self.state(row["id"], "uncertain", "Confirmation was interrupted. Refresh to reconcile; automatic retry is disabled.")
+                raise
 
     def apply_result(self, row, response):
         try:
@@ -258,10 +271,15 @@ class Synchronizer:
 
     def cache_media(self):
         # Bounded incremental prefetch: eligible current/upcoming study first.
-        rows = self.store.rows("""SELECT json_extract(body,'$.data.subject_id') AS sid FROM resources WHERE kind='assignment'
-          ORDER BY CASE WHEN json_extract(body,'$.data.started_at') IS NULL THEN 0 ELSE 1 END,
-          json_extract(body,'$.data.available_at') LIMIT 300""")
-        downloaded = 0
+        rows = self.store.rows("""SELECT s.id FROM resources s LEFT JOIN resources a
+          ON a.kind='assignment' AND json_extract(a.body,'$.data.subject_id')=CAST(s.id AS INTEGER)
+          WHERE s.kind IN ('radical','kanji','vocabulary','kana_vocabulary')
+          ORDER BY CASE
+            WHEN json_extract(a.body,'$.data.unlocked_at') IS NOT NULL AND json_extract(a.body,'$.data.started_at') IS NULL THEN 0
+            WHEN julianday(json_extract(a.body,'$.data.available_at'))<=julianday(?) THEN 1
+            WHEN json_extract(a.body,'$.data.started_at') IS NOT NULL THEN 2 ELSE 3 END,
+          json_extract(a.body,'$.data.available_at'),json_extract(s.body,'$.data.level')""", (stamp(self.engine.now() + 86400),))
+        downloaded = attempts = 0
         for row in rows:
             self.check_cancelled()
             subject = self.store.subject(row[0])
@@ -277,11 +295,18 @@ class Synchronizer:
             assets += sounds[:1]
             for asset in assets:
                 url = asset.get("url", "")
-                if self.store.rows("SELECT 1 FROM media WHERE url=?", (url,)):
+                cached = self.store.rows("SELECT path FROM media WHERE url=?", (url,))
+                if cached and Path(cached[0][0]).is_file():
                     continue
+                retry_key = "media_retry_" + hashlib.sha256(url.encode()).hexdigest()
+                if self.store.get(retry_key, 0) > self.engine.now():
+                    continue
+                attempts += 1
                 if self.download_media(url):
                     downloaded += 1
-                if downloaded >= 40:
+                else:
+                    self.store.set(retry_key, self.engine.now() + 3600)
+                if downloaded >= 40 or attempts >= 60:
                     self.trim_media()
                     return
         self.trim_media()

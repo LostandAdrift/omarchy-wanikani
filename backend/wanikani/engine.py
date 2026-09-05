@@ -16,7 +16,7 @@ DEFAULTS = {
     "last_notification_at": 0,
 }
 SUBJECTS = "('radical','kanji','vocabulary','kana_vocabulary')"
-BUSY_STATES = "('pending','inflight','uncertain','blocked')"
+BUSY_STATES = "('pending','inflight','uncertain','blocked','conflicted')"
 
 
 def baseline(assignment):
@@ -135,6 +135,7 @@ class Engine:
             "related": relatives(data.get("amalgamation_subject_ids", [])) if include_relations else [],
             "audio": audio, "audio_available": bool(data.get("pronunciation_audios")),
             "material": draft or (material or {}).get("data", {}), "material_pending": draft is not None,
+            "pinned": int(subject_id) in self.store.get("pinned_subjects", []),
             "assignment": (assignment or {}).get("data", {}), "statistics": (statistic or {}).get("data", {}),
         }
 
@@ -183,7 +184,9 @@ class Engine:
             else:
                 random.SystemRandom().shuffle(candidates)
             queue = []
-            for assignment, subject in candidates[:count]:
+            for assignment, subject in candidates:
+                if len(queue) >= count:
+                    break
                 parts = {"meaning": False}
                 if subject["object"] in ("kanji", "vocabulary"):
                     if not any(r.get("accepted_answer") for r in subject["data"].get("readings", [])):
@@ -286,7 +289,7 @@ class Engine:
                 session["index"] += 1
             session["feedback"] = None
             session["draft"] = ""
-            if session["index"] >= len(session["queue"]):
+            if session["index"] >= min(len(session["queue"]), session.get("finish_at", len(session["queue"]))):
                 session["phase"] = "complete"
                 session["ended_at"] = stamp(self.now())
             else:
@@ -299,12 +302,11 @@ class Engine:
             return self.session_view(session)
 
     def finish(self):
-        # End a batch early without submitting unfinished subjects; completed
-        # items have already been durably enqueued. Esc alone never calls this.
+        # Finish the current group of five, including all of its error counts.
+        # Closing immediately uses durable pause instead of abandoning answers.
         with self.store.transaction():
             session = self.require_session()
-            session["phase"] = "complete"
-            session["ended_at"] = stamp(self.now())
+            session["finish_at"] = min(len(session["queue"]), ((session["index"] // 5) + 1) * 5)
             self.store.save_session(session)
             return self.session_view(session)
 
@@ -314,10 +316,12 @@ class Engine:
             return None
         view = {key: session[key] for key in ("id", "mode", "phase", "part", "feedback", "draft", "completed", "overrides", "started_at", "ended_at", "lesson_index")}
         view["total"] = len(session["queue"])
+        view["finishing"] = "finish_at" in session
+        view["invalidated"] = session.get("invalidated", "")
         view["errors"] = sum(sum(item["errors"].values()) for item in session["queue"])
         index = session["lesson_index"] if session["phase"] == "lesson" else session["index"]
         view["subject"] = None
-        if index < len(session["queue"]):
+        if session["phase"] != "complete" and index < len(session["queue"]):
             try:
                 view["subject"] = self.details(session["queue"][index]["subject_id"])
             except UserError:
@@ -364,7 +368,7 @@ class Engine:
     def difficult(self):
         rows = self.store.rows("""SELECT DISTINCT subject_id FROM events WHERE kind='answer'
           AND json_extract(body,'$.kind')='incorrect' ORDER BY id DESC LIMIT 12""")
-        ids = [r[0] for r in rows]
+        ids = self.store.get("pinned_subjects", []) + [r[0] for r in rows]
         ids += [int(json.loads(r[0])["data"]["subject_id"]) for r in self.store.rows("""SELECT body FROM resources WHERE kind='review_statistic'
           AND json_extract(body,'$.data.percentage_correct')<90 ORDER BY json_extract(body,'$.data.percentage_correct') LIMIT 12""")]
         output = []
@@ -376,6 +380,16 @@ class Engine:
             if len(output) == 8:
                 break
         return output
+
+    def pin(self, subject_id, enabled):
+        self.ensure_access(self.store.subject(subject_id))
+        ids = self.store.get("pinned_subjects", [])
+        if enabled and subject_id not in ids:
+            ids.insert(0, subject_id)
+        elif not enabled and subject_id in ids:
+            ids.remove(subject_id)
+        self.store.set("pinned_subjects", ids[:100])
+        return self.details(subject_id)
 
     def ambient(self):
         rows = self.store.rows(f"""SELECT s.id FROM resources s JOIN resources a ON a.kind='assignment'
@@ -433,6 +447,7 @@ class Engine:
             "advance": self.advance, "correct": self.correct, "finish": self.finish,
             "lesson_next": lambda: self.lesson_next(args.get("back", False)),
             "set_material": lambda: self.set_material(int(args["subject_id"]), args.get("values", {})),
+            "pin": lambda: self.pin(int(args["subject_id"]), bool(args.get("enabled"))),
             "settings": lambda: self.set_settings(args),
             "snooze": lambda: self.set_settings({"snooze_until": self.now() + max(60, min(86400, int(args.get("seconds", 3600))))})}
         if method not in handlers:
