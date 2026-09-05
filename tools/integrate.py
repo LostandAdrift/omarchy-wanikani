@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""Reversible per-user launcher and Hyprland integration. Never replaces a binding."""
+import argparse
+import hashlib
+import json
+import re
+import shutil
+import subprocess
+import time
+from pathlib import Path
+
+ID = "io.github.lostandadrift.wanikani"
+START = "-- BEGIN " + ID
+END = "-- END " + ID
+BLOCK = re.compile(r"\n?" + re.escape(START) + r"\n.*?" + re.escape(END) + r"\n?", re.S)
+
+
+def digest(value):
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def integrate(home, source, remove=False, runtime=True):
+    state = home / ".local/state/omarchy/wanikani"
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    journal = state / "integration.json"
+    previous = json.loads(journal.read_text()) if journal.exists() else {"files": {}}
+    bindings = home / ".config/hypr/bindings.lua"
+    text = bindings.read_text() if bindings.exists() else ""
+    cleaned = BLOCK.sub("\n", text)
+    messages = []
+    if remove:
+        for path, expected in previous.get("files", {}).items():
+            item = Path(path)
+            if item.exists() and digest(item.read_text()) == expected:
+                item.unlink()
+                messages.append("Removed " + str(item))
+            elif item.exists():
+                messages.append("Preserved edited file " + str(item))
+        if cleaned != text:
+            bindings.write_text(cleaned)
+        journal.unlink(missing_ok=True)
+    else:
+        live = []
+        if runtime:
+            try:
+                live = json.loads(subprocess.check_output(["hyprctl", "binds", "-j"], timeout=5))
+            except (OSError, subprocess.SubprocessError, ValueError):
+                messages.append("Could not inspect live bindings; shortcuts skipped. Launcher entries remain available.")
+                live = None
+        existing = set()
+        for key in re.findall(r'o\.bind\(\s*["\']([^"\']+)', cleaned):
+            existing.add(tuple(sorted(p.strip().upper() for p in key.split("+"))))
+        lines = []
+        for key, mask, action, label in [("SUPER + ALT + W", 72, "resume", "WaniKani study"), ("SUPER + ALT + SHIFT + W", 73, "lookup", "WaniKani selection lookup")]:
+            occupied = tuple(sorted(p.strip() for p in key.split("+"))) in existing
+            if live is not None:
+                occupied = occupied or any(b.get("key", "").upper() == "W" and b.get("modmask") == mask and "omarchy-shell wanikani " not in b.get("arg", "") for b in live)
+            if occupied or live is None:
+                messages.append("Preserved existing shortcut / skipped " + key)
+            else:
+                lines.append(f'o.bind("{key}", "{label}", "omarchy-shell wanikani {action}")')
+        if lines:
+            bindings.parent.mkdir(parents=True, exist_ok=True)
+            if text and not previous.get("bindings_backup"):
+                backup = state / ("bindings-before-" + str(int(time.time())) + ".lua")
+                backup.write_text(text)
+                previous["bindings_backup"] = str(backup)
+            bindings.write_text(cleaned.rstrip() + "\n\n" + START + "\n" + "\n".join(lines) + "\n" + END + "\n")
+        applications = home / ".local/share/applications"
+        applications.mkdir(parents=True, exist_ok=True)
+        owned = previous.get("files", {})
+        for action, name in [("resume", "WaniKani Study"), ("lookup", "WaniKani Lookup")]:
+            destination = applications / f"{ID}.{action}.desktop"
+            entry = f"[Desktop Entry]\nType=Application\nName={name}\nComment=Five reviews, then back to work\nExec=omarchy-shell wanikani {action}\nIcon={source / 'assets/wanikani.svg'}\nTerminal=false\nCategories=Education;Languages;\nKeywords=Japanese;Kanji;Lessons;Reviews;WaniKani;\n"
+            if destination.exists() and str(destination) not in owned and destination.read_text() != entry:
+                messages.append("Preserved existing launcher " + str(destination))
+                continue
+            if destination.exists() and str(destination) in owned and digest(destination.read_text()) != owned[str(destination)]:
+                messages.append("Preserved edited launcher " + str(destination))
+                continue
+            destination.write_text(entry)
+            owned[str(destination)] = digest(entry)
+            messages.append("Installed " + str(destination))
+        previous["files"] = owned
+        journal.write_text(json.dumps(previous, indent=2) + "\n")
+        journal.chmod(0o600)
+    if runtime and bindings.exists():
+        subprocess.run(["hyprctl", "reload"], check=True, timeout=8)
+        errors = subprocess.check_output(["hyprctl", "configerrors"], timeout=8).decode().strip()
+        if errors and errors not in ("ok", "[]"):
+            # Restore only the just-touched bindings contents; no unrelated config.
+            bindings.write_text(text)
+            subprocess.run(["hyprctl", "reload"], timeout=8)
+            raise RuntimeError("Hyprland reported configuration errors; bindings restored. " + errors)
+    return messages
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("action", choices=["install", "remove", "check"])
+    args = parser.parse_args()
+    if args.action == "check":
+        required = ["python3", "omarchy-shell", "wl-paste"]
+        optional = ["secret-tool", "hyprctl"]
+        missing = [tool for tool in required if not shutil.which(tool)]
+        for tool in required + optional:
+            print(tool + ": " + (shutil.which(tool) or "missing"))
+        return bool(missing)
+    for message in integrate(Path.home(), Path(__file__).resolve().parents[1], remove=args.action == "remove"):
+        print(message)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

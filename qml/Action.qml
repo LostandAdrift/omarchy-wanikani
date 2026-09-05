@@ -1,0 +1,11 @@
+import QtQuick
+import qs.Ui as Ui
+
+Ui.Button {
+  focusable: true
+  bordered: true
+  opacity: enabled ? 1 : 0.45
+  Accessible.role: Accessible.Button
+  Accessible.name: text
+  Accessible.onPressAction: clicked()
+}

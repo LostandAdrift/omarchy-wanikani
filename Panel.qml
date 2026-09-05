@@ -1,0 +1,193 @@
+import QtQuick
+import QtQuick.Controls as Controls
+import QtQuick.Layouts
+import QtMultimedia
+import Quickshell
+import Quickshell.Io
+import Quickshell.Wayland
+import Quickshell.Hyprland
+import qs.Commons
+import "qml" as Kani
+
+Item {
+  id: root
+  property var shell: null
+  property var manifest: null
+  property var service: null
+  property bool opened: false
+  property string view: "dashboard"
+  property bool expanded: false
+  property bool busy: false
+  property string error: ""
+  property var session: null
+  property var results: []
+  property var detail: null
+  property string query: ""
+  property var chosenScreen: null
+  property bool focusPrimed: false
+  readonly property var snapshot: service ? service.snapshot : ({settings:{},outbox:[],difficult:[],forecast:[],activity:[]})
+  readonly property string pluginId: "io.github.lostandadrift.wanikani"
+
+  function open(payloadJson) {
+    var payload = ({})
+    try { payload = JSON.parse(payloadJson || "{}") } catch (_) {}
+    var monitor = Hyprland.focusedMonitor
+    chosenScreen = Quickshell.screens.find(function(s) { return monitor && s.name === monitor.name }) || Quickshell.screens[0]
+    opened = true; focusPrimed = false; focusTimer.restart(); error = ""
+    if (service) service.panelOpen = true
+    var requested = payload.view || "dashboard"
+    if (["reviews","lessons","practice","resume"].indexOf(requested) >= 0) begin(requested, payload.limit || 5, payload.subjects)
+    else navigate(["dashboard","lookup","zen","settings"].indexOf(requested) >= 0 ? requested : "dashboard")
+    if (requested === "lookup" && payload.selection) readSelection()
+  }
+  function close() {
+    opened = false; audio.stop()
+    if (service) { service.panelOpen = false; service.studying = false }
+  }
+  function dismiss() { close(); if (shell) shell.hide(pluginId) }
+  function navigate(next) {
+    view = next; detail = null; error = ""
+    if (service) service.studying = next === "study"
+    Qt.callLater(focusContent)
+  }
+  function focusContent() {
+    if (content.item && typeof content.item.focusInput === "function") content.item.focusInput()
+  }
+  function call(method, args, callback) {
+    if (!service) return
+    busy = true; error = ""
+    service.request(method, args || {}, function(ok, data, message) {
+      root.busy = false
+      if (!ok) root.error = message
+      if (callback) callback(ok, data)
+    })
+  }
+  function begin(mode, limit, subjects) {
+    navigate("study")
+    var saved = snapshot.session
+    if (saved && saved.phase !== "complete") { session = saved; Qt.callLater(focusContent); return }
+    session = null
+    call("start", {mode: mode === "resume" ? "reviews" : mode, limit: limit || 5, subjects: subjects}, function(ok, data) {
+      if (ok) root.session = data
+      Qt.callLater(root.focusContent)
+    })
+  }
+  function studyAction(method, args) {
+    call(method, args, function(ok, data) {
+      if (ok) root.session = data
+      Qt.callLater(root.focusContent)
+    })
+  }
+  function search(text) {
+    query = text
+    if (!service) return
+    var expected = query
+    service.request("search", {text:text}, function(ok, data) { if (ok && root.query === expected) root.results = data })
+  }
+  function showSubject(id) {
+    call("details", {subject_id:id}, function(ok, data) { if (ok) { root.detail = data; root.view = "lookup"; if (root.service) root.service.studying = false } })
+  }
+  function play(subject) {
+    if (subject && subject.audio && subject.audio.length) { audio.source = subject.audio[0].url; audio.play() }
+  }
+  function readSelection() { if (!clipboard.running) { clipboard.primary = true; clipboard.running = true } }
+  Process {
+    id: clipboard
+    property bool primary: true
+    command: primary ? ["wl-paste","--primary","--no-newline","--type","text"] : ["wl-paste","--no-newline","--type","text"]
+    property string captured: ""
+    stdout: StdioCollector { onStreamFinished: clipboard.captured = text.slice(0, 4096) }
+    onExited: {
+      if (!captured.trim() && primary) { primary = false; Qt.callLater(function() { clipboard.running = true }) }
+      else { root.query = captured.trim().slice(0,256); root.search(root.query); captured = ""; Qt.callLater(root.focusContent) }
+    }
+  }
+  MediaPlayer { id: audio; audioOutput: AudioOutput {} }
+  Connections {
+    target: root.service
+    function onSnapshotChanged() {
+      if (root.view === "study" && root.snapshot.session) root.session = root.snapshot.session
+    }
+    function onLockedChanged() { if (root.service.locked) root.dismiss() }
+  }
+  Timer { id: focusTimer; interval: 60; onTriggered: { root.focusPrimed = true; root.focusContent() } }
+
+  PanelWindow {
+    id: window
+    screen: root.chosenScreen
+    visible: root.opened
+    anchors { top: true; bottom: true; left: true; right: true }
+    exclusionMode: ExclusionMode.Ignore
+    WlrLayershell.namespace: "omarchy-wanikani"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: !root.opened ? WlrKeyboardFocus.None : root.focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
+    color: "transparent"
+    Rectangle { anchors.fill: parent; color: Qt.alpha(Color.background, 0.55) }
+    MouseArea { anchors.fill: parent; onClicked: root.dismiss() }
+    Rectangle {
+      id: frame
+      anchors.centerIn: parent
+      width: Math.min(parent.width - Style.gapsOut * 2, Style.space(root.expanded ? 1060 : 760))
+      height: Math.min(parent.height - Style.gapsOut * 2, Style.space(root.expanded ? 920 : 760))
+      color: Color.background
+      border.color: Color.popups.border
+      border.width: Math.max(1, Style.space(2))
+      radius: Style.cornerRadius
+      MouseArea { anchors.fill: parent } // consume clicks inside the card
+      Keys.onEscapePressed: root.dismiss()
+      ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: Style.space(22)
+        spacing: Style.space(14)
+        RowLayout {
+          Layout.fillWidth: true
+          Kani.Crab { Layout.preferredWidth: Style.space(52); Layout.preferredHeight: Style.space(44); animate: root.opened && root.service && root.service.animations }
+          ColumnLayout {
+            spacing: 1
+            Kani.Label { text: "WaniKani"; font.pixelSize: Style.font.title; font.bold: true }
+            Kani.Label { text: root.snapshot.demo ? "DEMO · Nothing is sent to WaniKani" : "Five reviews, then back to work."; font.pixelSize: Style.font.bodySmall; color: root.snapshot.demo ? Color.accent : Color.muted }
+          }
+          Item { Layout.fillWidth: true }
+          Kani.Action { text: root.expanded ? "Compact" : "Expand"; onClicked: root.expanded = !root.expanded }
+          Kani.Action { text: "Close · Esc"; onClicked: root.dismiss() }
+        }
+        Flow {
+          Layout.fillWidth: true
+          spacing: Style.space(6)
+          Kani.Action { text: "Today"; selected: root.view === "dashboard"; onClicked: root.navigate("dashboard") }
+          Kani.Action { text: "Study"; selected: root.view === "study"; onClicked: root.begin("resume") }
+          Kani.Action { text: "Lookup"; selected: root.view === "lookup"; onClicked: root.navigate("lookup") }
+          Kani.Action { text: "Zen"; selected: root.view === "zen"; onClicked: root.navigate("zen") }
+          Kani.Action { text: "Settings"; selected: root.view === "settings"; onClicked: root.navigate("settings") }
+        }
+        Kani.Label { Layout.fillWidth: true; visible: text !== ""; color: Color.urgent; text: root.error || (root.service ? root.service.error : "") }
+        Kani.Label { Layout.fillWidth: true; visible: root.busy; color: Color.muted; text: root.snapshot.syncing ? "Refreshing your progress… Cached study remains saved." : "Saving…" }
+        Controls.ScrollView {
+          id: scroll
+          Layout.fillWidth: true
+          Layout.fillHeight: true
+          contentWidth: availableWidth
+          clip: true
+          Loader {
+            id: content
+            width: scroll.availableWidth
+            sourceComponent: root.view === "study" ? studyPage : root.view === "lookup" ? lookupPage : root.view === "settings" ? settingsPage : root.view === "zen" ? zenPage : dashboardPage
+            onLoaded: Qt.callLater(root.focusContent)
+          }
+        }
+        RowLayout {
+          Layout.fillWidth: true
+          Kani.Label { text: root.snapshot.syncing ? "● Syncing" : "● " + (root.snapshot.status || "starting"); color: root.snapshot.status === "offline" ? Color.urgent : Color.muted; font.pixelSize: Style.font.bodySmall }
+          Kani.Label { text: (root.snapshot.pending || 0) + " pending"; visible: root.snapshot.pending > 0; color: Color.accent; font.pixelSize: Style.font.bodySmall }
+          Item { Layout.fillWidth: true }
+          Kani.Label { text: root.snapshot.username ? root.snapshot.username + " · Level " + root.snapshot.level : "Connect an account or explore the demo"; font.pixelSize: Style.font.bodySmall; color: Color.muted }
+        }
+      }
+    }
+  }
+  Component { id: dashboardPage; Kani.Dashboard { controller: root } }
+  Component { id: studyPage; Kani.Study { controller: root } }
+  Component { id: lookupPage; Kani.Lookup { controller: root } }
+  Component { id: settingsPage; Kani.Settings { controller: root } }
+  Component { id: zenPage; Kani.Zen { controller: root } }
+}
