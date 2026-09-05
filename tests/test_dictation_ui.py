@@ -83,6 +83,25 @@ Item {
       core.session=Object.assign({},core.session,{heard:true,revision:2});settle()
       verify(item("dictationCheck").enabled)
     }
+    function test_active_question_keeps_native_answer_controls_in_narrow_first_viewport() {
+      verify(item("dictation-introduction-title").visible)
+      verify(item("dictation-introduction-copy").visible)
+      core.session=front();settle()
+      verify(!item("dictation-introduction-title").visible)
+      verify(!item("dictation-introduction-copy").visible)
+      for(var name of ["dictationPlay","dictationAnswer","dictationCheck"]) {
+        var control=item(name),top=control.mapToItem(page,0,0).y
+        verify(control.visible,name)
+        verify(top>=0&&top+control.height<=480,name+" fits first 480px: "+top+"–"+(top+control.height))
+      }
+      compare(core.events.length,0)
+      compare(item("dictationAnswer").text,"やm")
+      verify(item("dictationPlay").activeFocus)
+      core.session=null;settle()
+      verify(item("dictation-introduction-title").visible)
+      verify(item("dictation-introduction-copy").visible)
+      compare(core.events.length,0)
+    }
     function test_terminal_n_and_live_romaji_save_current_utf16_cursor() {
       core.session=Object.assign(front(),{heard:true,draft:"",draft_cursor:0});settle()
       var input=item("dictationAnswer")

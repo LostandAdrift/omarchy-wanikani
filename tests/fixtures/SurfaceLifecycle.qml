@@ -4,6 +4,8 @@ import "UnicodeText.mjs" as UnicodeText
 TestCase {
   id: test
   name: "SurfaceLifecycle"
+  // Source-derived visual components now correctly observe inherited visibility.
+  visible: true
   property var objects: []
   readonly property var testService: service
   QtObject {
@@ -39,6 +41,7 @@ TestCase {
     property bool busy: false
     property string error: ""
     property string view: "lookup"
+    property string audioContext: ""
     property string contentAccess: "fixture"
     property string query: ""
     property bool queryTruncated: false

@@ -31,7 +31,7 @@ REQUIRED_RUNTIME = ("manifest.json", "Service.qml", "Panel.qml", "backend/worker
     "backend/wanikani/insights.py", "qml/LearningActivity.qml",
     "backend/wanikani/learning_digest.py", "qml/LearningDigest.mjs",
     "backend/wanikani/trail_practice.py", "qml/TrailPractice.qml",
-    "qml/Listening.qml", "qml/StudyOverview.qml", "qml/StudyRhythm.qml", "qml/TodayLevel.qml")
+    "qml/Listening.qml", "qml/StudyOverview.qml", "qml/StudyRhythm.qml", "qml/TodayLevel.qml", "qml/TodayActivity.qml")
 
 # This wrapper exists only in the generated plugin. API and Secret Service are
 # unavailable even if somebody opens Settings and leaves its fixture demo mode.

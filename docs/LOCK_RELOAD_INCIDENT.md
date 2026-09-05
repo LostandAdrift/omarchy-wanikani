@@ -30,3 +30,10 @@ No supported recovery procedure for this exact state was found in the inspected 
 ## Project mitigation
 
 The [native QA harness](../tools/native_qa.py) checks typed lock status **before installation and before cleanup removal**. Locked, locking, or unknown state defers the operation. Cleanup retains the marked temporary plugin and writes `cleanup-deferred` to its private run record for later explicit removal after the desktop is normally unlocked; it does not delete files or trigger a reload while locked. [Fixture tests](../tests/test_native_qa.py) cover these guards. These checks reduce lifecycle exposure; they are not an atomic lock reservation or a repair of Omarchy's reload mechanism. Further host verification remains gated, and the incident has not been published upstream.
+
+
+## Follow-up · September 5, 14:32 UTC
+
+A single read-only status check now reports `locked:true`, `requested:true`, `pending:false`, `sessionLocked:true`, `secure:true`, `realScreens:3`, with `lastEvent:"secure=true"` at `2026-09-05T11:45:30.316Z`. The current lock service therefore reports instance ownership again; the earlier `sessionLocked:false` mismatch is **not** the latest observed state. This is status evidence only. The transition was not observed, its cause is unknown, and no authentication or unlock was tested. Do not describe the desktop as currently proven stranded on the basis of the older observation.
+
+The desktop is still locked, so installation and hosted lifecycle changes remain deferred. No unlock, reload, restart, configuration change or host screenshot accompanied this read. The earlier incident, its source explanation and the need to avoid plugin lifecycle changes while locked remain relevant; the current flags do not establish a released upstream fix or complete the lock/suspend qualification gate.

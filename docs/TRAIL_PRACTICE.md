@@ -1,6 +1,6 @@
 # Practise words from your desktop
 
-Implemented for source milestone 0.2.8; combined verification is in progress and installation is deferred. See VERIFICATION.md and OVERNIGHT_WORK.md for the exact qualification and installed revision. This document is not a release claim.
+Implemented and source-verified in milestone 0.2.8: 1098 combined Python tests and 126 core Qt checks passed; installation is deferred. See VERIFICATION.md and OVERNIGHT_WORK.md for the exact qualification and installed revision. This document is not a release claim.
 
 The reading trail already finds exact WaniKani catalogue matches in explicitly selected Japanese. Add a deliberate next step: choose up to twenty of those words for ungraded practice, then return to the same passage. This connects desktop lookup to learning without treating the catalogue as a translator or sending the passage to a server.
 

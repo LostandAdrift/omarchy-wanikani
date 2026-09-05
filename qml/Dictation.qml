@@ -135,13 +135,17 @@ ColumnLayout {
     font.letterSpacing: 1.5
   }
   Label {
+    objectName: "dictation-introduction-title"
     Layout.fillWidth: true
+    visible: !root.session
     text: "Listen & type."
     font.pixelSize: Style.space(30)
     font.bold: true
   }
   Label {
+    objectName: "dictation-introduction-copy"
     Layout.fillWidth: true
+    visible: !root.session
     text: "Catch the sounds of a familiar word. Type kana, then compare it with the recording. Your WaniKani reviews and lesson progress stay separate."
     secondary: true
   }

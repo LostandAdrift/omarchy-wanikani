@@ -2,6 +2,8 @@
 
 Run the Python standard-library helper from this checkout. It controls the existing Omarchy shell; it does not install anything, start a daemon, change desktop settings, or open an account connection itself. No arguments print capabilities without contacting the shell.
 
+This guide describes the current source interface. Running a newer checkout's helper does not update the loaded plugin or make its new views available. Check the separately recorded source and installed revisions in [overnight tracking](OVERNIGHT_WORK.md); current installation and hosted qualification are deferred by the [lock/reload incident](LOCK_RELOAD_INCIDENT.md). Do not treat a source test or a successful dispatch as installed feature verification. Optional version fields and capabilities help interpret differences, but neither proves that every nested QML component was reloaded.
+
 ```bash
 python3 tools/wanikani.py capabilities --json
 python3 tools/wanikani.py status --json
@@ -46,7 +48,7 @@ Successful JSON reports use the existing `wanikani-cli` version-1 envelope. `dat
 {"available":false,"reason":"unavailable","digest":null}
 ```
 
-Unavailable counts are never replaced with zero. A supported empty history can return known zeros. `complete:true` means the supported aggregate fields were calculated successfully from retained records; it does not mean lifetime or account-wide coverage. `complete:false` marks an incomplete calculation. `stale:true` means the cache is known to be stale; `stale:null` means freshness is unknown. Even an explicitly supplied `stale:false` remains a cached observation, not a fresh read. The human report leads with **Recorded on this device · cached through …** and labels known stale, unknown freshness, incomplete and authored demo data.
+Unavailable counts are never replaced with zero. A supported empty history can return known zeros. `complete:true` means the supported aggregate fields were calculated successfully from retained records; it does not mean lifetime or account-wide coverage. `complete:false` marks an incomplete calculation. `stale:true` means the cache is known to be stale; `stale:null` means freshness is unknown. The current service emits those two freshness states, never an assurance of freshness. The helper also accepts a compatible `stale:false` response, which still describes a cached observation rather than a fresh read. The human report leads with **Recorded on this device · cached through …** and labels known stale, unknown freshness, incomplete and authored demo data.
 
 The optional digest contains counts, dates, static scope labels and an opaque local `data_epoch` UUID. It exposes no account identity, subject IDs, meanings, readings, answers, notes, individual session/operation IDs or media locations. The helper validates required fields, dates, timezone, integer bounds and the two-window relationship, drops unknown extra fields and returns a generic `invalid_response` error for malformed or incompatible data. It never falls back to raw worker messages or private files.
 
@@ -100,7 +102,7 @@ The learner can cancel preparation without cancelling ordinary account synchroni
 
 `open dictation` shows the separate **Type kana** activity without starting practice or playing audio. Its typed input, pinned recording, playback-completion acknowledgement, checks, Continue, Skip and Undo are learner actions in the native UI. Local Activity reports dictation separately from meaning recall and WaniKani review history. There is no agent dictation-answer or hearing-acknowledgement action; do not imitate a learner or claim the player can prove that a person heard the output.
 
-There is currently no CLI preparation, preparation-cancellation, playback, or listening-rating command. Use `open listen` for a request to show these controls; do not invent helper arguments or bypass the helper through raw worker messages. Aggregate `listening_due` is cached availability when supplied, not the preparation job's progress or proof of audible playback. An unavailable value stays `null`.
+There is currently no CLI preparation, preparation-cancellation, playback, or listening-rating command. Use `open listen` for a request to show these controls; do not invent helper arguments or bypass the helper through raw worker messages. The current service leaves aggregate `listening_due` as `null`: a status read does not calculate the familiar-word pool. This is unknown availability, not zero. Cached review audio readiness and learning-history totals do not establish current eligibility for either meaning listening or dictation, preparation progress, or audible playback.
 
 ## Synchronization and recovery
 

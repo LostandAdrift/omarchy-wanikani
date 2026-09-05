@@ -16,8 +16,10 @@ ColumnLayout {
   property bool dirty: true
   property bool fetching: false
   property int requestSerial: 0
-  readonly property bool active: controller.opened && controller.service && controller.service.ready && !controller.service.locked
+  readonly property bool active: visible && controller.opened && controller.service && controller.service.ready && !controller.service.locked
   onActiveChanged: {
+    if (!active && controller.audioContext === "voice_test")
+      controller.stopAudio()
     requestSerial++
     dirty = true
     loading = false

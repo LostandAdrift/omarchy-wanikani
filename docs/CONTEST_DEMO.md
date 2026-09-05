@@ -72,6 +72,18 @@ This demonstration does not certify live-account reliability, cached audio, or t
 
 For a longer walkthrough, select `山が見えます。火山と山。` and invoke Lookup. Show **Words in your selection**, follow the mountain link, and return to the unchanged passage. The linked text follows the current theme; the trail uses the local WaniKani catalogue. After the five-review demo batch is complete, a freshly reset demo also provides a mountain/river comparison under **Tell them apart**. In Zen, choose **Quiet recall**, pause on the concealed word, then choose **Reveal** and **Next word**. These are learning aids; no extra graded work is submitted. Keep the authored-demo label visible.
 
+## Optional daily-learning cut
+
+Keep the three-minute core demonstration above for the original desktop workflow. A separate short learning tour can show the newer source features after that source is installed and hosted checks pass:
+
+1. Open **Today** at a narrow width. Point out the separate saved Reviews and Lessons actions and confirmed level target. Open **Lessons**, preview a chosen batch, and show the Meaning / Reading or Sound / Context steps before the explicit quiz action.
+2. Open **Progress** and follow one SRS group. Refine the level or stage, open a permitted subject, then return to the same filters and page. Show **Level history** as account milestones, followed by **Activity** as work recorded on this device.
+3. Open **Listen** to show **Recall meaning** and **Type kana** as separate local activities. A real original-pronunciation demonstration requires a deliberately chosen, accessible cached word and an audible output check first. Do not substitute generated QA tones and call them Japanese speech. If that check is unavailable, show the silent controls and explain that audio qualification is pending.
+4. Show a short selected passage in Lookup, choose words for ungraded practice and inspect readiness before starting. Return to the exact passage. Keep existing graded work paused throughout.
+5. Show **Study rhythm** and preview a schedule. Applying a schedule changes real preferences even in a demonstration; restore the prior preferences afterward. A preview alone sends no reminder and plays no audio.
+
+Use authored demo data wherever possible. For any deliberate live-audio segment, keep account and token Settings out of the recording and do not manufacture live answers. Distinguish local listening ratings, exact-recording dictation matches, and WaniKani confirmations in the narration.
+
 ## Rules recheck — September 4, 2026 Pacific
 
 The [official news index](https://omarchy.org/news/) and [August 28 competition announcement](https://omarchy.org/news/2026/08/the-first-plugin-competition-winners/) were rechecked during implementation. They still announce future competitions without a next deadline. The [publishing guide](https://plugins.omarchy.org/publish.html) currently requires a public GitHub repository, valid root manifest, README/license, and safe install/removal before listing submission. This repository remains local and unsubmitted.

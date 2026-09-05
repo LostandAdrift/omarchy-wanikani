@@ -13,6 +13,8 @@ Use an explicitly supplied checkout when the user selects one. Otherwise prefer 
 
 Invoke `python3` and the verified helper path as separate arguments. Keep paths quoted if using a shell, and pass lookup text as a single argument without interpolating it into shell code. The helper controls the running shell even when executed from a checkout; a checkout's manifest version does not prove the installed version.
 
+New source views or report fields may not exist in the loaded client yet. Preserve unsupported fields as unknown and report unavailable navigation honestly. Consult the verified repository's [source/installed tracking](../../docs/OVERNIGHT_WORK.md) when that distinction matters; a version match or accepted dispatch is not proof that every component loaded. Do not update or restart the desktop as an automatic compatibility probe.
+
 Start with `capabilities --json` when the helper's interface is unfamiliar. Read the verified repository's `docs/AGENT_SUPPORT.md` for detailed fields, exit codes, or compatibility questions ([bundled reference](../../docs/AGENT_SUPPORT.md)). Prefer its supported commands over raw shell IPC. Do not inspect keyring contents, tokens, SQLite, notes, or saved answers for ordinary client support.
 
 ## Match the requested action
@@ -34,13 +36,13 @@ Append these arguments to the verified helper command:
 | Look up the current selection | `lookup --selection --json` | Explicitly request selection, with clipboard fallback. |
 | Synchronize completed work | `refresh --json` | May submit already completed pending work through normal reconciliation. |
 
-Preserve existing user authorization. “Start five reviews” already authorizes that start; do not ask again. A status request alone does not authorize opening a study session or synchronizing. Opening `lookup` without `--selection` does not read the clipboard. Ordinary navigation also includes `dashboard`, `settings`, `help`, and `zen` as listed by capabilities.
+Preserve existing user authorization. “Start five reviews” already authorizes that start; do not ask again. A status request alone does not authorize opening a study session or synchronizing. `open lookup` does not read the clipboard. Ordinary navigation also includes `dashboard`, `settings`, `help`, and `zen` as listed by capabilities.
 
 Starting or resuming may refresh online and replay previously completed pending work. This playbook does not supply answers, acknowledge feedback, correct answers, or force a recovery replay. If the user asks about pending work, inspect aggregates or open Recovery; uncertain writes must not be blindly retried.
 
 For missing listening audio, open `listen` and explain the native **Prepare recordings** action. It downloads up to five eligible recordings without starting study, playing audio, or revealing words. The learner can cancel and then choose when to start listening. The helper has no preparation, cancellation, playback, or listening-rating command; do not invent one or call the worker directly. See the bundled agent guide for partial-download and cache behavior.
 
-Meaning recall and kana dictation are separate local skills with independently saved sessions and daily introductions. Dictation compares typed kana with the selected recording after playback; the learner owns Check, Continue, Skip and Undo. Do not send hearing acknowledgements, type answers or treat a player completion as proof that the learner heard the sound. Activity labels the two skills separately from account progress.
+Meaning recall and kana dictation are separate local skills with independently saved sessions and five-new-word daily allowances. Dictation compares typed kana with the selected recording after playback; the learner owns Check, Continue, Skip and Undo. Do not send hearing acknowledgements, type answers or treat a player completion as proof that the learner heard the sound. Activity labels the two skills separately from account progress. The current service leaves `listening_due` unknown; neither cached review audio counts nor historical listening totals establish current eligibility for either audio skill.
 
 ## Interpret results accurately
 

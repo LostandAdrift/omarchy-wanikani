@@ -284,49 +284,10 @@ ColumnLayout {
       }))
     }
   }
-  ColumnLayout {
+  TodayActivity {
     Layout.fillWidth: true
     visible: !!s.username
-    Label {
-      text: "Your activity here"
-      font.bold: true
-    }
-    Label {
-      Layout.fillWidth: true
-      text: (s.activity || []).length ? "Completed subjects and practice recorded by this plugin. Other clients are not included." : "Your first session starts the story. Activity from other clients is not available as individual review history."
-      font.pixelSize: Style.font.bodySmall
-      secondary: true
-    }
-    Action {
-      text: "Explore local activity →"
-      accessibleHint: "See seven or thirty days of local study, listening, and saved-submission status"
-      onClicked: root.controller.navigate("activity")
-    }
-    Flow {
-      Layout.fillWidth: true
-      spacing: Style.space(6)
-      Repeater {
-        model: root.s.activity || []
-        Card {
-          required property var modelData
-          width: Style.space(90)
-          height: Style.space(58)
-          Column {
-            anchors.centerIn: parent
-            Label {
-              text: modelData.day.slice(5)
-              font.pixelSize: Style.font.bodySmall
-              secondary: true
-            }
-            Label {
-              text: String(modelData.count)
-              font.bold: true
-              textColor: Color.accent
-            }
-          }
-        }
-      }
-    }
+    controller: root.controller
   }
   Action {
     visible: (s.attention || 0) > 0 || (s.pending || 0) > 0

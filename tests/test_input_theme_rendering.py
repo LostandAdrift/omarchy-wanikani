@@ -168,11 +168,17 @@ Rectangle {
     }
     function test_settings_inputs_field_names_and_local_listening_autoplay() {
       make(settingsPage)
+      page.selectSection("account");wait(1)
+      checkColors([field("settings-token")])
+      verify(field("settings-token").activeFocus)
+      page.selectSection("data");wait(1)
       page.showDeletion=true
-      checkColors([field("settings-token"),field("settings-delete-confirmation")])
+      wait(1);checkColors([field("settings-delete-confirmation")])
+      verify(field("settings-delete-confirmation").activeFocus)
       compare(field("settings-token").echoMode,TextInput.Password)
       compare(field("settings-batch-size").field.Accessible.name,"Subjects in each study batch")
       compare(field("settings-cache-limit").field.Accessible.name,"Media cache limit in megabytes")
+      page.selectSection("audio");wait(1)
       var toggles=allItems(page).filter(function(item){return item.accessibleName==="Autoplay new listening prompts"})
       compare(toggles.length,1)
       verify(toggles[0].Accessible.checked)

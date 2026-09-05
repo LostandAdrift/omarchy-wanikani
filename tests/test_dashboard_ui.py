@@ -214,9 +214,10 @@ def build(directory):
     foundation.build(directory)
     (directory / "tst_LessonFlow.qml").unlink()
     palettes.pure_native_style(directory)
-    for name in ("Dashboard", "TodayLevel", "OfflineStatus", "Forecast", "Crab"):
+    for name in ("Dashboard", "TodayLevel", "TodayActivity", "OfflineStatus", "Forecast", "Crab"):
         shutil.copyfile(ROOT / "qml" / (name + ".qml"), directory / "qml" / (name + ".qml"))
     shutil.copyfile(ROOT / "qml/ForecastModel.mjs", directory / "qml/ForecastModel.mjs")
+    shutil.copyfile(ROOT / "qml/LearningDigest.mjs", directory / "qml/LearningDigest.mjs")
     checks = palettes.CHECKS.replace("__PALETTES__", json.dumps(palettes.palettes()))
     (directory / "tst_Today.qml").write_text(QML.replace("__CHECKS__", checks))
 

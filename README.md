@@ -4,7 +4,7 @@
 
 A native WaniKani study companion for Omarchy 4: lessons, reviews, listening practice, offline sessions, selection lookup, an ambient kanji gallery, and a little crab. The interface follows your desktop theme. There is no browser wrapper, cloud backend, telemetry, or AI grading.
 
-This is an independent community client, not a Tofugu product. **Version 0.2.9 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
+This is an independent community client, not a Tofugu product. **Version 0.2.10 is a development release.** Live-account study qualification and two weeks of personal daily use are still pending before a contest-ready 1.0.
 
 ![Native dashboard in Tokyo Night, showing an authored demo account](docs/screenshots/dashboard-dark.png)
 
@@ -68,9 +68,13 @@ An optional [agent playbook](skills/omarchy-wanikani/SKILL.md) ships in the repo
 
 ## How study works
 
+Settings has separate **Account, Study, Audio, Reminders, Desktop, Storage, and Data** sections. Switching keeps unfinished settings input in the panel. Voice selection and a sample test are directly under Audio; hiding that section stops its sample.
+
 **Reviews** and **Lessons** have separate overview screens and independently saved sessions. Today shows both actions and any saved position. Switching between them preserves the current question, draft and mistake counts for each. Direct commands still start or resume their requested mode.
 
 The lesson overview lets you browse confirmed unlocked subjects by type, preview the recommended batch, or choose 1–20 subjects yourself. Previewing does not start a lesson. A saved lesson session always resumes its existing selection and position. Discovery then follows **Meaning → Reading or Sound → Context**, with only applicable steps and a separate **Start lesson quiz** action. Closing keeps your exact step and reopening stays silent. See [guided lessons](docs/GUIDED_LESSONS.md) for navigation, audio and recovery behavior.
+
+Today also has a saved seven-day recap with separate written, meaning-listening and kana-dictation results. Missing totals stay unavailable, and the saved calculation time and scope remain visible. Open Activity for a current local report.
 
 **Activity** shows the last seven or thirty local calendar days of completed subjects, finished batches, separate meaning-listening and kana-dictation results, and guarded typo corrections. Current submission confirmations and items needing attention remain separate. Suggestions open the appropriate overview without starting study. Records retained across an account reset still describe work you did here; activity from other devices is not reconstructed.
 
@@ -134,7 +138,7 @@ Cached lessons and due reviews work offline. Completed work stays pending until 
 
 The API does not provide idempotency keys or retrievable individual review history. A timed-out submission is **uncertain**, never automatically retried. Refresh reconciles it against remote progress. When another client has changed the assignment, its state wins and the local answer remains recorded. The **Saved submissions** page shows paginated local records, error counts, and the reason a result is waiting or needs attention. Filter reviews, lessons, or note edits; inspect confirmed and archived records separately. An explicit recovery action lets you keep remote progress and archive an unresolved local result. This recovery path deliberately offers no force-resubmit button.
 
-Activity charts show only completed subjects and practice recorded by this plugin. They do not reconstruct your all-device review history.
+Activity separates completed subjects, meaning-listening ratings and kana-dictation results recorded by this plugin. It does not reconstruct your all-device review history.
 
 Demo Settings includes **Simulate offline in demo**, **Reconnect demo & sync**, and **Reset demo progress**. This exercises pending submissions using authored fixtures without changing the computer's network connection or contacting WaniKani. It is a demonstration aid; real network recovery is tested separately with a mock API and must still be qualified on a live account.
 
