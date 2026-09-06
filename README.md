@@ -4,7 +4,7 @@
 
 A native WaniKani client for Omarchy: lessons, reviews, listening practice, offline study, selection lookup and an original crab companion. It follows your desktop theme and uses one shared Python worker behind the native QML interface. No browser wrapper, cloud backend, telemetry or AI grading.
 
-**Version 0.2.14 is a development release.** This is an independent community client, not a Tofugu product. Live study and fourteen days of personal use remain qualification gates.
+**Version 0.2.15 is a development release.** This is an independent community client, not a Tofugu product. Live study and fourteen days of personal use remain qualification gates.
 
 ![Today with separate saved Reviews and Lessons, confirmed level progress and both audio activities](docs/screenshots/today-component-dark.png)
 

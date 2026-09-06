@@ -400,8 +400,9 @@ ColumnLayout {
         Action {
           id: doneButton
           objectName: "dictationDone"
-          text: root.complete ? "Back to work" : "Save & return to work"
-          selected: root.complete
+          text: "Back to work"
+          visible: root.complete
+          selected: true
           enabled: root.interactive
           onClicked: root.controller.dismiss()
         }

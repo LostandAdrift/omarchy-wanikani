@@ -435,10 +435,6 @@ ColumnLayout {
         onClicked: root.controller.studyAction("correct", {})
       }
       Action {
-        text: "Save & return to work"
-        onClicked: root.controller.dismiss()
-      }
-      Action {
         text: root.session && root.session.finishing ? "Finishing this batch" : "Finish this batch"
         visible: root.session && root.session.total > 5
         enabled: root.session && !root.session.finishing && !root.controller.busy
@@ -494,10 +490,6 @@ ColumnLayout {
         enabled: root.interactive && !root.controller.busy && root.promptReady
         accessibleHint: "Begin the quiz for this batch of lessons"
         onClicked: root.navigateLesson("quiz")
-      }
-      Action {
-        text: "Save & return to work"
-        onClicked: root.controller.dismiss()
       }
     }
     Label {
