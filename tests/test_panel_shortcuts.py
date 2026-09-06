@@ -25,6 +25,9 @@ import "qml" as Kani
 Item {
   id:root;width:620;height:900
   property bool opened:true
+  property bool busy:false
+  property bool composingText:false
+  __TAB_DESTINATIONS__
   readonly property var focusedItem:frame.Window.activeFocusItem
   readonly property bool editingText:isTextEditor(focusedItem)
   property string view:"study"
@@ -46,6 +49,7 @@ Item {
   QtObject {
     id:backend
     property bool ready:true
+    property bool locked:false
     property bool studying:true
     property int preparationCancels:0
     property var requests:[]
@@ -60,6 +64,8 @@ Item {
   Item {
     id:frame;anchors.fill:parent
     Item {id:focusSink;width:20;height:20;activeFocusOnTab:true}
+    Item {id:moreTab;width:20;height:20;activeFocusOnTab:true}
+    Item {id:practiceTab;visible:root.moreNavigation;width:20;height:20;activeFocusOnTab:true}
     TextInput {id:single;x:20;y:20;width:180;height:28;text:"Authored text"
       Item {id:editorChild;width:2;height:2;activeFocusOnTab:true}
     }
@@ -74,6 +80,7 @@ Item {
     function init(){
       failOnWarning(/.*/);root.opened=true;root.view="study";root.begins=[];root.audioStops=0;root.listeningLoads=0
       root.navigationSequence=0;root.listenSequence=0;root.listenBusy=false;root.progressReturn=false;root.detail=null;root.error=""
+      root.busy=false;root.composingText=false;root.moreNavigation=false;backend.locked=false
       backend.ready=true;backend.studying=true;backend.preparationCancels=0;backend.requests=[]
       single.text="Authored text";multi.text="Authored\nnotes";helpOwner.closed=0
       focusSink.forceActiveFocus();wait(1);verify(!root.editingText)
@@ -81,6 +88,43 @@ Item {
     function cleanup(){if(help)help.destroy();help=null;wait(1)}
     function ctrl(key){keyClick(key,Qt.ControlModifier);wait(1)}
     function saved(){return JSON.stringify([root.session,root.savedLessons,root.savedDictation])}
+    function alt(key){keyClick(key,Qt.AltModifier);wait(1)}
+    function test_alt_follows_visible_tabs_without_starting_study_data(){return [
+      {tag:"Today",key:Qt.Key_1,view:"dashboard"},{tag:"Reviews",key:Qt.Key_2,view:"review-overview"},
+      {tag:"Lessons",key:Qt.Key_3,view:"lesson-overview"},{tag:"Listen",key:Qt.Key_4,view:"listen"},
+      {tag:"Progress",key:Qt.Key_5,view:"progress"},{tag:"Lookup",key:Qt.Key_6,view:"lookup"}]}
+    function test_alt_follows_visible_tabs_without_starting_study(data){
+      var before=saved();alt(data.key);compare(root.view,data.view)
+      compare(root.begins,[]);compare(saved(),before)
+      verify(backend.requests.every(function(request){return request.method==="snapshot"}))
+    }
+    function test_alt_more_toggles_without_navigating_and_focuses_choices(){
+      var before=saved();alt(Qt.Key_7);verify(root.moreNavigation);tryCompare(practiceTab,"activeFocus",true)
+      compare(root.view,"study");compare(root.navigationSequence,0);compare(saved(),before)
+      alt(Qt.Key_7);verify(!root.moreNavigation);tryCompare(moreTab,"activeFocus",true)
+      compare(root.begins,[]);compare(backend.requests,[])
+    }
+    function test_more_focus_callback_cannot_steal_focus_after_later_navigation(){
+      root.activateTab(6);root.activateTab(1);focusSink.forceActiveFocus();wait(1)
+      compare(root.view,"review-overview");verify(focusSink.activeFocus)
+    }
+    function test_alt_never_navigates_when_closed_busy_locked_unready_or_composing_data(){return [
+      {tag:"closed"},{tag:"busy"},{tag:"locked"},{tag:"unready"},{tag:"composition"}]}
+    function test_alt_never_navigates_when_closed_busy_locked_unready_or_composing(data){
+      if(data.tag==="closed")root.opened=false
+      if(data.tag==="busy")root.busy=true
+      if(data.tag==="locked")backend.locked=true
+      if(data.tag==="unready")backend.ready=false
+      if(data.tag==="composition")root.composingText=true
+      var before=saved();alt(Qt.Key_2);alt(Qt.Key_7)
+      compare(root.view,"study");compare(root.navigationSequence,0);verify(!root.moreNavigation)
+      compare(saved(),before);compare(root.begins,[])
+    }
+    function test_alt_switches_from_answer_field_without_changing_draft(){
+      single.forceActiveFocus();wait(1);var before=saved(),draft=single.text
+      alt(Qt.Key_2);compare(root.view,"review-overview");compare(single.text,draft);compare(saved(),before)
+      compare(root.begins,[])
+    }
     function test_existing_number_mapping_and_new_zero_data(){return [
       {tag:"today",key:Qt.Key_1,view:"dashboard"},{tag:"study",key:Qt.Key_2,view:"study"},
       {tag:"lookup",key:Qt.Key_3,view:"lookup"},{tag:"zen",key:Qt.Key_4,view:"zen"},
@@ -123,6 +167,7 @@ Item {
     function children(node){var values=[node];for(var child of node.children)values=values.concat(children(child));return values}
     function test_native_help_names_both_audio_routes_and_specific_settings_sections(){
       help=helpComponent.createObject(root);verify(help!==null);verify(waitForRendering(help))
+      compare(help.tabShortcuts.length,7);compare(help.tabShortcuts[1],{key:"Alt+2",action:"Reviews"});compare(help.tabShortcuts[6].key,"Alt+7")
       compare(help.navigationShortcuts.length,10);compare(help.navigationShortcuts[9],{key:"Ctrl+0",action:"Type kana"})
       var labels=children(help).filter(function(node){return node.visible&&typeof node.text==="string"})
       var text=labels.map(function(node){return node.text}).join(" ")
@@ -151,7 +196,7 @@ def build(directory):
     foundation.build(directory)
     (directory / "tst_LessonFlow.qml").unlink()
     shutil.copyfile(ROOT / "qml/ShortcutHelp.qml", directory / "qml/ShortcutHelp.qml")
-    (directory / "tst_PanelShortcuts.qml").write_text(QML.replace("__FUNCTIONS__",function("isTextEditor")+function("navigate")).replace("__SHORTCUTS__",shortcuts))
+    (directory / "tst_PanelShortcuts.qml").write_text(QML.replace("__FUNCTIONS__",function("isTextEditor")+function("navigate")+function("activateTab")).replace("__SHORTCUTS__",shortcuts).replace("__TAB_DESTINATIONS__",re.search(r"^  readonly property var tabDestinations:.*$",panel,re.M).group(0)))
 
 
 @unittest.skipUnless(RUNNER.is_file() and (foundation.NATIVE / "Button.qml").is_file(), "Native Qt controls required")

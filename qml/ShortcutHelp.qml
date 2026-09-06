@@ -27,6 +27,15 @@ ColumnLayout {
       action: "Use the focused button"
     }
   ]
+  readonly property var tabShortcuts: [
+    {key: "Alt+1", action: "Today"},
+    {key: "Alt+2", action: "Reviews"},
+    {key: "Alt+3", action: "Lessons"},
+    {key: "Alt+4", action: "Listen"},
+    {key: "Alt+5", action: "Progress"},
+    {key: "Alt+6", action: "Lookup"},
+    {key: "Alt+7", action: "Show or hide More"}
+  ]
   readonly property var navigationShortcuts: [
     {
       key: "Ctrl+1",
@@ -172,7 +181,37 @@ ColumnLayout {
     }
     Label {
       Layout.fillWidth: true
-      text: "These shortcuts work inside the open panel when you are outside a text field."
+      text: "Alt+number works inside the open panel, including answer fields. It keeps your draft and pauses during Japanese input composition or a pending study action."
+      secondary: true
+      font.pixelSize: Style.font.bodySmall
+    }
+    Label {
+      Layout.fillWidth: true
+      text: "Alt+number follows the visible tabs from left to right. Reviews and Lessons open their overviews; they do not start a session."
+      secondary: true
+    }
+    Repeater {
+      model: root.navigationShortcutsEnabled ? root.tabShortcuts : []
+      RowLayout {
+        id: tabRow
+        required property var modelData
+        Layout.fillWidth: true
+        spacing: Style.space(14)
+        Label {
+          Layout.preferredWidth: Math.min(Style.space(200), root.width * 0.38)
+          text: tabRow.modelData.key
+          font.bold: true
+          textColor: Color.accent
+        }
+        Label {
+          Layout.fillWidth: true
+          text: tabRow.modelData.action
+        }
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: "Additional Ctrl shortcuts work outside text fields."
       secondary: true
       font.pixelSize: Style.font.bodySmall
     }

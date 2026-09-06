@@ -22,6 +22,7 @@ Item {
   property string view: "dashboard"
   property bool expanded: false
   property bool moreNavigation: false
+  readonly property var tabDestinations: ["dashboard", "review-overview", "lesson-overview", "listen", "progress", "lookup", "more"]
   property bool busy: false
   property string error: ""
   property var session: null
@@ -216,6 +217,20 @@ Item {
       })
     }
     Qt.callLater(focusContent)
+  }
+  function activateTab(index) {
+    if (!opened || !service || !service.ready || service.locked || busy || composingText || index < 0 || index >= tabDestinations.length)
+      return
+    if (tabDestinations[index] === "more") {
+      moreNavigation = !moreNavigation
+      var expanded = moreNavigation
+      var navigation = navigationSequence
+      Qt.callLater(function () {
+        if (root.opened && !root.composingText && root.navigationSequence === navigation && root.moreNavigation === expanded)
+          (expanded ? practiceTab : moreTab).forceActiveFocus(Qt.TabFocusReason)
+      })
+    } else
+      navigate(tabDestinations[index])
   }
   function focusContent() {
     if (!opened || !service || !service.ready || service.locked)
@@ -846,6 +861,20 @@ Item {
         autoRepeat: false
         onActivated: root.navigate("dictation")
       }
+      Repeater {
+        model: root.tabDestinations
+        Item {
+          id: tabShortcut
+          required property int index
+          Shortcut {
+            objectName: "tab-shortcut-" + (tabShortcut.index + 1)
+            sequence: "Alt+" + (tabShortcut.index + 1)
+            enabled: root.opened && !root.composingText && !root.busy
+            autoRepeat: false
+            onActivated: root.activateTab(tabShortcut.index)
+          }
+        }
+      }
       ColumnLayout {
         anchors.fill: parent
         anchors.margins: Style.space(22)
@@ -896,40 +925,54 @@ Item {
           spacing: Style.space(6)
           Kani.Action {
             id: todayTab
-            text: "Today"
+            text: "Today · 1"
+            accessibleName: "Today"
+            tooltipText: "Alt+1 · Today"
             selected: root.view === "dashboard"
-            onClicked: root.navigate("dashboard")
+            onClicked: root.activateTab(0)
           }
           Kani.Action {
-            text: "Reviews"
+            text: "Reviews · 2"
+            accessibleName: "Reviews"
+            tooltipText: "Alt+2 · Reviews"
             selected: root.view === "review-overview" || (root.view === "study" && root.session && root.session.mode === "reviews")
-            onClicked: root.navigate("review-overview")
+            onClicked: root.activateTab(1)
           }
           Kani.Action {
-            text: "Lessons"
+            text: "Lessons · 3"
+            accessibleName: "Lessons"
+            tooltipText: "Alt+3 · Lessons"
             selected: root.view === "lesson-overview" || (root.view === "study" && root.session && root.session.mode === "lessons")
-            onClicked: root.navigate("lesson-overview")
+            onClicked: root.activateTab(2)
           }
           Kani.Action {
-            text: "Listen"
+            text: "Listen · 4"
+            accessibleName: "Listen"
+            tooltipText: "Alt+4 · Listen"
             selected: root.view === "listen" || root.view === "dictation"
-            onClicked: root.navigate("listen")
+            onClicked: root.activateTab(3)
           }
           Kani.Action {
-            text: "Progress"
+            text: "Progress · 5"
+            accessibleName: "Progress"
+            tooltipText: "Alt+5 · Progress"
             selected: root.view === "progress"
-            onClicked: root.navigate("progress")
+            onClicked: root.activateTab(4)
           }
           Kani.Action {
-            text: "Lookup"
+            text: "Lookup · 6"
+            accessibleName: "Lookup"
+            tooltipText: "Alt+6 · Lookup"
             selected: root.view === "lookup"
-            onClicked: root.navigate("lookup")
+            onClicked: root.activateTab(5)
           }
           Kani.Action {
-            text: root.moreNavigation ? "More ▴" : "More ▾"
+            id: moreTab
+            text: root.moreNavigation ? "More · 7 ▴" : "More · 7 ▾"
+            tooltipText: "Alt+7 · Show or hide more views"
             accessibleName: "More WaniKani views"
             selected: root.moreNavigation
-            onClicked: root.moreNavigation = !root.moreNavigation
+            onClicked: root.activateTab(6)
           }
         }
         Flow {
@@ -937,6 +980,7 @@ Item {
           visible: root.moreNavigation
           spacing: Style.space(6)
           Kani.Action {
+            id: practiceTab
             text: "Practice"
             selected: root.view === "practice-library"
             onClicked: root.navigate("practice-library")

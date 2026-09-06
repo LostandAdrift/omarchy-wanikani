@@ -343,3 +343,10 @@ The first frozen run (`2a67c49537ffa3a3ecd6eb16f851db1717636c10`, `/tmp/wanikani
 ## September 6 · 0.2.15 remove redundant study exit button
 
 Removed “Save & return to work” from review/lesson controls and active dictation. Escape and the panel Close action continue to preserve study; completed-batch return actions remain. No new tests were added for this button removal. Frozen tree `21154fb66bd3309d1c078b1857d881402caf7436` passed the required existing suite: 1153 tests with one optional audio-device skip, 126 core Qt checks, valid manifest and zero QML errors. Report `/tmp/wanikani-verify-lwougepd/report.json`. Installation requires fresh unlocked/closed-study checks.
+
+
+## September 6 · 0.2.16 visible-tab Alt shortcuts
+
+Frozen tree `26278c61aa4db38786ced48c75d1951c4ca7ff63` passed the complete verifier: 1153 Python tests with one optional audio-device skip, 126 core Qt checks, valid manifest and zero QML errors. Report `/tmp/wanikani-verify-mzwi8xtm/report.json`. Expanded actual-Panel Qt key tests cover all six overview destinations, More focus/toggling, answer-field draft preservation, closed/busy/locked/unready/composition suppression and protection from a delayed More-focus callback after navigation. Existing Ctrl mappings remain verified.
+
+A separate actual tab-strip fixture ran 34 Qt outcomes, including widths 320/720; inspected captures and fixture log are in `/home/martin/.cache/tmp/wanikani-alt-tabs-preview-8rrkb6mk/`. The fixture hides unrelated test controls during capture and uses inert IO; it does not automate the learner's desktop or IME. Read-only compositor binding inventory found no Alt+1–7 conflicts. These are local panel shortcuts, not changes to Hyprland configuration.

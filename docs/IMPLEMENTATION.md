@@ -2,6 +2,10 @@
 
 User authorized the complete researched plan on 2026-09-04 and resumed work after a Codex reset. An earlier verified milestone is installed locally; newer source can remain uninstalled. Continue from the factual status and remaining qualification gates below; do not redo completed setup or discard the saved study session.
 
+## September 6 follow-up · visible-tab shortcuts
+
+Version 0.2.16 adds Alt+1–7 in the visible top-row order, with numbered labels, tooltips and F1 help. The user explicitly chose to allow these shortcuts while typing an answer, except during Japanese IME composition; this supersedes the original outside-answer-field default for the new Alt shortcuts. They also pause during a pending study action. Saved study remains intact, Reviews/Lessons open overviews, and Alt+7 toggles More with guarded focus. Existing Ctrl navigation still operates outside text fields. See the latest verification entry and private workspace installation handoff for installed state.
+
 ## September 6 follow-up · reading size and keyboard focus
 
 Version 0.2.13 was installed at `af10202` after the user unlocked and closed study; both runtime versions and exact saved-session preservation were checked. That supersedes the September 5 installation blocker below, without certifying every lock/lifecycle scenario.

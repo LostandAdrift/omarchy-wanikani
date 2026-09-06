@@ -25,6 +25,8 @@ The answer field receives keyboard focus when a question opens or resumes, and a
 
 **Escape** saves your place and returns to work. **Expand** changes the presentation without restarting. **Enter** checks an answer and, after feedback, advances. Holding Enter cannot check and immediately skip the feedback. **F1** opens keyboard help. **Ctrl+0** opens Type kana inside the panel when focus is outside a text field. Navigation shortcuts leave answer fields and IME composition alone, and focused controls scroll into view.
 
+**Alt+1–7** selects the visible top row from left to right: Today, Reviews, Lessons, Listen, Progress, Lookup, and More. The numbers on each tab are reminders; hover shows the full shortcut. These shortcuts work while typing and retain the saved draft, but pause during Japanese IME composition or a pending study action. Reviews and Lessons open their overviews. Alt+7 toggles More and focuses its first option; Tab moves through those extra views. The older Ctrl navigation shortcuts still operate outside text fields.
+
 The optional desktop integration supplies **Super+Alt+W** for study and **Super+Alt+Shift+W** for selection lookup when those bindings are free. Install or remove it under **Settings → Desktop**; occupied bindings and unrelated configuration are preserved. For command-line usage, see the [README](../README.md) and [command-line support](AGENT_SUPPORT.md). Press **F1** for the complete keyboard shortcut reference.
 
 ## Learn a lesson, then take its quiz
