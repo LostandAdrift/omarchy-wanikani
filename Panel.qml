@@ -56,7 +56,6 @@ Item {
   property string helpReturnView: "dashboard"
   property var helpReturnDetail: null
   property var chosenScreen: null
-  property bool focusPrimed: false
   property string integrationNotice: ""
   property int audioSequence: 0
   property string audioContext: ""
@@ -160,8 +159,6 @@ Item {
       return monitor && s.name === monitor.name
     }) || Quickshell.screens[0]
     opened = true
-    focusPrimed = false
-    focusTimer.restart()
     error = ""
     if (service)
       service.panelOpen = true
@@ -221,6 +218,8 @@ Item {
     Qt.callLater(focusContent)
   }
   function focusContent() {
+    if (!opened || !service || !service.ready || service.locked)
+      return
     if (content.item && typeof content.item.focusInput === "function")
       content.item.focusInput()
     else
@@ -781,15 +780,6 @@ Item {
         root.dismiss()
     }
   }
-  Timer {
-    id: focusTimer
-    interval: 60
-    onTriggered: {
-      root.focusPrimed = true
-      root.focusContent()
-    }
-  }
-
   PanelWindow {
     id: window
     screen: root.chosenScreen
@@ -803,7 +793,9 @@ Item {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "omarchy-wanikani"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: !root.opened ? WlrKeyboardFocus.None : root.focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive
+    // This is a modal surface, like the native menu: retain keyboard focus
+    // until dismissal instead of dropping it before the question is ready.
+    WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     color: "transparent"
     Rectangle {
       anchors.fill: parent

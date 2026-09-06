@@ -133,8 +133,12 @@ ColumnLayout {
       revision: session.revision
     })
   }
-  onInteractiveChanged: if (!interactive)
-    lessonAutoplayIntent = null
+  onInteractiveChanged: {
+    if (!interactive)
+      lessonAutoplayIntent = null
+    else
+      Qt.callLater(focusInput)
+  }
   Connections {
     target: root.controller
     function onErrorChanged() {
@@ -384,7 +388,7 @@ ColumnLayout {
       visible: root.session && root.session.phase !== "lesson"
       readOnly: root.feedback || root.controller.busy
       horizontalAlignment: TextInput.AlignHCenter
-      font.pixelSize: Style.space(24)
+      font.pixelSize: Style.space(32)
       font.family: root.session && root.session.part === "reading" ? "Noto Sans CJK JP" : Style.font.family
       placeholderText: root.session && root.session.part === "reading" ? "Type romaji or kana" : "Type the English meaning"
       Accessible.name: root.session && root.session.part === "reading" ? "Reading answer" : "Meaning answer"
@@ -408,9 +412,11 @@ ColumnLayout {
     Label {
       Layout.fillWidth: true
       visible: root.feedback && root.session && root.session.feedback && root.session.feedback && !root.session.feedback.correct
+      objectName: "study-accepted-answer"
       text: root.session && root.session.feedback ? root.session.feedback.accepted.join(" · ") : ""
       horizontalAlignment: Text.AlignHCenter
-      font.pixelSize: Style.font.title
+      font.family: root.session && root.session.part === "reading" ? "Noto Sans CJK JP" : Style.font.family
+      font.pixelSize: Style.space(root.session && root.session.part === "reading" ? 36 : 24)
     }
     Flow {
       Layout.fillWidth: true

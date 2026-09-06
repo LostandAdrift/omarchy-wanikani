@@ -301,10 +301,12 @@ ColumnLayout {
   Label {
     Layout.fillWidth: true
     visible: root.showReading && root.sectionVisible("reading") && text !== ""
+    objectName: "subject-readings"
     text: root.subject ? root.subject.readings.map(function (r) {
       return r.reading + (r.type ? " (" + r.type + ")" : "")
     }).join(" · ") : ""
     font.family: "Noto Sans CJK JP"
+    font.pixelSize: Style.space(28)
   }
   Label {
     Layout.fillWidth: true

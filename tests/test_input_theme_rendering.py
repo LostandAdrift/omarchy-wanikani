@@ -30,6 +30,7 @@ Rectangle {
   readonly property color kaniSurface: color
   property color kaniText:"#222222"
   property var page:null
+  TextInput { id: otherField; width:100; height:30 }
   Component { id: settingsPage; Kani.Settings { width:460;controller:owner } }
   Component { id: studyPage; Kani.Study { width:460;controller:owner } }
   Component { id: lookupPage; Kani.Lookup { width:460;controller:owner } }
@@ -91,7 +92,7 @@ Rectangle {
       Color.background="#111111";Color.foreground="#ffffff";Color.accent="#aaaaaa"
       owner.opened=true;owner.busy=false;owner.detail=null;owner.query="";owner.actions=[]
       owner.searchType="all";owner.searchState="all";owner.searching=false
-      backend.writes=[]
+      backend.writes=[];backend.ready=true;backend.locked=false
       backend.snapshot={connected:true,demo:false,username:"Authored",credential_storage:"session",syncing:false,
         settings:{batch_size:5,cache_limit_mb:256,autoplay_audio:false,autoplay_lessons:false,autoplay_listening:true},
         pending:0,attention:0,outbox_total:0,cache:{subjects:5,files:0,bytes:0}}
@@ -141,6 +142,70 @@ Rectangle {
       verify(input.readOnly)
       input.forceActiveFocus();keyClicks("extra")
       compare(input.text,"")
+    }
+    function test_study_focus_without_click_on_open_resume_and_ready() {
+      otherField.forceActiveFocus()
+      make(studyPage)
+      var input=field("study-answer")
+      tryCompare(input,"activeFocus",true)
+      keyClicks("vol")
+      compare(input.text,"vol")
+      owner.session=Object.assign({},owner.session,{draft:"vol"})
+      wait(1)
+      owner.opened=false
+      otherField.forceActiveFocus()
+      owner.opened=true
+      tryCompare(input,"activeFocus",true)
+      compare(input.text,"vol")
+      keyClicks("cano")
+      compare(input.text,"volcano")
+      backend.ready=false
+      otherField.forceActiveFocus()
+      backend.ready=true
+      tryCompare(input,"activeFocus",true)
+      compare(input.text,"volcano")
+    }
+    function test_study_next_question_takes_focus_after_feedback_button() {
+      make(studyPage)
+      var input=field("study-answer")
+      owner.session=Object.assign({},owner.session,{phase:"feedback",feedback:{correct:false,accepted:["かざん"],message:"Try again",retry:false},part:"reading"})
+      wait(1)
+      var action=allItems(page).filter(function(item){return item.text==="Continue · Enter"})[0]
+      verify(action!==undefined)
+      action.forceActiveFocus()
+      owner.session=Object.assign({},owner.session,{phase:"question",feedback:null,draft:"",revision:3})
+      tryCompare(input,"activeFocus",true)
+      keyClicks("kazan")
+      keyClick(Qt.Key_Return)
+      compare(owner.actions[0],{method:"answer",args:{text:"かざん"}})
+    }
+    function test_study_draft_update_does_not_steal_deliberate_focus() {
+      make(studyPage)
+      var input=field("study-answer")
+      tryCompare(input,"activeFocus",true)
+      wait(1)
+      otherField.forceActiveFocus()
+      owner.session=Object.assign({},owner.session,{draft:"retained",revision:2})
+      wait(1)
+      verify(otherField.activeFocus)
+      owner.opened=false
+      owner.session=Object.assign({},owner.session,{part:"reading",revision:3})
+      wait(1)
+      verify(otherField.activeFocus)
+    }
+    function test_reading_feedback_is_large_and_wraps_in_narrow_view() {
+      owner.session=Object.assign({},owner.session,{phase:"feedback",part:"reading",feedback:{correct:false,accepted:["かざん"],message:"Try again",retry:false}})
+      make(studyPage)
+      var input=field("study-answer"),accepted=field("study-accepted-answer"),readings=field("subject-readings")
+      verify(input.font.pixelSize>=32)
+      verify(accepted.font.pixelSize>=36)
+      verify(readings.font.pixelSize>=28)
+      compare(accepted.font.family,"Noto Sans CJK JP")
+      page.width=320
+      owner.session=Object.assign({},owner.session,{feedback:{correct:false,accepted:["かざん", "ひとつのながいれんしゅう", "べつのよみかた"],message:"Try again",retry:false}})
+      wait(1)
+      verify(accepted.contentHeight>accepted.font.pixelSize)
+      verify(accepted.paintedWidth<=accepted.width+1)
     }
     function test_lookup_filters_announce_checked_state() {
       make(lookupPage)

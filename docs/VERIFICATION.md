@@ -329,3 +329,12 @@ This is the final implemented source milestone for the confirmed 09:00 local han
 
 
 At **15:56 UTC**, the final read-only lock check still reported `locked:true`, `requested:true`, `pending:false`, `sessionLocked:true`, and `secure:true`; installed Git remained **e5cb4e6**. No installation, restart, unlock, live grading or account refresh followed. The verified 0.2.13 runtime is committed as **1bffaa4**; later handoff edits affect documentation only.
+
+
+## September 6 · 0.2.14 reading size and keyboard focus
+
+Frozen tree `2196fa9237dfef0572c23497421630682535b8f5` passed the full verifier, report `/tmp/wanikani-verify-6yomkm_c/report.json`. All 1153 Python tests ran with one optional audio-device skip and no failures/errors; 126 core Qt checks passed, manifest valid, 43 QML files linted with zero errors and 568 retained warnings. Runtime files/modes were unchanged throughout verification.
+
+Four additional native-input Qt cases inside the existing test wrapper cover opening/resuming/worker readiness without clicking, taking input focus after a feedback button, preserving deliberate focus during same-question draft refreshes or closure, and readable wrapping at 320 logical pixels. Light and dark authored component previews were inspected in `/home/martin/.cache/tmp/wanikani-reading-preview-isda_cru/` and `/home/martin/.cache/tmp/wanikani-reading-dark-preview-nqgv40iz/`. These use actual Study/SubjectDetails and native input controls with inert backend/theme adapters, not the live account or full shell. The panel now retains modal exclusive keyboard focus like the installed native menu. Physical compositor/IME behavior still needs learner confirmation.
+
+The first frozen run (`2a67c49537ffa3a3ecd6eb16f851db1717636c10`, `/tmp/wanikani-verify-6uhl2vs_/report.json`) had one existing help-render test failure: waiting one millisecond before `waitForRendering` allowed the paint event to pass before it was observed. Removing that premature wait passed the focused test and the full second run. No application behavior was changed to satisfy this test.

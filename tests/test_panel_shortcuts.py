@@ -122,7 +122,7 @@ Item {
     }
     function children(node){var values=[node];for(var child of node.children)values=values.concat(children(child));return values}
     function test_native_help_names_both_audio_routes_and_specific_settings_sections(){
-      help=helpComponent.createObject(root);verify(help!==null);wait(1);verify(waitForRendering(help))
+      help=helpComponent.createObject(root);verify(help!==null);verify(waitForRendering(help))
       compare(help.navigationShortcuts.length,10);compare(help.navigationShortcuts[9],{key:"Ctrl+0",action:"Type kana"})
       var labels=children(help).filter(function(node){return node.visible&&typeof node.text==="string"})
       var text=labels.map(function(node){return node.text}).join(" ")

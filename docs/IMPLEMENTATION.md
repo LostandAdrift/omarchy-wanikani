@@ -2,6 +2,12 @@
 
 User authorized the complete researched plan on 2026-09-04 and resumed work after a Codex reset. An earlier verified milestone is installed locally; newer source can remain uninstalled. Continue from the factual status and remaining qualification gates below; do not redo completed setup or discard the saved study session.
 
+## September 6 follow-up · reading size and keyboard focus
+
+Version 0.2.13 was installed at `af10202` after the user unlocked and closed study; both runtime versions and exact saved-session preservation were checked. That supersedes the September 5 installation blocker below, without certifying every lock/lifecycle scenario.
+
+The current 0.2.14 source addresses the user's small-reading and click-to-type complaints: answer input is 32 scaled pixels, accepted reading feedback 36, and detail readings 28. The modal panel retains exclusive keyboard focus until dismissal, matching the native menu, instead of switching to on-demand focus after 60 ms. Study also restores input focus when reopened or when the service becomes ready; routine draft refreshes do not steal deliberate focus. See the latest verification entry before installing. Preserve live study and recheck lock/closed state immediately before any lifecycle operation.
+
 ## Accepted product
 
 Full native WaniKani lessons/reviews, offline sessions, guarded current-answer typo correction, and five-subject batches. Active learner, quality before contest deadline. Theme-native QML with original crab companion, dashboard, lookup from selection/clipboard (no OCR), optional desktop/idle/Zen kanji. All native study/ambient/companion features are in scope.
