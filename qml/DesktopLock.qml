@@ -13,6 +13,9 @@ Item {
   property bool lockedValue: true
   readonly property bool locked: !known || lockedValue
   property var callbacks: []
+  property int lastExitCode: -1
+  property int lastExitStatus: -1
+  property int lastReplyLength: 0
 
   function check(callback) {
     if (typeof callback === "function")
@@ -56,6 +59,9 @@ Item {
     stdout: StdioCollector { id: output }
     stderr: StdioCollector {}
     onExited: function (code, status) {
+      root.lastExitCode = code
+      root.lastExitStatus = status
+      root.lastReplyLength = output.text.length
       root.finish(output.text, code === 0 && status === 0)
     }
   }

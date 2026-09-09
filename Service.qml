@@ -543,6 +543,12 @@ Item {
   }
   IpcHandler {
     target: "wanikani"
+    function desktopStatus(): string {
+      return JSON.stringify({locked: root.locked, legacy: !!root.lockService,
+        active: desktopLock.active, known: desktopLock.known,
+        exitCode: desktopLock.lastExitCode, exitStatus: desktopLock.lastExitStatus,
+        replyLength: desktopLock.lastReplyLength, waiting: desktopLock.callbacks.length})
+    }
     function dashboard(): void {
       root.summon("dashboard")
     }
