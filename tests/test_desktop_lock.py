@@ -15,6 +15,7 @@ import QtTest
 Item {
  id: root
  property var service: backend
+ property string lastOpenResult: "idle"
  property int openSequence: 0
  property bool opened: false
  property int listenSequence: 0

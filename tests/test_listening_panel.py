@@ -211,6 +211,7 @@ Item {
  id: root
  required property var service
  property bool opened: false
+ property string lastOpenResult: "idle"
  property int openSequence: 0
  property string view: "listen"
  readonly property var snapshot: service.snapshot

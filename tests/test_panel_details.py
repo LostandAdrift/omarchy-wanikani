@@ -319,7 +319,8 @@ Item {
   id: root
   required property var service
   property bool opened: true
-  property int openSequence: 0
+  property string lastOpenResult: "idle"
+ property int openSequence: 0
   property bool moreNavigation: false
   property int listenSequence: 0
   property bool listenBusy: false

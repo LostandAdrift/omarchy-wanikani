@@ -20,6 +20,7 @@ Item {
   property var service: null
   property bool opened: false
   property int openSequence: 0
+  property string lastOpenResult: "idle"
   property string view: "dashboard"
   property bool expanded: false
   property bool moreNavigation: false
@@ -147,11 +148,17 @@ Item {
     helpReturnDetail = null
   }
 
+  function desktopStatus() {
+    return JSON.stringify({opened: opened, sequence: openSequence, result: lastOpenResult,
+      hasService: !!service, locked: service ? service.locked : null})
+  }
   function open(payloadJson) {
+    lastOpenResult = "checking"
     var request = ++openSequence
     var owner = service
     if (owner && !owner.lockService && typeof owner.checkDesktop === "function") {
       owner.checkDesktop(function (unlocked) {
+        root.lastOpenResult = unlocked ? "unlocked" : "locked-or-unknown"
         if (root.openSequence !== request || root.service !== owner)
           return
         if (unlocked)
@@ -163,6 +170,7 @@ Item {
       openChecked(payloadJson)
   }
   function openChecked(payloadJson) {
+    lastOpenResult = "opening"
     if (service && service.locked) {
       close()
       return
@@ -190,6 +198,7 @@ Item {
       search(payload.text)
   }
   function close() {
+    lastOpenResult = "closed"
     openSequence++
     if (service && typeof service.cancelListeningPreparation === "function")
       service.cancelListeningPreparation()
