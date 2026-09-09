@@ -211,6 +211,7 @@ Item {
  id: root
  required property var service
  property bool opened: false
+ property int openSequence: 0
  property string view: "listen"
  readonly property var snapshot: service.snapshot
  property var listenSession: null
@@ -257,7 +258,7 @@ Item {
    function stop() {}
  }
 ''' + bindings+'\n'+access+'\n'+connections+'\n'+'\n'.join(function(panel,name) for name in
-        ('open','close','dismiss','navigate','stopAudio','invalidateListening','listenCurrent','loadListening','listenAction','playListening'))+'\n}\n')
+        ('open','openChecked','close','dismiss','navigate','stopAudio','invalidateListening','listenCurrent','loadListening','listenAction','playListening'))+'\n}\n')
     (directory/'ServiceCore.qml').write_text('''import QtQuick
 import "SessionState.mjs" as SessionState
 Item {

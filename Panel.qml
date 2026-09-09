@@ -19,6 +19,7 @@ Item {
   property var manifest: null
   property var service: null
   property bool opened: false
+  property int openSequence: 0
   property string view: "dashboard"
   property bool expanded: false
   property bool moreNavigation: false
@@ -147,6 +148,21 @@ Item {
   }
 
   function open(payloadJson) {
+    var request = ++openSequence
+    var owner = service
+    if (owner && !owner.lockService && typeof owner.checkDesktop === "function") {
+      owner.checkDesktop(function (unlocked) {
+        if (root.openSequence !== request || root.service !== owner)
+          return
+        if (unlocked)
+          root.openChecked(payloadJson)
+        else
+          root.close()
+      })
+    } else
+      openChecked(payloadJson)
+  }
+  function openChecked(payloadJson) {
     if (service && service.locked) {
       close()
       return
@@ -174,6 +190,7 @@ Item {
       search(payload.text)
   }
   function close() {
+    openSequence++
     if (service && typeof service.cancelListeningPreparation === "function")
       service.cancelListeningPreparation()
     listenSequence++

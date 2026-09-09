@@ -2,6 +2,12 @@
 
 User authorized the complete researched plan on 2026-09-04 and resumed work after a Codex reset. An earlier verified milestone is installed locally; newer source can remain uninstalled. Continue from the factual status and remaining qualification gates below; do not redo completed setup or discard the saved study session.
 
+## September 9 follow-up · Omarchy 4.0.3 scoped services
+
+The installed shell now scopes third-party `serviceFor()` to the plugin itself. WaniKani's legacy lock lookup became null, so its fail-closed guard rejected every open even though the plugin, bar entry and persisted shortcuts remained installed. Source 0.2.17 reads the public `omarchy-shell lock status` IPC only when that service is unavailable. All five lock fields must be booleans; unknown/error/timeout remains locked. Every explicit open waits for a fresh response and is guarded against closure, newer requests and replacement service owners. A bounded probe polls once per second while open and once per fifteen seconds while hidden. It neither owns nor changes the OS lock, and uses no private shell object traversal. Legacy live-service observation remains supported.
+
+Automatic ambient display and reminders stay suppressed on the scoped API until reliable idle/notification access is adapted. Do not weaken the lock guard or label all desktop integrations qualified. Full verification and hosted opening must be checked before reporting this fix installed. The shortcut/launcher integration was reapplied with no config errors; both global shortcuts are registered once.
+
 ## September 6 follow-up · visible-tab shortcuts
 
 Version 0.2.16 adds Alt+1–7 in the visible top-row order, with numbered labels, tooltips and F1 help. The user explicitly chose to allow these shortcuts while typing an answer, except during Japanese IME composition; this supersedes the original outside-answer-field default for the new Alt shortcuts. They also pause during a pending study action. Saved study remains intact, Reviews/Lessons open overviews, and Alt+7 toggles More with guarded focus. Existing Ctrl navigation still operates outside text fields. See the latest verification entry and private workspace installation handoff for installed state.

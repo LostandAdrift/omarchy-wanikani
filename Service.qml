@@ -89,10 +89,10 @@ Item {
   readonly property var lockService: shell ? shell.serviceFor("omarchy.lock") : null
   readonly property var notificationsService: shell ? shell.serviceFor("omarchy.notifications") : null
   readonly property var idleService: shell ? shell.serviceFor("omarchy.idle") : null
-  readonly property bool locked: lockService ? lockService.locked : true
+  readonly property bool locked: lockService ? lockService.locked : desktopLock.locked
   readonly property bool dnd: notificationsService ? notificationsService.doNotDisturb : false
   readonly property bool fullscreen: ToplevelManager.activeToplevel ? ToplevelManager.activeToplevel.fullscreen : false
-  readonly property bool canDecorate: Policy.ambientAllowed({
+  readonly property bool canDecorate: !!lockService && Policy.ambientAllowed({
     locked: locked,
     fullscreen: fullscreen,
     studying: studying,
@@ -116,6 +116,17 @@ Item {
   })
   onAmbientWantedChanged: queueAmbient()
 
+  Kani.DesktopLock {
+    id: desktopLock
+    active: !!root.shell && !root.lockService
+    visibleSurface: root.panelOpen
+  }
+  function checkDesktop(callback) {
+    if (lockService)
+      callback(!locked)
+    else
+      desktopLock.check(callback)
+  }
   function ordering() {
     return Object.assign({}, stateOrder, {
       snapshot: snapshot
