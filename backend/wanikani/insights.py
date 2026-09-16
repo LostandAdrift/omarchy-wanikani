@@ -24,7 +24,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .api import user_id
-from .common import UserError, plain, stamp
+from .common import MAX_REVIEW_SESSION, UserError, plain, stamp
 from .trail import _protected
 
 
@@ -103,13 +103,15 @@ def _session_data(engine, boundaries, now, daily):
       AND julianday(json_extract(body,'$.ended_at'))<=julianday(?)
       AND julianday(json_extract(body,'$.started_at'))<=julianday(json_extract(body,'$.ended_at'))
       AND json_extract(body,'$.invalidated') IS NULL
-      AND json_type(body,'$.completed')='integer' AND json_extract(body,'$.completed') BETWEEN 1 AND 20
-      AND json_type(body,'$.queue')='array' AND json_array_length(body,'$.queue') BETWEEN 1 AND 20
+      AND json_type(body,'$.completed')='integer' AND json_extract(body,'$.completed') BETWEEN 1 AND
+        CASE WHEN json_extract(body,'$.mode')='reviews' AND json_type(body,'$.all_reviews')='true' THEN ? ELSE 20 END
+      AND json_type(body,'$.queue')='array' AND json_array_length(body,'$.queue') BETWEEN 1 AND
+        CASE WHEN json_extract(body,'$.mode')='reviews' AND json_type(body,'$.all_reviews')='true' THEN ? ELSE 20 END
       AND json_extract(body,'$.completed')=COALESCE(json_extract(body,'$.finish_at'),json_array_length(body,'$.queue'))
       AND NOT EXISTS (SELECT 1 FROM json_each(json_extract(sessions.body,'$.queue')) item
         WHERE item.key<json_extract(sessions.body,'$.completed')
           AND COALESCE(json_type(CASE WHEN item.type='object' THEN item.value ELSE '{}' END,'$.done'),'null')!='true')
-      GROUP BY day,mode""", (*values, stamp(boundaries[0][1]), stamp(now)))
+      GROUP BY day,mode""", (*values, stamp(boundaries[0][1]), stamp(now), MAX_REVIEW_SESSION, MAX_REVIEW_SESSION))
     for row in rows:
         if row["day"] in daily:
             daily[row["day"]]["sessions_completed"][row["mode"]] = row["count"]

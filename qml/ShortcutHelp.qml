@@ -10,6 +10,8 @@ ColumnLayout {
   property bool navigationShortcutsEnabled: false
   property bool helpShortcutEnabled: false
   readonly property var basicShortcuts: [
+    {key: "Alt+P", action: "Play available pronunciation in study (after checking a reading)"},
+    {key: "Alt+D", action: "Focus the explanation after checking an answer"},
     {
       key: "Escape",
       action: "Save and return to work"

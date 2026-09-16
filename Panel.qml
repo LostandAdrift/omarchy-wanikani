@@ -19,6 +19,7 @@ Item {
   property var manifest: null
   property var service: null
   property bool opened: false
+  readonly property bool closeOnOutsideClick: snapshot.settings.close_on_outside_click !== false
   property int openSequence: 0
   property string lastOpenResult: "idle"
   property string view: "dashboard"
@@ -116,6 +117,10 @@ Item {
     }
     return false
   }
+  function resetStudyScroll() {
+    if (view === "study" && scroll.contentItem && scroll.contentItem.contentY !== undefined)
+      scroll.contentItem.contentY = 0
+  }
   function revealFocus() {
     var item = focusedItem
     var ancestor = item
@@ -189,7 +194,7 @@ Item {
       service.panelOpen = true
     var requested = payload.view || "dashboard"
     if (["reviews", "lessons", "practice", "resume"].indexOf(requested) >= 0)
-      begin(requested, payload.limit, payload.subjects)
+      begin(requested, payload.limit, payload.subjects, false, payload.all_reviews)
     else
       navigate(["dashboard", "review-overview", "lesson-overview", "progress", "activity", "listen", "dictation", "lookup", "zen", "settings", "help", "practice-library", "recovery"].indexOf(requested) >= 0 ? requested : "dashboard")
     if (requested === "lookup" && payload.selection)
@@ -216,6 +221,10 @@ Item {
     close()
     if (shell)
       shell.hide(pluginId)
+  }
+  function dismissOutside() {
+    if (opened && closeOnOutsideClick)
+      dismiss()
   }
   function navigate(next) {
     if (next !== "listen" && service && typeof service.cancelListeningPreparation === "function")
@@ -279,7 +288,7 @@ Item {
         callback(ok, data)
     })
   }
-  function begin(mode, limit, subjects, replacePractice) {
+  function begin(mode, limit, subjects, replacePractice, allReviews) {
     navigate("study")
     var saved = snapshot.session
     if (mode === "resume" && saved && saved.phase === "complete" && !snapshot.paused_graded && snapshot.reviews === 0) {
@@ -294,6 +303,7 @@ Item {
     call("start", {
       mode: mode,
       limit: limit || snapshot.settings.batch_size || 5,
+      all_reviews: allReviews === undefined ? (limit === undefined && (mode === "reviews" || mode === "resume") && snapshot.settings.review_all === true) : allReviews,
       subjects: subjects,
       replace_practice: replacePractice === true
     }, function (ok, data) {
@@ -834,9 +844,14 @@ Item {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.namespace: "omarchy-wanikani"
     WlrLayershell.layer: WlrLayer.Overlay
-    // This is a modal surface, like the native menu: retain keyboard focus
-    // until dismissal instead of dropping it before the question is ready.
-    WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // Keep typing immediate in the default popup. The opt-out lets another
+    // application take keyboard focus while the study panel remains visible.
+    WlrLayershell.keyboardFocus: !root.opened ? WlrKeyboardFocus.None : root.closeOnOutsideClick ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+    HyprlandFocusGrab {
+      active: root.opened && root.closeOnOutsideClick
+      windows: [window]
+      onCleared: root.dismissOutside()
+    }
     color: "transparent"
     Rectangle {
       anchors.fill: parent
@@ -844,7 +859,7 @@ Item {
     }
     MouseArea {
       anchors.fill: parent
-      onClicked: root.dismiss()
+      onClicked: root.dismissOutside()
     }
     Ui.BorderSurface {
       id: frame
@@ -1000,6 +1015,13 @@ Item {
             selected: root.moreNavigation
             onClicked: root.activateTab(6)
           }
+          Kani.Action {
+            objectName: "open-settings"
+            text: "Settings"
+            selected: root.view === "settings"
+            accessibleHint: "Study, audio, desktop behavior, and account preferences"
+            onClicked: root.navigate("settings")
+          }
         }
         Flow {
           Layout.fillWidth: true
@@ -1061,6 +1083,7 @@ Item {
           Layout.fillHeight: true
           contentWidth: availableWidth
           clip: true
+          Controls.ScrollBar.vertical.policy: Controls.ScrollBar.AlwaysOn
           Loader {
             id: content
             width: scroll.availableWidth
@@ -1071,6 +1094,13 @@ Item {
               Qt.callLater(root.focusContent)
             }
           }
+        }
+        Loader {
+          objectName: "study-docked-actions"
+          Layout.fillWidth: true
+          active: root.view === "study" && !!content.item && !!root.session && root.session.phase !== "lesson" && root.session.phase !== "complete"
+          visible: active
+          sourceComponent: active ? content.item.reviewActions : null
         }
         RowLayout {
           Layout.fillWidth: true
@@ -1145,6 +1175,7 @@ Item {
   Component {
     id: studyPage
     Kani.Study {
+      dockActions: true
       controller: root
     }
   }

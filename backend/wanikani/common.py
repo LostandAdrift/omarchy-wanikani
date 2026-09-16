@@ -4,6 +4,15 @@ import os
 import re
 
 
+# Matches the bounded account catalogue used by readiness and local practice.
+MAX_REVIEW_SESSION = 12000
+
+
+def session_queue_limit(session):
+    """Only explicitly marked all-due review sessions exceed a normal batch."""
+    return MAX_REVIEW_SESSION if session.get("mode") == "reviews" and session.get("all_reviews") is True else 20
+
+
 def stamp(value=None):
     return datetime.fromtimestamp(value, timezone.utc).isoformat().replace("+00:00", "Z") if value is not None else datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 

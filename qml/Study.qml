@@ -16,10 +16,73 @@ ColumnLayout {
   readonly property bool interactive: controller.opened && controller.service && controller.service.ready && !controller.service.locked
   readonly property bool feedback: session && session.phase === "feedback"
   readonly property color subjectColor: !subject ? Color.accent : subject.type === "radical" ? "#48a9de" : subject.type === "kanji" ? "#e56cb0" : "#a68be8"
+  property bool dockActions: false
+  readonly property bool readingQuestion: !!session && session.part === "reading"
+  readonly property bool audioRevealed: !!session && !!subject && (session.phase === "lesson" || (feedback && session.feedback && !session.feedback.retry && (readingQuestion || subject.type === "kana_vocabulary")))
+  readonly property bool canPlayPronunciation: interactive && !controller.busy && !input.inputMethodComposing && audioRevealed && subject.audio_available === true && controller.audioState !== "loading"
+  function playPronunciation() {
+    if (canPlayPronunciation)
+      controller.play(subject)
+  }
+  function showDetails() {
+    if (interactive && feedback && !input.inputMethodComposing)
+      detailsHeading.forceActiveFocus(Qt.ShortcutFocusReason)
+  }
+  Shortcut {
+    sequence: "Alt+P"
+    enabled: root.visible && root.canPlayPronunciation
+    autoRepeat: false
+    onActivated: root.playPronunciation()
+  }
+  Shortcut {
+    sequence: "Alt+D"
+    enabled: root.visible && root.interactive && root.feedback && !input.inputMethodComposing
+    autoRepeat: false
+    onActivated: root.showDetails()
+  }
   property bool converting: false
   property string questionKey: ""
   property var lessonAutoplayIntent: null
   spacing: Style.space(16)
+
+  property Component reviewActions: Component {
+    Flow {
+      Layout.fillWidth: true
+      spacing: Style.space(8)
+      visible: root.session && root.session.phase !== "lesson" && root.session.phase !== "complete"
+      Action {
+        text: root.feedback ? "Continue · Enter" : "Check answer · Enter"
+        selected: true
+        enabled: root.interactive && !root.controller.busy && root.promptReady
+        onClicked: root.submit()
+      }
+      Action {
+        objectName: "study-play-pronunciation"
+        text: root.controller.audioState === "loading" ? "Loading audio…" : "Play pronunciation · Alt+P"
+        visible: !!root.subject && (root.subject.type === "vocabulary" || root.subject.type === "kana_vocabulary")
+        enabled: root.canPlayPronunciation
+        accessibleHint: root.audioRevealed ? "Hear the recorded pronunciation without advancing" : "Available after checking the reading"
+        onClicked: root.playPronunciation()
+      }
+      Action {
+        text: "Details · Alt+D"
+        visible: root.feedback
+        onClicked: root.showDetails()
+      }
+      Action {
+        text: "I made a typo"
+        visible: root.feedback && root.session && root.session.feedback && root.session.feedback && !root.session.feedback.correct
+        enabled: !root.controller.busy
+        onClicked: root.controller.studyAction("correct", {})
+      }
+      Action {
+        text: root.session && root.session.finishing ? "Finishing this batch" : "Finish this batch"
+        visible: root.session && root.session.total > 5
+        enabled: root.session && !root.session.finishing && !root.controller.busy
+        onClicked: root.controller.studyAction("finish", {})
+      }
+    }
+  }
 
   function focusInput() {
     if (!interactive)
@@ -52,6 +115,8 @@ ColumnLayout {
       converting = true
       input.text = session.draft || ""
       converting = false
+      if (typeof controller.resetStudyScroll === "function")
+        controller.resetStudyScroll()
       Qt.callLater(focusInput)
       if (interactive && subject.audio_available === true && session.phase === "feedback" && session.feedback && session.feedback.correct && (session.part === "reading" || subject.type === "kana_vocabulary") && controller.snapshot.settings.autoplay_audio)
         controller.play(subject)
@@ -180,16 +245,26 @@ ColumnLayout {
     visible: root.session !== null
     Label {
       Layout.fillWidth: true
-      text: !root.session ? "" : (root.session.mode === "practice" ? "PRACTICE" : root.session.mode === "lessons" ? "LESSONS" : "REVIEWS") + " · " + (root.session.phase === "lesson" ? "LEARN" : root.session.phase === "complete" ? "COMPLETE" : (root.session.mode === "lessons" ? "QUIZ · " : "") + (root.session.part === "reading" ? "READING" : "MEANING"))
+      text: !root.session ? "" : (root.session.mode === "practice" ? "PRACTICE" : root.session.mode === "lessons" ? "LESSONS" : root.session.all_reviews ? "ALL DUE REVIEWS" : "REVIEWS") + " · " + (root.session.phase === "lesson" ? "LEARN" : root.session.phase === "complete" ? "COMPLETE" : (root.session.mode === "lessons" ? "QUIZ · " : "") + (root.session.part === "reading" ? "READING" : "MEANING"))
       font.pixelSize: Style.font.bodySmall
       font.letterSpacing: 2
       secondary: true
     }
     Label {
+      objectName: "study-session-total"
+      Layout.maximumWidth: parent.width * 0.52
       text: root.session ? root.session.phase === "lesson" ? "Subject " + (root.session.lesson_index + 1) + " of " + root.session.total : root.session.completed + " / " + root.session.total + " subjects" : ""
       secondary: true
       font.pixelSize: Style.font.bodySmall
     }
+  }
+  Label {
+    objectName: "study-reviews-remaining"
+    Layout.fillWidth: true
+    visible: !!root.session && root.session.all_reviews === true && root.session.phase !== "complete"
+    text: root.session ? Math.max(0, root.session.total - root.session.completed) + (root.session.finishing ? " left before this batch ends" : " left in this session") : ""
+    secondary: true
+    font.pixelSize: Style.font.bodySmall
   }
   Rectangle {
     objectName: "study-completion-meter"
@@ -318,7 +393,7 @@ ColumnLayout {
     Card {
       id: subjectCard
       Layout.fillWidth: true
-      Layout.preferredHeight: Math.max(Style.space(220), subjectPrompt.implicitHeight + Style.space(32))
+      Layout.preferredHeight: Math.max(Style.space(root.feedback ? 130 : 200), subjectPrompt.implicitHeight + Style.space(24))
       activeFocusOnTab: root.session && root.session.phase === "lesson"
       border.color: activeFocus ? Theme.indicator(Color.accent, kaniSurface, kaniText) : Theme.tint(kaniText, kaniSurface, 0.14)
       Accessible.role: Accessible.Grouping
@@ -355,15 +430,24 @@ ColumnLayout {
           id: subjectGlyph
           width: parent.width
           subject: root.subject
-          pixelSize: Style.space(94)
+          pixelSize: Style.space(root.feedback ? 60 : 88)
           revealLabel: !!root.session && (root.session.phase === "lesson" || root.session.phase === "feedback")
         }
         Label {
           width: parent.width
-          text: root.session && root.session.phase === "lesson" ? "Discover · " + (root.session.lesson_index + 1) + " of " + root.session.total : root.session && root.session.part === "reading" ? "What is the reading?" : "What is the meaning?"
+          objectName: "study-question-cue"
+          text: root.session && root.session.phase === "lesson" ? "Discover · " + (root.session.lesson_index + 1) + " of " + root.session.total : root.readingQuestion ? "READING · Type the pronunciation" : "MEANING · Answer in English"
           horizontalAlignment: Text.AlignHCenter
           textColor: Color.accent
-          font.pixelSize: Style.font.title
+          font.pixelSize: Style.space(22)
+          font.bold: true
+        }
+        Label {
+          width: parent.width
+          visible: !!root.session && root.session.phase === "question"
+          text: root.readingQuestion ? "Japanese kana · romaji converts as you type" : "English words · no kana needed"
+          horizontalAlignment: Text.AlignHCenter
+          secondary: true
         }
       }
     }
@@ -418,35 +502,35 @@ ColumnLayout {
       font.family: root.session && root.session.part === "reading" ? "Noto Sans CJK JP" : Style.font.family
       font.pixelSize: Style.space(root.session && root.session.part === "reading" ? 36 : 24)
     }
-    Flow {
+    Loader {
       Layout.fillWidth: true
-      spacing: Style.space(8)
-      visible: root.session && root.session.phase !== "lesson"
-      Action {
-        text: root.feedback ? "Continue · Enter" : "Check answer · Enter"
-        selected: true
-        enabled: root.interactive && !root.controller.busy && root.promptReady
-        onClicked: root.submit()
-      }
-      Action {
-        text: "I made a typo"
-        visible: root.feedback && root.session && root.session.feedback && root.session.feedback && !root.session.feedback.correct
-        enabled: !root.controller.busy
-        onClicked: root.controller.studyAction("correct", {})
-      }
-      Action {
-        text: root.session && root.session.finishing ? "Finishing this batch" : "Finish this batch"
-        visible: root.session && root.session.total > 5
-        enabled: root.session && !root.session.finishing && !root.controller.busy
-        onClicked: root.controller.studyAction("finish", {})
-      }
+      active: !root.dockActions
+      sourceComponent: root.reviewActions
+    }
+    Label {
+      id: detailsHeading
+      objectName: "study-details-heading"
+      Layout.fillWidth: true
+      visible: root.feedback
+      text: root.readingQuestion ? "Reading explanation" : "Meaning explanation"
+      font.bold: true
+      activeFocusOnTab: true
+      Keys.onReturnPressed: function(event) { if (!event.isAutoRepeat) root.submit() }
+      Keys.onEnterPressed: function(event) { if (!event.isAutoRepeat) root.submit() }
+    }
+    Label {
+      Layout.fillWidth: true
+      visible: root.audioRevealed && !!root.controller.audioNotice
+      text: root.controller.audioNotice || ""
+      secondary: true
     }
     SubjectDetails {
       Layout.fillWidth: true
       subject: root.subject
       controller: root.controller
       section: root.lessonSection
-      visible: root.session && (root.session.phase === "lesson" || (root.feedback && root.session && root.session.feedback && !root.session.feedback.correct))
+      showPronunciation: root.session && root.session.phase === "lesson"
+      visible: root.session && (root.session.phase === "lesson" || root.feedback)
       showMeaning: root.session && (root.session.phase === "lesson" || root.session.part === "meaning")
       showReading: root.session && (root.session.phase === "lesson" || root.session.part === "reading")
     }
@@ -455,12 +539,6 @@ ColumnLayout {
       controller: root.controller
       subject: root.subject
       visible: root.feedback && root.session && root.session.part === "reading" && root.session.feedback && root.session.feedback.correct && !root.session.feedback.retry && root.subject && root.subject.type === "kanji"
-    }
-    Pronunciation {
-      Layout.fillWidth: true
-      controller: root.controller
-      subject: root.subject
-      visible: root.feedback && root.session && root.session.feedback && root.session.feedback.correct && root.subject && root.subject.audio_available && (root.session.part === "reading" || root.subject.type === "kana_vocabulary")
     }
     Flow {
       Layout.fillWidth: true

@@ -194,6 +194,17 @@ class AgentCliTests(unittest.TestCase):
             self.assertNotIn("PRIVATE", json.dumps(result))
             self.run.assert_not_called()
 
+    def test_all_due_is_an_explicit_review_only_option(self):
+        code, result = self.machine("reviews", "--all")
+        self.assertEqual(0, code)
+        self.assertEqual({"view": "reviews", "all_reviews": True}, self.payload())
+        self.assertIs(result["data"]["all_reviews"], True)
+        for args in (("reviews", "--all", "--batch", "5"), ("lessons", "--all"), ("resume", "--all")):
+            self.run.reset_mock()
+            code, result = self.machine(*args)
+            self.assertEqual(2, code)
+            self.run.assert_not_called()
+
     def test_lookup_preserves_exact_unicode_whitespace_and_literal_metacharacters(self):
         text = '  山\n𠮷\t"$(touch /tmp/never)" `literal`  '
         code, result = self.machine("lookup", text)

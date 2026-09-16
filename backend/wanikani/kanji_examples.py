@@ -6,7 +6,7 @@ parent occurrence may be exempted from automatic graded-spoiler protection.
 """
 import json
 
-from .common import UserError, accessible_subject, epoch
+from .common import UserError, accessible_subject, epoch, session_queue_limit
 from .grading import KANA, reading, validate_subject_answers
 from .media_plan import assets
 from .trail import MAX_SESSIONS
@@ -83,7 +83,7 @@ def _parent(engine, sid, context, session_id=None, revision=None):
             raise UserError("The study question changed. Choose the current example again.", "stale_session")
         index = session.get("lesson_index") if session.get("phase") == "lesson" else session.get("index")
         queue = session.get("queue")
-        if (not isinstance(queue, list) or not 1 <= len(queue) <= 20 or type(index) is not int
+        if (not isinstance(queue, list) or not 1 <= len(queue) <= session_queue_limit(session) or type(index) is not int
                 or not 0 <= index < len(queue) or not isinstance(queue[index], dict)
                 or queue[index].get("subject_id") != sid):
             raise UserError("The study question changed. Choose the current example again.", "stale_session")
@@ -110,7 +110,8 @@ def _relations(parent):
 
 def _protection(engine, exemption, parent_id):
     rows = engine.store.rows("""SELECT id,json_extract(body,'$.mode') AS mode,
-        json_extract(body,'$.queue') AS queue,json_type(body,'$.queue') AS queue_type
+        json_extract(body,'$.queue') AS queue,json_type(body,'$.queue') AS queue_type,
+        json_type(body,'$.all_reviews') AS all_reviews
       FROM sessions INDEXED BY sessions_unfinished_graded WHERE json_extract(body,'$.phase')!='complete'
         AND json_extract(body,'$.mode')!='practice' LIMIT ?""", (MAX_SESSIONS + 1,))
     def unreadable():
@@ -122,7 +123,8 @@ def _protection(engine, exemption, parent_id):
         if row["mode"] not in ("reviews", "lessons") or row["queue_type"] != "array":
             unreadable()
         queue = json.loads(row["queue"])
-        if not isinstance(queue, list) or not 1 <= len(queue) <= 20:
+        limit = session_queue_limit({"mode": row["mode"], "all_reviews": row["all_reviews"] == "true"})
+        if not isinstance(queue, list) or not 1 <= len(queue) <= limit:
             unreadable()
         for index, entry in enumerate(queue):
             if not isinstance(entry, dict) or not _id(entry.get("subject_id")):

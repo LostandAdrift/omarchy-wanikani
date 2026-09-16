@@ -40,6 +40,7 @@ Item {
       root.opened=true;root.view="dashboard";root.navigationSequence=0;root.contentAccess="authored-account"
       root.service=backend;root.session=null;root.busy=false;root.error="";root.focuses=0
       backend.ready=true;backend.locked=false;backend.pending=[]
+      root.snapshot={settings:{batch_size:5},session:null,paused_graded:false,reviews:137}
     }
     function answer(index,value){backend.pending[index].callback(true,value,"");wait(1)}
     function test_current_explicit_start_keeps_mode_and_focus(){
@@ -48,6 +49,14 @@ Item {
       compare(backend.pending[0].args.subjects,[11,12,13])
       answer(0,{id:"authored-lessons",mode:"lessons",phase:"lesson",draft:""})
       compare(root.session.id,"authored-lessons");compare(root.focuses,1)
+    }
+    function test_all_preference_and_explicit_batch_are_distinct(){
+      root.snapshot={settings:{review_all:true,batch_size:10},session:null,paused_graded:false,reviews:137}
+      root.begin("reviews");verify(backend.pending[0].args.all_reviews)
+      root.begin("reviews",5);verify(!backend.pending[1].args.all_reviews);compare(backend.pending[1].args.limit,5)
+      root.begin("reviews",10,undefined,false,true);verify(backend.pending[2].args.all_reviews)
+      root.begin("lessons");verify(!backend.pending[3].args.all_reviews)
+      root.begin("resume");verify(backend.pending[4].args.all_reviews)
     }
     function test_stale_start_never_replaces_new_view_or_refocuses_data(){return [
       {tag:"navigate-away"},{tag:"navigate-away-and-back"},{tag:"closed"},

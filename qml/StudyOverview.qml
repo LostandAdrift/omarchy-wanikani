@@ -15,7 +15,8 @@ ColumnLayout {
   readonly property bool canDiscover: lessons && active && !saved
   readonly property bool studyAllowed: active && !controller.busy && snapshot.vacation !== true && snapshot.status !== "clock_changed"
   readonly property string contextKey: JSON.stringify([controller.contentAccess || "", snapshot.last_sync, snapshot.session_epoch, snapshot.session_revision, snapshot.pending, snapshot.attention, snapshot.saved_sessions, snapshot.max_level])
-  property int batch: 5
+  property int batch: (snapshot.settings || {}).batch_size || 5
+  property bool reviewAll: (snapshot.settings || {}).review_all === true
   property string subjectType: "all"
   property int offset: 0
   readonly property int pageSize: 12
@@ -52,6 +53,17 @@ ColumnLayout {
       recommendAction.forceActiveFocus(Qt.TabFocusReason)
     else
       reviewAction.forceActiveFocus(Qt.TabFocusReason)
+  }
+  function chooseReviews(all, size) {
+    if (!studyAllowed)
+      return
+    reviewAll = all
+    if (size !== undefined)
+      batch = size
+    var values = {review_all: all}
+    if (size !== undefined)
+      values.batch_size = size
+    controller.service.saveSettings(values)
   }
   function invalidate(clear) {
     pageSerial++
@@ -318,10 +330,29 @@ ColumnLayout {
     visible: !root.lessons && !root.saved && root.available > 0
     spacing: Style.space(10)
     Label {
-      text: "Subjects in this batch"
+      text: "How much would you like to review?"
     }
     Flow {
       Layout.fillWidth: true
+      spacing: Style.space(8)
+      Action {
+        objectName: "reviews-scope-batch"
+        text: "A batch"
+        selected: !root.reviewAll
+        enabled: root.studyAllowed
+        onClicked: root.chooseReviews(false)
+      }
+      Action {
+        objectName: "reviews-scope-all"
+        text: "All due · " + root.available
+        selected: root.reviewAll
+        enabled: root.studyAllowed
+        onClicked: root.chooseReviews(true)
+      }
+    }
+    Flow {
+      Layout.fillWidth: true
+      visible: !root.reviewAll
       spacing: Style.space(8)
       Repeater {
         model: [5, 10, 20]
@@ -329,16 +360,23 @@ ColumnLayout {
           required property int modelData
           text: String(modelData)
           selected: root.batch === modelData
-          onClicked: root.batch = modelData
+          enabled: root.studyAllowed
+          onClicked: root.chooseReviews(false, modelData)
         }
       }
     }
     Action {
       id: reviewAction
-      text: "Review " + Math.min(root.batch, root.available) + (Math.min(root.batch, root.available) === 1 ? " subject →" : " subjects →")
+      objectName: "reviews-start"
+      text: root.reviewAll ? "Review all " + root.available + " →" : "Review " + Math.min(root.batch, root.available) + (Math.min(root.batch, root.available) === 1 ? " subject →" : " subjects →")
       selected: true
       enabled: root.studyAllowed
-      onClicked: root.controller.begin(root.mode, root.batch)
+      onClicked: root.controller.begin(root.mode, root.batch, undefined, false, root.reviewAll)
+    }
+    Label {
+      Layout.fillWidth: true
+      text: root.reviewAll ? "All eligible cached reviews due when you start. New arrivals wait for your next session. You can still finish the current group of five or close and resume later." : "A short session at your pace. Your choice is remembered for the next session."
+      secondary: true
     }
   }
   ColumnLayout {
@@ -577,7 +615,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: root.lessons ? "Learn → Lesson quiz → Scheduled reviews. You choose when to start the quiz." : "Another batch is always optional. Escape saves your exact place and returns to work."
+    text: root.lessons ? "Learn → Lesson quiz → Scheduled reviews. You choose when to start the quiz." : "Escape saves your exact place, whether you chose a batch or all due reviews."
     font.pixelSize: Style.font.bodySmall
   }
   Action {

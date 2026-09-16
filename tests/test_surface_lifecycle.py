@@ -32,6 +32,9 @@ def build_surfaces(directory):
                 raise AssertionError('The search timer must be included in the behavior fixture')
             source += timer.group(0) + '\n'
         if name == 'Study':
+            # The reusable footer is presentation, exercised with native controls
+            # in test_review_workspace_ui; this fixture isolates lifecycle IO.
+            source = re.sub(r'(?ms)^  property Component reviewActions: Component \{.*?^  \}\n', '', source)
             source = source.replace('import QtQuick\n', 'import QtQuick\nimport "WanaKana.mjs" as Kana\n', 1)
             source += '''
   QtObject { id: input; property string text: ""; property int cursorPosition: 0; property bool inputMethodComposing: false; function forceActiveFocus() {} }

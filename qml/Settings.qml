@@ -233,6 +233,30 @@ ColumnLayout {
       text: "Study"
       font.bold: true
     }
+    Label {
+      text: "Review session"
+    }
+    Flow {
+      Layout.fillWidth: true
+      spacing: Style.space(8)
+      Action {
+        objectName: "settings-review-batch"
+        text: "A batch"
+        selected: root.snapshot.settings.review_all !== true
+        onClicked: root.controller.service.saveSettings({review_all: false})
+      }
+      Action {
+        objectName: "settings-review-all"
+        text: "All due reviews"
+        selected: root.snapshot.settings.review_all === true
+        onClicked: root.controller.service.saveSettings({review_all: true})
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: "Choose a short batch or all reviews due when you start. Saved sessions keep their original queue. Lessons stay in batches."
+      secondary: true
+    }
     Repeater {
       model: [
         {
@@ -370,6 +394,33 @@ ColumnLayout {
     Layout.fillWidth: true
     visible: root.section === "desktop"
     spacing: Style.space(14)
+    Label {
+      text: "Window behavior"
+      font.bold: true
+    }
+    RowLayout {
+      Layout.fillWidth: true
+      Label {
+        Layout.fillWidth: true
+        text: "Close when clicking outside"
+      }
+      Action {
+        objectName: "settings-close-on-outside-click"
+        text: selected ? "On" : "Off"
+        selected: root.snapshot.settings.close_on_outside_click !== false
+        accessibleName: "Close when clicking outside"
+        accessibleHint: "Includes other monitors. Your unfinished session stays saved."
+        Accessible.checkable: true
+        Accessible.checked: selected
+        onClicked: root.controller.service.saveSettings({close_on_outside_click: !selected})
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: "Click outside WaniKani, including on another monitor, to close it. Moving the pointer away keeps it open. Turn this off to keep the panel visible while using another app. Escape and Close always work; your unfinished session stays saved."
+      secondary: true
+      font.pixelSize: Style.font.bodySmall
+    }
     Label {
       text: "Desktop & companion"
       font.bold: true
@@ -586,7 +637,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "WaniKani for Omarchy · 0.2.17\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
+    text: "WaniKani for Omarchy · 0.2.19\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
     secondary: true
     font.pixelSize: Style.font.bodySmall
   }

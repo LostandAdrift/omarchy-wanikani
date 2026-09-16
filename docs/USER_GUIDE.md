@@ -47,7 +47,11 @@ Reading answers require exact normalized kana. Meaning grading accepts the subje
 
 **I made a typo** is available only for the current incorrect feedback before advancing. The correction is recorded locally. A completed subject enters the submission queue only when you acknowledge its final feedback; already committed WaniKani progress cannot be retroactively changed. Feedback exposes only the part you just answered, with the relevant personal note where available.
 
-At the end, **Review this batch** shows recorded mistakes and each subject's current local submission status. **Practice items to revisit** opens ungraded practice of missed items; guarded typo corrections are excluded. Another batch is optional. [Authored batch recap](screenshots/recap-dark.png)
+Choose **A batch** or **All due · N** on the Reviews overview. This choice is remembered for Today and the next default review start, and can also be changed in Settings → Study. An explicit batch start still uses that batch size. All due includes eligible cached subjects due when the new session starts after its normal refresh; missing content, pending work and inaccessible subjects remain excluded. New arrivals do not extend the saved stack. Lessons remain separate batches.
+
+The review header shows completed subjects out of the session total. All-due sessions also show how many remain. Escape pauses the entire stack with its exact draft and mistakes. **Finish this batch** ends after the current group of five, leaving untouched reviews due for another session. Changing the default never reshapes an unfinished saved session.
+
+At the end, **Review this session** shows recorded mistakes and each subject's current local submission status. Large recaps have Previous/Next controls with twenty subjects per page. **Practice items to revisit** opens ungraded practice of missed items on that page; guarded typo corrections are excluded. Another session is optional. [Authored batch recap](screenshots/recap-dark.png)
 
 The **Practice** library groups saved difficult items, recent local mistakes and learned subjects. Compact cards show familiar SRS stage names and give the selection reason its own line. Choose up to twenty, or add five at a time. Cards explain why each item appears and whether required content is available offline. Graded answers remain concealed on protected library cards. Starting an explicitly different practice selection keeps the earlier local record and paused lessons/reviews; it replaces only the active ungraded practice reference. [Authored compact practice selection](screenshots/practice-component-dark.png)
 
@@ -175,3 +179,10 @@ If the interface reports that an older saved token still needs removal, unlock t
 - Plugin removal leaves local account data until explicitly deleted. The optional integration remover removes only owned, unchanged launchers and its marked shortcut block.
 
 Installation and removal instructions live in the [README](../README.md). Keep source separate from private state and never copy account databases or keyring contents into a release. The project has no telemetry, cloud backend or AI grading; account synchronization and media downloads still use the network.
+
+
+## Review keyboard and desktop behavior
+
+Reviews explicitly label **MEANING · Answer in English** and **READING · Type the pronunciation**. Reading input converts romaji to kana. Enter checks an answer and then continues from feedback; it never automatically acknowledges feedback. The action row stays below the scrolling explanation. **Alt+P** plays an available recording after checking a reading, including incorrect readings; meaning questions do not reveal vocabulary pronunciation. **Alt+D** focuses the explanation, where Enter continues. These shortcuts pause during IME composition, and playback pauses while saving, locked, closed, or already loading audio.
+
+A visible **Settings** button opens the existing categorized settings page. Under **Desktop → Window behavior**, **Close when clicking outside** defaults to On and includes clicks on another monitor. Pointer movement alone does not dismiss the panel. Turn it Off to keep the panel visible while another application receives input. Escape and Close always dismiss. The preference is stored with local settings, survives restart/update, and leaves saved questions, drafts, feedback and error counts intact.

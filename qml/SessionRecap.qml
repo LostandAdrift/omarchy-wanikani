@@ -9,6 +9,7 @@ ColumnLayout {
   required property var session
   property var report: null
   property bool expanded: false
+  property int offset: 0
   property bool loading: false
   property string notice: ""
   property int requestSerial: 0
@@ -24,7 +25,8 @@ ColumnLayout {
     var serial = ++requestSerial
     loading = true
     controller.service.request("session_report", {
-      session_id: session.id
+      session_id: session.id,
+      offset: offset
     }, function (ok, data, message) {
       if (!root || root.requestSerial !== serial)
         return
@@ -40,6 +42,7 @@ ColumnLayout {
   onSessionIdChanged: {
     requestSerial++
     expanded = false
+    offset = 0
     report = null
     refreshDelay.restart()
   }
@@ -81,14 +84,14 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: Style.space(8)
     Action {
-      text: root.expanded ? "Hide batch recap" : "Review this batch"
+      text: root.expanded ? "Hide session recap" : "Review this session"
       enabled: !!root.report && !root.loading
       selected: root.expanded
       onClicked: root.expanded = !root.expanded
     }
     Action {
       visible: !!root.report && root.report.mistake_ids.length > 0
-      text: root.report ? "Practice items to revisit · " + root.report.mistake_ids.length : "Practice items to revisit"
+      text: root.report ? "Practice items to revisit" + (root.report.total > 20 ? " on this page" : "") + " · " + root.report.mistake_ids.length : "Practice items to revisit"
       enabled: !root.controller.busy
       onClicked: root.practice(root.report.mistake_ids)
     }
@@ -161,7 +164,7 @@ ColumnLayout {
       Layout.fillWidth: true
       spacing: Style.space(8)
       Action {
-        text: "Practice this batch"
+        text: root.report && root.report.total > 20 ? "Practice this page" : "Practice this batch"
         enabled: !!root.report && root.report.practice_ids.length > 0 && !root.controller.busy
         onClicked: root.practice(root.report.practice_ids)
       }
@@ -169,6 +172,26 @@ ColumnLayout {
         text: "Saved submissions"
         visible: root.report && root.report.mode !== "practice"
         onClicked: root.controller.navigate("recovery")
+      }
+    }
+    Flow {
+      Layout.fillWidth: true
+      visible: !!root.report && root.report.total > 20
+      spacing: Style.space(8)
+      Action {
+        objectName: "recap-previous-page"
+        text: "Previous 20"
+        enabled: root.offset > 0 && !root.loading
+        onClicked: { root.offset = Math.max(0, root.offset - 20); root.refresh() }
+      }
+      Label {
+        text: root.report ? (root.report.offset + 1) + "–" + (root.report.offset + root.report.items.length) + " of " + root.report.total : ""
+      }
+      Action {
+        objectName: "recap-next-page"
+        text: "Next 20"
+        enabled: !!root.report && root.report.has_more === true && !root.loading
+        onClicked: { root.offset += 20; root.refresh() }
       }
     }
   }

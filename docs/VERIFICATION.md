@@ -1,5 +1,13 @@
 # Verification and release qualification
 
+## September 16 · 0.2.19 batch or all due reviews
+
+Frozen runtime tree `540e5bfa610df1dcc01f9af713e43e275cf011a8` passed the full verifier: **1,170 Python tests**, one optional audio-device skip, zero failures/errors; **126 core Qt checks**; valid manifest; **44 QML files**, zero lint errors and 612 retained warnings. Report: `/tmp/wanikani-verify-j5qseoov/report.json`. The first candidate failed one version-label assertion; the Settings footer was corrected and the entire suite rerun. The final commit adds this verification note to the tested tree.
+
+New coverage includes large queues, explicit batch override and persisted preference, stable start-time membership, paused feedback and drafts through reopening, pending/content exclusions, transactional interruption, duplicate local start commands, finish-five behavior, whole-stack spoiler/media protection, completed-session history, paged recaps, keyboard scope selection and recap paging, narrow counters, and review-only CLI validation. Only authored fixtures and inert interfaces were used; no live answers or submissions were generated.
+
+An isolated 1,000-subject authored run created the queue in 33.0 ms. Twenty durable answer commands measured 9.5 ms median and 16.3 ms maximum on this machine. These backend observations do not measure physical-key latency, native window opening, network synchronization or audible playback. An authored overview capture at `/tmp/wanikani-all-review-preview/all-reviews-overview.png` was inspected; overview fixtures use Basic button adapters, while the separate recap test uses the installed native action control. Installed verification remains a separate check.
+
 ## September 5 overnight 0.2.1 source checkpoint
 
 Frozen tree `83e71ea71f60c89e4549c3a4e93056ca2512ba90` passed **812 tests in 246.998 seconds** from `/tmp/wanikani-milestone-3-release-r2` (log `/tmp/wanikani-milestone-3-release-r2-tests.log`). The first archive found one hardcoded 0.2.0 footer expectation; the repaired test now compares the rendered version against the manifest. Runtime files are identical between those archives. This checkpoint adds deliberate preparation of up to five familiar recordings, cooperative cancellation and count-only progress, fresh post-download readiness, and the optional repository-bundled operating skill.
@@ -359,3 +367,14 @@ On installed Omarchy 4.0.3, the plugin, persistent shortcuts and bar registratio
 Frozen tree `a95342c385358afda9ebd64c705c0731e320bd54` passed the full verifier; report `/tmp/wanikani-verify-6d1ie3u1/report.json`. It includes the new adapter and actual open/close callback regression fixture. The standalone qmltestrunner cannot load the Quickshell Io binary plugin on this installation, so that attempted live-adapter fixture did not run; ordinary Qt regressions use inert Process/collector adapters. Hosted opening after installation is required separately. No live study is automated.
 
 The fix is committed in the plugin source repository and installed with the ordinary plugin manager. Global shortcuts are in user `hypr/bindings.lua`, launcher entries in user applications, and the bar entry in user `omarchy/shell.json`; no packaged Omarchy file is edited. These persist through ordinary upgrades, though future breaking API changes may require another compatibility update.
+
+
+## September 16 · 0.2.18 review keyboard and click-away behavior
+
+Frozen tree `49850267b7cabc32714545a35625638d2c1d93b8` passed the complete verifier on Omarchy 4.0.4 / Qt 6.11.2: 1157 tests completed, one optional audio-device skip, no failures or errors; 126 core Qt checks passed; manifest valid; 44 QML files linted with zero errors, 608 warnings and two informational findings. Report `/tmp/wanikani-verify-ni_dur8t/report.json`; runtime blobs/modes remained exact. The final commit differs only by this verification note.
+
+New tests exercise persisted default-on click-away settings without changing session rows, production dismissal/grab wiring with an inert compositor adapter, native audio/details shortcuts and their guards, distinct meaning/reading prompts, and pinned action visibility at 756 and 360 logical pixels with long explanations. Dark/light authored native review previews were inspected in `/tmp/wanikani-review-preview/`; they use inert account/audio/theme adapters, not the live account or full shell. Alt+P and Alt+D had no host binding conflicts.
+
+The first full run (`0a65faab38643e552d81b5a17606d023aa86ff49`, `/tmp/wanikani-verify-xbypk6fs/report.json`) exposed a behavior-only lifecycle fixture that accidentally included the new presentation component without its Action type. Its extraction now excludes the presentation footer, which is independently exercised with native controls. The focused lifecycle test and full rerun both pass. No product behavior was changed to conceal the failure.
+
+Native focus-grab dismissal follows the installed shell's PopupCard and the public Quickshell HyprlandFocusGrab contract. Offscreen tests do not establish physical cross-monitor clicking, IME behavior or audible playback. Local installation requires fresh unlocked/closed-study checks and saved-session comparison. The owner requested a public app repository and a draft PR, with no merge until explicit approval after local testing.

@@ -4,7 +4,7 @@ import re
 import time
 import uuid
 from datetime import datetime
-from .common import UserError, accessible_subject, epoch, plain, stamp
+from .common import MAX_REVIEW_SESSION, UserError, accessible_subject, epoch, plain, stamp
 from .media_files import available_file
 from .grading import grade, validate_subject_answers
 from . import comparisons, editor, history, lesson_flow, milestones
@@ -15,7 +15,7 @@ DEFAULTS = {
     "idle_gallery": False, "companion_animation": True, "reduced_motion": False,
     "autoplay_audio": False, "voice_actor_id": 1, "cache_limit_mb": 256,
     "autoplay_lessons": False, "autoplay_listening": True,
-    "strict_meanings": False,
+    "strict_meanings": False, "close_on_outside_click": True, "review_all": False,
     "last_notification_at": 0,
     "demo_offline": False,
 }
@@ -288,11 +288,15 @@ class Engine:
             active = unfinished(self.store.get("active_session"), "practice")
             return active or unfinished(self.store.get("practice_session"), "practice")
 
-    def start(self, mode="reviews", limit=None, subjects=None, replace_practice=False):
+    def start(self, mode="reviews", limit=None, subjects=None, replace_practice=False, all_reviews=None):
         if mode not in ("reviews", "lessons", "practice", "resume"):
             raise UserError("Unknown study mode.", "invalid_mode")
         if not isinstance(replace_practice, bool) or (replace_practice and mode != "practice"):
             raise UserError("Only ungraded practice can start a new selection.")
+        if all_reviews is not None and type(all_reviews) is not bool:
+            raise UserError("Choose a review batch or all due reviews.")
+        if all_reviews and (mode not in ("reviews", "resume") or subjects is not None):
+            raise UserError("All due is available only for reviews.")
         with self.store.transaction():
             if replace_practice:
                 from .practice import validate_selection
@@ -309,7 +313,9 @@ class Engine:
                 raise UserError("WaniKani vacation mode is active. Ungraded practice is still available.", "vacation")
             if mode != "practice" and (abs(self.clock_offset) > 300 or self.clock_untrusted):
                 raise UserError("The system clock differs from WaniKani. Correct it before graded study.", "clock_changed")
-            count = max(1, min(20, int(limit or self.settings()["batch_size"])))
+            all_reviews = mode == "reviews" and (all_reviews if all_reviews is not None
+                else limit is None and self.settings()["review_all"])
+            count = MAX_REVIEW_SESSION if all_reviews else max(1, min(20, int(limit or self.settings()["batch_size"])))
             if mode == "practice":
                 if subjects:
                     ids = subjects
@@ -343,7 +349,9 @@ class Engine:
                 queue.append({"subject_id": subject["id"], "assignment_id": assignment["id"] if assignment else None,
                     "baseline": baseline(assignment) if assignment else {}, "parts": parts,
                     "errors": {"meaning": 0, "reading": 0}, "done": False})
-                if len(queue) >= count:
+                if all_reviews and len(queue) > count:
+                    raise UserError("This review stack exceeds the supported catalogue size. Choose a batch instead.", "queue_too_large")
+                if not all_reviews and len(queue) >= count:
                     break
             if not queue:
                 raise UserError("No eligible cached items are ready for this session. Refresh or choose another activity.", "empty_queue")
@@ -352,6 +360,8 @@ class Engine:
                 "draft": "", "lesson_index": 0, "completed": 0, "overrides": 0, "started_at": stamp(self.now()), "ended_at": None}
             if mode == "lessons":
                 session["lesson_step"] = "meaning"
+            if all_reviews:
+                session["all_reviews"] = True
             self.store.save_session(session)
             return self.session_view(session)
 
@@ -561,6 +571,7 @@ class Engine:
         view["revision"] = session.get("revision", 0)
         view["session_epoch"] = self.store.get("session_epoch", "")
         view["total"] = min(len(session["queue"]), session.get("finish_at", len(session["queue"])))
+        view["all_reviews"] = session.get("all_reviews") is True
         view["finishing"] = "finish_at" in session
         view["invalidated"] = session.get("invalidated", "")
         view["errors"] = sum(sum(item["errors"].values()) for item in session["queue"])
@@ -691,6 +702,7 @@ class Engine:
                 position = saved["lesson_index"] if saved["phase"] == "lesson" else saved["index"]
                 summaries[mode] = {key: saved[key] for key in ("id", "mode", "phase", "part", "completed")}
                 summaries[mode].update(total=total, position=min(position + 1, total),
+                    all_reviews=saved.get("all_reviews") is True,
                     active=bool(session and session["id"] == saved["id"]),
                     invalidated=saved.get("invalidated", ""), revision=saved.get("revision", 0))
             paused = any(value and not value["active"] for mode, value in summaries.items() if mode != "practice")
@@ -740,7 +752,7 @@ class Engine:
             "credential_cleanup_needed": bool(self.store.get("credential_may_exist", False)) and self.store.get("credential_storage") in ("session", "disconnected")}
 
     def command(self, request_id, method, args):
-        handlers = {"start": lambda: self.start(args.get("mode", "reviews"), args.get("limit"), args.get("subjects"), args.get("replace_practice", False)),
+        handlers = {"start": lambda: self.start(args.get("mode", "reviews"), args.get("limit"), args.get("subjects"), args.get("replace_practice", False), args.get("all_reviews")),
             "trail_practice_start": lambda: self.start_trail_practice(args),
             "draft": lambda: self.draft(args.get("text", "")), "answer": lambda: self.answer(args.get("text", "")),
             "advance": self.advance, "correct": self.correct, "finish": self.finish,

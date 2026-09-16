@@ -26,7 +26,7 @@ import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
-from .common import UserError, epoch
+from .common import UserError, epoch, session_queue_limit
 
 
 MAX_FILE_BYTES = 8 * 1024 * 1024
@@ -254,10 +254,10 @@ def _active_subjects(store):
             continue
         current = session.get("index", 0)
         current = current if type(current) is int and current >= 0 else 0
-        for index, entry in enumerate(queue[:20]):
+        for index, entry in enumerate(queue[:session_queue_limit(session)]):
             if not isinstance(entry, dict) or entry.get("done") is True or type(entry.get("subject_id")) is not int:
                 continue
-            position = index - current if index >= current else 20 + index
+            position = index - current if index >= current else len(queue) + index
             subject_id = entry["subject_id"]
             active[subject_id] = min(active.get(subject_id, (99, 99)), (context, position))
     return active

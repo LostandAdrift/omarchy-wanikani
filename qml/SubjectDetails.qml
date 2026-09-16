@@ -12,6 +12,7 @@ ColumnLayout {
   required property var controller
   property bool showMeaning: true
   property bool showReading: true
+  property bool showPronunciation: true
   property string section: "all"
   property bool editable: false
   property bool editorReady: false
@@ -344,7 +345,7 @@ ColumnLayout {
   }
   Pronunciation {
     Layout.fillWidth: true
-    visible: root.showReading && root.sectionVisible("reading") && root.subject && root.subject.audio_available
+    visible: root.showPronunciation && root.showReading && root.sectionVisible("reading") && root.subject && root.subject.audio_available
     controller: root.controller
     subject: root.subject
   }

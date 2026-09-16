@@ -91,6 +91,19 @@ class EngineFixture:
 
 
 class EngineTests(EngineFixture, unittest.TestCase):
+    def test_click_away_preference_defaults_on_and_persists_without_changing_study(self):
+        self.assertIs(self.engine.settings()["close_on_outside_click"], True)
+        session = self.engine.start("reviews", 5)
+        before = self.store.db.execute("SELECT id,body FROM sessions ORDER BY id").fetchall()
+        self.engine.set_settings({"close_on_outside_click": False})
+        self.store.close()
+        self.store = Store(self.path)
+        self.engine = Engine(self.store, clock=lambda: NOW)
+        self.assertIs(self.engine.settings()["close_on_outside_click"], False)
+        self.assertEqual(before, self.store.db.execute("SELECT id,body FROM sessions ORDER BY id").fetchall())
+        with self.assertRaises(UserError):
+            self.engine.set_settings({"close_on_outside_click": "false"})
+
     def test_finish_current_group_preserves_answers(self):
         for a in self.store.all('assignment'):
             if a['data']['started_at']:
