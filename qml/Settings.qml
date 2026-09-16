@@ -371,6 +371,33 @@ ColumnLayout {
     visible: root.section === "desktop"
     spacing: Style.space(14)
     Label {
+      text: "Window behavior"
+      font.bold: true
+    }
+    RowLayout {
+      Layout.fillWidth: true
+      Label {
+        Layout.fillWidth: true
+        text: "Close when clicking outside"
+      }
+      Action {
+        objectName: "settings-close-on-outside-click"
+        text: selected ? "On" : "Off"
+        selected: root.snapshot.settings.close_on_outside_click !== false
+        accessibleName: "Close when clicking outside"
+        accessibleHint: "Includes other monitors. Your unfinished session stays saved."
+        Accessible.checkable: true
+        Accessible.checked: selected
+        onClicked: root.controller.service.saveSettings({close_on_outside_click: !selected})
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: "Click outside WaniKani, including on another monitor, to close it. Moving the pointer away keeps it open. Turn this off to keep the panel visible while using another app. Escape and Close always work; your unfinished session stays saved."
+      secondary: true
+      font.pixelSize: Style.font.bodySmall
+    }
+    Label {
       text: "Desktop & companion"
       font.bold: true
     }
@@ -586,7 +613,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "WaniKani for Omarchy · 0.2.17\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
+    text: "WaniKani for Omarchy · 0.2.18\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
     secondary: true
     font.pixelSize: Style.font.bodySmall
   }

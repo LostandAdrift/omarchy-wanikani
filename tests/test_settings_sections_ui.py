@@ -158,6 +158,13 @@ Rectangle {
       section("audio");backend.previews[0].callback(true,Object.assign({},backend.rhythm,{reason:"STALE PREVIEW"}),"")
       wait(1);compare(rhythm.draftPreview,null);compare(rhythm.timesText,"09:30, 15:00");compare(backend.configurations,[])
     }
+    function test_click_away_defaults_on_and_toggle_writes_only_preference(){
+      make();section("desktop");var toggle=item("settings-close-on-outside-click")
+      verify(toggle.selected);activate(toggle);compare(backend.writes,[{close_on_outside_click:false}])
+      owner.snapshot=Object.assign({},owner.snapshot,{settings:Object.assign({},owner.snapshot.settings,{close_on_outside_click:false})})
+      verify(!toggle.selected);activate(toggle);compare(backend.writes[1],{close_on_outside_click:true})
+      compare(owner.calls,[]);compare(owner.navigation,[])
+    }
     function test_existing_explicit_actions_keep_their_exact_contract(){
       make();section("audio");activate(allItems(page).filter(function(value){return value.accessibleName==="Autoplay new listening prompts"})[0]);compare(backend.writes,[{autoplay_listening:false}])
       section("desktop");activate(action("Install shortcuts & launchers"));activate(action("Remove shortcuts & launchers"));compare(owner.integrations,[false,true])

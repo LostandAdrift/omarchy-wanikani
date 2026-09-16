@@ -6,7 +6,7 @@ A native WaniKani client for Omarchy: lessons, reviews, listening practice, offl
 
 **Omarchy 4.0.3 compatibility:** study and lookup use the public read-only lock-status IPC because third-party plugins no longer receive the live lock service. An explicit open waits for a valid unlocked response; failures remain closed. Automatic ambient display and reminders are suppressed when the required idle/notification services are unavailable.
 
-**Version 0.2.17 is a development release.** This is an independent community client, not a Tofugu product. Live study and fourteen days of personal use remain qualification gates.
+**Version 0.2.18 is a development release.** Reviews have explicit English/kana prompts, pinned actions, Alt+P pronunciation and Alt+D explanations. Click-away dismissal defaults on; change it in Settings → Desktop. This is an independent community client, not a Tofugu product. Live study and fourteen days of personal use remain qualification gates.
 
 ![Today with separate saved Reviews and Lessons, confirmed level progress and both audio activities](docs/screenshots/today-component-dark.png)
 
@@ -16,13 +16,15 @@ A native WaniKani client for Omarchy: lessons, reviews, listening practice, offl
 
 Target: **Omarchy 4.0.2 / Quickshell 0.3.1**, Python 3.11+, Qt Multimedia and Noto Sans CJK JP. `wl-paste` supports explicit selection lookup; `secret-tool` supports optional keyring persistence.
 
-This repository is currently local and unpublished. Install a committed checkout with:
+Install from GitHub, or use a committed local checkout for development:
 
 ```sh
+omarchy plugin add https://github.com/LostandAdrift/omarchy-wanikani --enable
+# Local development:
 omarchy plugin add /absolute/path/to/omarchy-wanikani --enable
 ```
 
-Use the ordinary plugin manager for installation and updates. Keep the desktop fully unlocked and study closed during plugin lifecycle changes. This machine's [documented lock/reload incident](docs/LOCK_RELOAD_INCIDENT.md) has deferred installation of later milestones; [verified source and installed state](docs/IMPLEMENTATION.md) are recorded separately.
+Use the ordinary plugin manager for installation and updates. Keep the desktop fully unlocked and study closed during plugin lifecycle changes. A historical [lock/reload incident](docs/LOCK_RELOAD_INCIDENT.md) motivates these lifecycle checks; [verified source and installed state](docs/IMPLEMENTATION.md) are recorded separately.
 
 Click the crab in the bar, then choose **Try the demo** or **Settings → Account**. A WaniKani personal API token with read access supports dashboard and lookup. Native lessons/reviews also need assignment-start and review-create permissions; notes and synonyms need study-material create/update permissions. Credentials travel through private process pipes and can be stored in the desktop keyring. Session-only authentication is available when persistence is unavailable.
 

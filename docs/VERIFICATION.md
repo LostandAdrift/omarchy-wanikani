@@ -359,3 +359,14 @@ On installed Omarchy 4.0.3, the plugin, persistent shortcuts and bar registratio
 Frozen tree `a95342c385358afda9ebd64c705c0731e320bd54` passed the full verifier; report `/tmp/wanikani-verify-6d1ie3u1/report.json`. It includes the new adapter and actual open/close callback regression fixture. The standalone qmltestrunner cannot load the Quickshell Io binary plugin on this installation, so that attempted live-adapter fixture did not run; ordinary Qt regressions use inert Process/collector adapters. Hosted opening after installation is required separately. No live study is automated.
 
 The fix is committed in the plugin source repository and installed with the ordinary plugin manager. Global shortcuts are in user `hypr/bindings.lua`, launcher entries in user applications, and the bar entry in user `omarchy/shell.json`; no packaged Omarchy file is edited. These persist through ordinary upgrades, though future breaking API changes may require another compatibility update.
+
+
+## September 16 · 0.2.18 review keyboard and click-away behavior
+
+Frozen tree `49850267b7cabc32714545a35625638d2c1d93b8` passed the complete verifier on Omarchy 4.0.4 / Qt 6.11.2: 1157 tests completed, one optional audio-device skip, no failures or errors; 126 core Qt checks passed; manifest valid; 44 QML files linted with zero errors, 608 warnings and two informational findings. Report `/tmp/wanikani-verify-ni_dur8t/report.json`; runtime blobs/modes remained exact. The final commit differs only by this verification note.
+
+New tests exercise persisted default-on click-away settings without changing session rows, production dismissal/grab wiring with an inert compositor adapter, native audio/details shortcuts and their guards, distinct meaning/reading prompts, and pinned action visibility at 756 and 360 logical pixels with long explanations. Dark/light authored native review previews were inspected in `/tmp/wanikani-review-preview/`; they use inert account/audio/theme adapters, not the live account or full shell. Alt+P and Alt+D had no host binding conflicts.
+
+The first full run (`0a65faab38643e552d81b5a17606d023aa86ff49`, `/tmp/wanikani-verify-xbypk6fs/report.json`) exposed a behavior-only lifecycle fixture that accidentally included the new presentation component without its Action type. Its extraction now excludes the presentation footer, which is independently exercised with native controls. The focused lifecycle test and full rerun both pass. No product behavior was changed to conceal the failure.
+
+Native focus-grab dismissal follows the installed shell's PopupCard and the public Quickshell HyprlandFocusGrab contract. Offscreen tests do not establish physical cross-monitor clicking, IME behavior or audible playback. Local installation requires fresh unlocked/closed-study checks and saved-session comparison. The owner requested a public app repository and a draft PR, with no merge until explicit approval after local testing.

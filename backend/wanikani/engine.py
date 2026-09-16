@@ -15,7 +15,7 @@ DEFAULTS = {
     "idle_gallery": False, "companion_animation": True, "reduced_motion": False,
     "autoplay_audio": False, "voice_actor_id": 1, "cache_limit_mb": 256,
     "autoplay_lessons": False, "autoplay_listening": True,
-    "strict_meanings": False,
+    "strict_meanings": False, "close_on_outside_click": True,
     "last_notification_at": 0,
     "demo_offline": False,
 }

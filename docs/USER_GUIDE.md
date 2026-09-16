@@ -175,3 +175,10 @@ If the interface reports that an older saved token still needs removal, unlock t
 - Plugin removal leaves local account data until explicitly deleted. The optional integration remover removes only owned, unchanged launchers and its marked shortcut block.
 
 Installation and removal instructions live in the [README](../README.md). Keep source separate from private state and never copy account databases or keyring contents into a release. The project has no telemetry, cloud backend or AI grading; account synchronization and media downloads still use the network.
+
+
+## Review keyboard and desktop behavior
+
+Reviews explicitly label **MEANING · Answer in English** and **READING · Type the pronunciation**. Reading input converts romaji to kana. Enter checks an answer and then continues from feedback; it never automatically acknowledges feedback. The action row stays below the scrolling explanation. **Alt+P** plays an available recording after checking a reading, including incorrect readings; meaning questions do not reveal vocabulary pronunciation. **Alt+D** focuses the explanation, where Enter continues. These shortcuts pause during IME composition, and playback pauses while saving, locked, closed, or already loading audio.
+
+A visible **Settings** button opens the existing categorized settings page. Under **Desktop → Window behavior**, **Close when clicking outside** defaults to On and includes clicks on another monitor. Pointer movement alone does not dismiss the panel. Turn it Off to keep the panel visible while another application receives input. Escape and Close always dismiss. The preference is stored with local settings, survives restart/update, and leaves saved questions, drafts, feedback and error counts intact.
