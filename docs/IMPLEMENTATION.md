@@ -2,6 +2,12 @@
 
 User authorized the complete researched plan on 2026-09-04 and resumed work after a Codex reset. An earlier verified milestone is installed locally; newer source can remain uninstalled. Continue from the factual status and remaining qualification gates below; do not redo completed setup or discard the saved study session.
 
+## September 16 follow-up · batch or all due reviews
+
+Version 0.2.19 adds remembered `review_all` and an explicit `all_reviews` start option. The Reviews overview and Settings → Study offer a batch or all eligible cached reviews due when starting. Today/default study starts honor the preference; explicit numeric batches override it. Existing sessions always retain their original queue, answers and errors. The all-due queue is frozen after preflight; subsequent arrivals wait for a later session. Finish-this-batch keeps its existing five-subject boundary. Lessons and practice retain their twenty-subject bound.
+
+Large review sessions carry an explicit marker and use the existing 12,000-subject catalogue safety bound; exceeding it rejects transactionally instead of silently truncating. Queue protection, kanji examples, media priority, activity counts and saved-session presentation recognize that marker. Session recaps hydrate at most twenty subject cards per page and recap practice remains bounded. The CLI exposes `reviews --all` and rejects combination with `--batch`. Verification and installed status must be recorded separately; the GitHub PR still requires the user's testing and explicit merge approval.
+
 ## September 16 follow-up · review keyboard and click-away behavior
 
 Version 0.2.18 adds native HyprlandFocusGrab outside-click dismissal (including other monitors), default-on persisted `close_on_outside_click`, a visible Settings entry and a Desktop window-behavior section. Opting out disables the grab and uses on-demand keyboard focus, so other applications can receive input while the panel stays visible. Closing always follows existing saved-session behavior. The user now authorizes a public GitHub app repository and a PR; **do not merge the PR until the user tests locally and explicitly approves**. Install locally first, only with fresh unlocked/closed-study checks.

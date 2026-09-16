@@ -1,5 +1,13 @@
 # Verification and release qualification
 
+## September 16 · 0.2.19 batch or all due reviews
+
+Frozen runtime tree `540e5bfa610df1dcc01f9af713e43e275cf011a8` passed the full verifier: **1,170 Python tests**, one optional audio-device skip, zero failures/errors; **126 core Qt checks**; valid manifest; **44 QML files**, zero lint errors and 612 retained warnings. Report: `/tmp/wanikani-verify-j5qseoov/report.json`. The first candidate failed one version-label assertion; the Settings footer was corrected and the entire suite rerun. The final commit adds this verification note to the tested tree.
+
+New coverage includes large queues, explicit batch override and persisted preference, stable start-time membership, paused feedback and drafts through reopening, pending/content exclusions, transactional interruption, duplicate local start commands, finish-five behavior, whole-stack spoiler/media protection, completed-session history, paged recaps, keyboard scope selection and recap paging, narrow counters, and review-only CLI validation. Only authored fixtures and inert interfaces were used; no live answers or submissions were generated.
+
+An isolated 1,000-subject authored run created the queue in 33.0 ms. Twenty durable answer commands measured 9.5 ms median and 16.3 ms maximum on this machine. These backend observations do not measure physical-key latency, native window opening, network synchronization or audible playback. An authored overview capture at `/tmp/wanikani-all-review-preview/all-reviews-overview.png` was inspected; overview fixtures use Basic button adapters, while the separate recap test uses the installed native action control. Installed verification remains a separate check.
+
 ## September 5 overnight 0.2.1 source checkpoint
 
 Frozen tree `83e71ea71f60c89e4549c3a4e93056ca2512ba90` passed **812 tests in 246.998 seconds** from `/tmp/wanikani-milestone-3-release-r2` (log `/tmp/wanikani-milestone-3-release-r2-tests.log`). The first archive found one hardcoded 0.2.0 footer expectation; the repaired test now compares the rendered version against the manifest. Runtime files are identical between those archives. This checkpoint adds deliberate preparation of up to five familiar recordings, cooperative cancellation and count-only progress, fresh post-download readiness, and the optional repository-bundled operating skill.

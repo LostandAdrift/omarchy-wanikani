@@ -62,7 +62,7 @@ def capabilities():
                 "description": "Project one cached local learning window through a single status call. No account refresh, network request, UI opening or fresh history calculation is initiated."},
             "doctor": {"effect": "read_only", "description": "Check dependency presence, shell/plugin accessibility and redacted cached status."},
             "open": {"effect": "show_ui", "views": list(VIEWS), "description": "Open a named surface; does not itself begin study or read clipboard text."},
-            "reviews": {"effect": "begin_study", "user_intent_required": True, "batch": {"minimum": 1, "maximum": 20, "default": "plugin preference"}},
+            "reviews": {"effect": "begin_study", "user_intent_required": True, "all_due": True, "batch": {"minimum": 1, "maximum": 20, "default": "plugin preference"}},
             "lessons": {"effect": "begin_study", "user_intent_required": True, "batch": {"minimum": 1, "maximum": 20, "default": "plugin preference"}},
             "resume": {"effect": "begin_study", "user_intent_required": True, "batch": {"minimum": 1, "maximum": 20, "default": "plugin preference"}},
             "lookup": {"effect": "show_ui", "source": ["explicit TEXT", "--selection"], "maximum_code_points": 256,
@@ -109,7 +109,10 @@ def parser():
     opened.add_argument("view", choices=VIEWS)
     for command in ("reviews", "lessons", "resume"):
         study = sub.add_parser(command, parents=[common])
-        study.add_argument("--batch", type=int, choices=range(1, 21), metavar="1–20")
+        size = study.add_mutually_exclusive_group()
+        size.add_argument("--batch", type=int, choices=range(1, 21), metavar="1–20")
+        if command == "reviews":
+            size.add_argument("--all", dest="all_reviews", action="store_true", help="Review all eligible cached subjects due at session start.")
     lookup = sub.add_parser("lookup", parents=[common])
     source = lookup.add_mutually_exclusive_group(required=True)
     source.add_argument("text", nargs="?", help="Exact text to search; at most 256 Unicode code points.")
@@ -424,6 +427,8 @@ def dispatch(args):
     payload = {"view": args.view if command == "open" else command}
     if command in ("reviews", "lessons", "resume") and args.batch is not None:
         payload["limit"] = args.batch
+    if command == "reviews" and args.all_reviews:
+        payload["all_reviews"] = True
     if command == "lookup":
         if args.selection:
             payload["selection"] = True
@@ -436,6 +441,8 @@ def dispatch(args):
     result = {"accepted": True, "view": payload["view"], "completion": "dispatch_only"}
     if "limit" in payload:
         result["batch"] = payload["limit"]
+    if payload.get("all_reviews"):
+        result["all_reviews"] = True
     if command == "lookup":
         result["source"] = "selection_or_clipboard" if args.selection else "supplied_text"
     return result, 0

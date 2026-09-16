@@ -60,7 +60,9 @@ ColumnLayout {
         objectName: "today-" + modelData.mode
         required property var modelData
         readonly property var saved: root.s.saved_sessions && typeof root.s.saved_sessions === "object" && !Array.isArray(root.s.saved_sessions) ? root.s.saved_sessions[modelData.mode] : undefined
-        readonly property bool savedValid: !!saved && typeof saved === "object" && !Array.isArray(saved) && Number.isSafeInteger(saved.completed) && Number.isSafeInteger(saved.total) && saved.total >= 1 && saved.total <= 20 && saved.completed >= 0 && saved.completed < saved.total && (saved.mode === undefined || saved.mode === modelData.mode) && (saved.phase === undefined || ["question", "feedback"].indexOf(saved.phase) >= 0 || modelData.mode === "lessons" && saved.phase === "lesson") && !saved.invalidated
+        readonly property bool allReviews: modelData.mode === "reviews" && (root.s.settings || {}).review_all === true
+        readonly property int batchSize: (root.s.settings || {}).batch_size || 5
+        readonly property bool savedValid: !!saved && typeof saved === "object" && !Array.isArray(saved) && Number.isSafeInteger(saved.completed) && Number.isSafeInteger(saved.total) && saved.total >= 1 && saved.total <= (modelData.mode === "reviews" && saved.all_reviews === true ? 12000 : 20) && saved.completed >= 0 && saved.completed < saved.total && (saved.mode === undefined || saved.mode === modelData.mode) && (saved.phase === undefined || ["question", "feedback"].indexOf(saved.phase) >= 0 || modelData.mode === "lessons" && saved.phase === "lesson") && !saved.invalidated
         readonly property bool needsCheck: saved === undefined || saved !== null && !savedValid
         Layout.fillWidth: true
         Layout.preferredHeight: studyCardContent.implicitHeight + Style.space(24)
@@ -97,7 +99,7 @@ ColumnLayout {
             spacing: Style.space(6)
             Action {
               objectName: "today-" + studyCard.modelData.mode + "-begin"
-              text: studyCard.needsCheck ? "Check saved status →" : studyCard.savedValid ? "Resume " + studyCard.modelData.mode + " →" : studyCard.modelData.mode === "reviews" ? "Review 5 →" : "Choose lessons →"
+              text: studyCard.needsCheck ? "Check saved status →" : studyCard.savedValid ? "Resume " + studyCard.modelData.mode + " →" : studyCard.modelData.mode === "reviews" ? "Review " + (studyCard.allReviews ? "all " + studyCard.modelData.value : Math.min(studyCard.batchSize, studyCard.modelData.value)) + " →" : "Choose lessons →"
               accessibleName: studyCard.needsCheck ? "Check saved " + studyCard.modelData.mode + " status" : text
               selected: true
               enabled: !root.controller.busy && (studyCard.needsCheck || studyCard.savedValid || (studyCard.modelData.value > 0 && !root.s.vacation))
@@ -105,7 +107,7 @@ ColumnLayout {
                 if (studyCard.needsCheck)
                   root.controller.navigate(studyCard.modelData.mode === "reviews" ? "review-overview" : "lesson-overview")
                 else if (studyCard.savedValid || studyCard.modelData.mode === "reviews")
-                  root.controller.begin(studyCard.modelData.mode, 5)
+                  root.controller.begin(studyCard.modelData.mode, studyCard.batchSize, undefined, false, studyCard.allReviews)
                 else
                   root.controller.navigate("lesson-overview")
               }

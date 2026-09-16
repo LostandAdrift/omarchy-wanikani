@@ -1,5 +1,6 @@
 """Exercise the actual lesson/review overview with authored data and inert IO."""
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -26,6 +27,11 @@ Item {
     property var pending: []
     property var snapshot: ({})
     property var cards: []
+    property var settingsWrites: []
+    function saveSettings(values) {
+      settingsWrites = settingsWrites.concat([values])
+      snapshot = Object.assign({},snapshot,{settings:Object.assign({},snapshot.settings || {},values)})
+    }
     function result(method, args) {
       var counts = {radical:0,kanji:0,vocabulary:0,kana_vocabulary:0}
       cards.forEach(function (card) { counts[card.type]++ })
@@ -56,8 +62,9 @@ Item {
     property bool busy: false
     property string contentAccess: "authored-account"
     property var starts: []
+    property bool allReviews: false
     property var routes: []
-    function begin(mode,limit,ids) { starts = starts.concat([{mode:mode,limit:limit,ids:ids}]) }
+    function begin(mode,limit,ids,replacePractice,all) { allReviews=all===true;starts = starts.concat([{mode:mode,limit:limit,ids:ids}]) }
     function navigate(route) { routes = routes.concat([route]) }
   }
   StudyOverview { id: screen; controller: owner; mode: "lessons"; width: 460 }
@@ -95,6 +102,8 @@ Item {
       screen.batch = 5
       screen.invalidate(true)
       backend.requests = []
+      backend.settingsWrites = []
+      screen.reviewAll = false
       owner.opened = true
     }
     function cleanup() { owner.opened = false }
@@ -106,7 +115,7 @@ Item {
       return result
     }
     function action(text) {
-      var matches = items(screen).filter(function (item) { return item.objectName === "fixture-action" && item.text === text && item.visible })
+      var matches = items(screen).filter(function (item) { return typeof item.clicked === "function" && item.text === text && item.visible })
       compare(matches.length,1,text)
       return matches[0]
     }
@@ -123,6 +132,42 @@ Item {
       action("Vocabulary · 8")
       action("Kana vocabulary · 7")
       compare(owner.starts.length,0)
+    }
+    function test_all_due_selection_persists_and_starts_with_explicit_scope() {
+      screen.mode="reviews"
+      backend.snapshot=Object.assign({},backend.snapshot,{reviews:137})
+      var all=findChild(screen,"reviews-scope-all")
+      all.forceActiveFocus();keyClick(Qt.Key_Space)
+      verify(screen.reviewAll)
+      compare(backend.settingsWrites,[{review_all:true}])
+      var start=findChild(screen,"reviews-start")
+      compare(start.text,"Review all 137 →")
+      start.forceActiveFocus();keyClick(Qt.Key_Space)
+      verify(owner.allReviews);compare(owner.starts[0].mode,"reviews")
+      findChild(screen,"reviews-scope-batch").clicked()
+      verify(!screen.reviewAll);compare(backend.settingsWrites[1],{review_all:false})
+      owner.busy=true;screen.chooseReviews(true);verify(!screen.reviewAll)
+    }
+    function test_large_saved_review_keeps_resume_instead_of_new_scope_choice() {
+      screen.mode="reviews"
+      backend.snapshot=Object.assign({},backend.snapshot,{saved_sessions:{reviews:{mode:"reviews",phase:"question",completed:21,total:137,all_reviews:true}}})
+      verify(!findChild(screen,"reviews-scope-all").visible)
+      action("Resume reviews →").clicked();compare(owner.starts[0].mode,"reviews")
+      compare(backend.settingsWrites,[])
+    }
+    function test_all_due_narrow_layout_and_authored_capture() {
+      screen.mode="reviews";screen.reviewAll=true
+      backend.snapshot=Object.assign({},backend.snapshot,{reviews:137})
+      for(var size of [320,710]) {
+        screen.width=size;wait(10);verify(waitForRendering(screen))
+        for(var item of items(screen)) {
+          if(!item.visible || !item.width || !item.height)continue
+          var p=item.mapToItem(screen,0,0)
+          verify(p.x>=-1 && p.x+item.width<=screen.width+1,String(item.text||item.objectName)+" exceeds review width")
+        }
+      }
+      var capture=__CAPTURE__
+      if(capture)grabImage(screen).save(capture+"/all-reviews-overview.png")
     }
     function test_cached_image_radical_uses_original_catalogue_array() {
       var radical = card(91,"radical",true)
@@ -395,7 +440,7 @@ class LessonOverviewRenderingTests(unittest.TestCase):
                 ' property color background: "#ffffff"\n property color foreground: "#202020"\n'
                 ' property color accent: "#006699"\n property color urgent: "#990000"\n}\n')
             shutil.copyfile(ROOT / "tests/qml/fixtures/radical.svg", directory / "radical.svg")
-            (directory / "tst_LessonOverview.qml").write_text(QML)
+            (directory / "tst_LessonOverview.qml").write_text(QML.replace('__CAPTURE__', json.dumps(os.environ.get('WANIKANI_ALL_CAPTURE_DIR', ''))))
             result = subprocess.run([str(RUNNER), "-input", str(directory), "-import", str(directory)],
                 capture_output=True, text=True, timeout=45,
                 env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_QPA_PLATFORMTHEME": "",

@@ -233,6 +233,30 @@ ColumnLayout {
       text: "Study"
       font.bold: true
     }
+    Label {
+      text: "Review session"
+    }
+    Flow {
+      Layout.fillWidth: true
+      spacing: Style.space(8)
+      Action {
+        objectName: "settings-review-batch"
+        text: "A batch"
+        selected: root.snapshot.settings.review_all !== true
+        onClicked: root.controller.service.saveSettings({review_all: false})
+      }
+      Action {
+        objectName: "settings-review-all"
+        text: "All due reviews"
+        selected: root.snapshot.settings.review_all === true
+        onClicked: root.controller.service.saveSettings({review_all: true})
+      }
+    }
+    Label {
+      Layout.fillWidth: true
+      text: "Choose a short batch or all reviews due when you start. Saved sessions keep their original queue. Lessons stay in batches."
+      secondary: true
+    }
     Repeater {
       model: [
         {
@@ -613,7 +637,7 @@ ColumnLayout {
   }
   Label {
     Layout.fillWidth: true
-    text: "WaniKani for Omarchy · 0.2.18\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
+    text: "WaniKani for Omarchy · 0.2.19\nAn independent community project. WaniKani content belongs to Tofugu. No telemetry, cloud backend, or AI grading."
     secondary: true
     font.pixelSize: Style.font.bodySmall
   }

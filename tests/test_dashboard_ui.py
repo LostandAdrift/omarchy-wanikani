@@ -52,10 +52,11 @@ Rectangle {
     property bool busy:false
     property var snapshot:({})
     property var begins:[]
+    property bool allReviews:false
     property var routes:[]
     property var calls:[]
     property var subjects:[]
-    function begin(mode,limit,ids){begins=begins.concat([{mode:mode,limit:limit,ids:ids||null}])}
+    function begin(mode,limit,ids,replacePractice,all){allReviews=all===true;begins=begins.concat([{mode:mode,limit:limit,ids:ids||null}])}
     function navigate(view){routes=routes.concat([view])}
     function call(method,args){calls=calls.concat([{method:method,args:args}])}
     function showSubject(id){subjects=subjects.concat([id])}
@@ -116,6 +117,16 @@ Rectangle {
       change({saved_sessions:{reviews:{completed:0,total:5},lessons:{completed:0,total:3}}})
       verify(item("today-reviews-begin").enabled&&item("today-lessons-begin").enabled)
       compare(item("today-lessons-saved").text,"Saved · 0 of 3 complete")
+    }
+    function test_all_due_preference_and_large_saved_session_are_supported(){
+      change({saved_sessions:{reviews:null,lessons:null},reviews:137,settings:{review_all:true,batch_size:10}});make(290)
+      compare(item("today-reviews-begin").text,"Review all 137 →")
+      click("today-reviews-begin");verify(owner.allReviews)
+      change({saved_sessions:{reviews:{mode:"reviews",phase:"feedback",completed:23,total:137,all_reviews:true},lessons:null}})
+      compare(item("today-reviews-begin").text,"Resume reviews →")
+      compare(item("today-reviews-saved").text,"Saved · 23 of 137 complete")
+      change({settings:{review_all:false,batch_size:10}})
+      compare(item("today-reviews-begin").text,"Resume reviews →")
     }
     function test_busy_and_vacation_states_remain_visible_and_keep_saved_work_resumable(){
       make(290);owner.busy=true;wait(1)

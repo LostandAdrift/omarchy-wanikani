@@ -660,7 +660,7 @@ class Worker:
             result = subject_status(self.engine, args.get("subject_id"))
         elif method == "session_report":
             from wanikani.session_report import report
-            result = report(self.engine, args.get("session_id"))
+            result = report(self.engine, args.get("session_id"), args.get("offset", 0))
         elif method == "details":
             result = self.engine.details(int(args["subject_id"]), include_status=True)
         elif method == "ambient":

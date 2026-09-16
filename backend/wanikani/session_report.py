@@ -4,7 +4,7 @@ The durable queue establishes what was completed; the matching local outbox
 record establishes submission status. No account-wide accuracy or elapsed
 study time is inferred. Answer text, notes and assignment baselines stay private.
 """
-from .common import UserError
+from .common import UserError, session_queue_limit
 from .recovery import _protected_subjects, _subject
 
 
@@ -22,7 +22,7 @@ STATUS_LABELS = {
 }
 
 
-def report(engine, session_id=None):
+def report(engine, session_id=None, offset=0):
     if session_id is not None and (not isinstance(session_id, str) or not session_id or len(session_id) > 160):
         raise UserError("Choose a completed local session.")
     session = engine.store.session(session_id)
@@ -34,29 +34,28 @@ def report(engine, session_id=None):
             session = engine.store.session(session_id)
             if session:
                 engine.ensure_trail_practice(session)
-            return _report(engine, session)
-    return _report(engine, session)
+            return _report(engine, session, offset)
+    return _report(engine, session, offset)
 
 
-def _report(engine, session):
+def _report(engine, session, offset=0):
     if not session or session.get("phase") != "complete":
         raise UserError("The batch recap is available after the session ends.", "session_unfinished")
     if session.get("mode") not in ("reviews", "lessons", "practice"):
         raise UserError("This saved session has an unavailable study mode.")
     queue = session.get("queue")
-    if not isinstance(queue, list) or len(queue) > 20:
+    if not isinstance(queue, list) or len(queue) > session_queue_limit(session):
         raise UserError("This saved session needs inspection before a recap is available.")
+    if type(offset) is not int or offset < 0 or offset >= max(1, len(queue)):
+        raise UserError("Choose an available recap page.")
     maximum, protected = engine.max_level(), _protected_subjects(engine)
     items, practice_ids, mistake_ids = [], [], []
     totals = {"completed": 0, "not_completed": 0, "meaning": 0, "reading": 0, "without_mistakes": 0}
-    for entry in queue:
+    for index, entry in enumerate(queue):
         subject_id = entry.get("subject_id") if isinstance(entry, dict) else None
         if type(subject_id) is not int or subject_id < 1:
             raise UserError("This saved session contains an unavailable subject reference.")
         done = entry.get("done") is True
-        # Ended/reset sessions may still contain unfinished subjects. Do not
-        # expose their answers as if they were acknowledged completions.
-        subject = _subject(engine, subject_id, maximum, protected | ({subject_id} if not done else set()))
         counters = entry.get("errors", {})
         if not isinstance(counters, dict):
             raise UserError("This saved session contains invalid mistake counts.")
@@ -70,6 +69,15 @@ def _report(engine, session):
             totals["meaning"] += errors["meaning"]
             totals["reading"] += errors["reading"]
             totals["without_mistakes"] += int(errors["total"] == 0)
+        else:
+            totals["not_completed"] += 1
+        # Keep the entire session's counts, but hydrate at most one page of
+        # subject content and practice IDs. Large stacks must not mount thousands
+        # of QML cards or accidentally turn recap practice into another all queue.
+        if not offset <= index < offset + 20:
+            continue
+        subject = _subject(engine, subject_id, maximum, protected | ({subject_id} if not done else set()))
+        if done:
             if session["mode"] == "practice":
                 state = "ungraded"
             else:
@@ -80,8 +88,6 @@ def _report(engine, session):
                     state = rows[0]["state"] if rows[0]["state"] in STATUS_LABELS else "missing"
                 else:
                     state = "missing"
-        else:
-            totals["not_completed"] += 1
         ready = False
         if done and subject["accessible"]:
             try:
@@ -105,4 +111,6 @@ def _report(engine, session):
     return {"id": session["id"], "mode": session["mode"], "ended_at": session.get("ended_at"),
         "items": items, "counts": totals, "typo_corrections": session.get("overrides", 0),
         "practice_ids": practice_ids, "mistake_ids": mistake_ids,
+        "offset": offset, "total": len(queue), "has_more": offset + len(items) < len(queue),
+        "all_reviews": session.get("all_reviews") is True,
         "local_only": True, "demo": engine.demo}

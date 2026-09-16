@@ -245,16 +245,26 @@ ColumnLayout {
     visible: root.session !== null
     Label {
       Layout.fillWidth: true
-      text: !root.session ? "" : (root.session.mode === "practice" ? "PRACTICE" : root.session.mode === "lessons" ? "LESSONS" : "REVIEWS") + " · " + (root.session.phase === "lesson" ? "LEARN" : root.session.phase === "complete" ? "COMPLETE" : (root.session.mode === "lessons" ? "QUIZ · " : "") + (root.session.part === "reading" ? "READING" : "MEANING"))
+      text: !root.session ? "" : (root.session.mode === "practice" ? "PRACTICE" : root.session.mode === "lessons" ? "LESSONS" : root.session.all_reviews ? "ALL DUE REVIEWS" : "REVIEWS") + " · " + (root.session.phase === "lesson" ? "LEARN" : root.session.phase === "complete" ? "COMPLETE" : (root.session.mode === "lessons" ? "QUIZ · " : "") + (root.session.part === "reading" ? "READING" : "MEANING"))
       font.pixelSize: Style.font.bodySmall
       font.letterSpacing: 2
       secondary: true
     }
     Label {
+      objectName: "study-session-total"
+      Layout.maximumWidth: parent.width * 0.52
       text: root.session ? root.session.phase === "lesson" ? "Subject " + (root.session.lesson_index + 1) + " of " + root.session.total : root.session.completed + " / " + root.session.total + " subjects" : ""
       secondary: true
       font.pixelSize: Style.font.bodySmall
     }
+  }
+  Label {
+    objectName: "study-reviews-remaining"
+    Layout.fillWidth: true
+    visible: !!root.session && root.session.all_reviews === true && root.session.phase !== "complete"
+    text: root.session ? Math.max(0, root.session.total - root.session.completed) + (root.session.finishing ? " left before this batch ends" : " left in this session") : ""
+    secondary: true
+    font.pixelSize: Style.font.bodySmall
   }
   Rectangle {
     objectName: "study-completion-meter"

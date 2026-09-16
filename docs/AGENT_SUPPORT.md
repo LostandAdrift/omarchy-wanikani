@@ -88,11 +88,12 @@ Begin or resume only when the user intends to study:
 
 ```bash
 python3 tools/wanikani.py reviews --batch 5
+python3 tools/wanikani.py reviews --all
 python3 tools/wanikani.py lessons --batch 5
 python3 tools/wanikani.py resume
 ```
 
-The optional batch is a whole number from 1 to 20. Omitting it uses the plugin preference. Beginning study creates or restores durable local session state and can refresh online, including normal replay of previously completed pending work. Reviews and lessons use the native mode selection and saved-session rules. The CLI supplies no answers and acknowledges no feedback. It has no grading, automatic study, correction, forced-recovery, credential, or generic worker-command interface.
+The optional batch is a whole number from 1 to 20. Reviews also accept `--all`, mutually exclusive with `--batch`, to select all eligible cached reviews due at session start. This option is review-only; lessons stay bounded. Omitting size options uses the plugin preference. An unfinished saved session always resumes its original queue, even if another size was requested. Beginning study creates or restores durable local session state and can refresh online, including normal replay of previously completed pending work. The CLI supplies no answers and acknowledges no feedback. It has no grading, automatic study, correction, forced-recovery, credential, or generic worker-command interface.
 
 ## Listening and recording preparation
 

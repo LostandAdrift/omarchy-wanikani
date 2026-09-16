@@ -6,7 +6,7 @@ A native WaniKani client for Omarchy: lessons, reviews, listening practice, offl
 
 **Omarchy 4.0.3 compatibility:** study and lookup use the public read-only lock-status IPC because third-party plugins no longer receive the live lock service. An explicit open waits for a valid unlocked response; failures remain closed. Automatic ambient display and reminders are suppressed when the required idle/notification services are unavailable.
 
-**Version 0.2.18 is a development release.** Reviews have explicit English/kana prompts, pinned actions, Alt+P pronunciation and Alt+D explanations. Click-away dismissal defaults on; change it in Settings → Desktop. This is an independent community client, not a Tofugu product. Live study and fourteen days of personal use remain qualification gates.
+**Version 0.2.19 is a development release.** Choose a short review batch or **All due**, with completed/remaining totals and saved progress. Reviews have explicit English/kana prompts, pinned actions, Alt+P pronunciation and Alt+D explanations. Click-away dismissal defaults on; change it in Settings → Desktop. This is an independent community client, not a Tofugu product. Live study and fourteen days of personal use remain qualification gates.
 
 ![Today with separate saved Reviews and Lessons, confirmed level progress and both audio activities](docs/screenshots/today-component-dark.png)
 
@@ -39,7 +39,7 @@ python3 tools/integrate.py install
 
 | Choose | What happens |
 | --- | --- |
-| **Reviews** | Recall learned subjects in small batches. Lessons and reviews keep separate saved questions, drafts and mistake counts. |
+| **Reviews** | Choose a small batch or all eligible cached reviews due at the start. Your choice is remembered; saved sessions retain their exact queue. Lessons and reviews keep separate drafts and mistake counts. |
 | **Lessons** | Preview a batch, learn Meaning → Reading or Sound → Context, then explicitly start its quiz. |
 | **Listen · Recall meaning** | Play a familiar recording, reveal the word, then choose Got it or Again. Local intervals and Undo stay separate from WaniKani. |
 | **Listen · Type kana** | Transcribe the actual recording in romaji or kana. Check gives feedback; Continue records the local result. |
@@ -48,6 +48,8 @@ python3 tools/integrate.py install
 | **Lookup / Practice** | Search selected text locally, inspect a reading trail and choose up to twenty words for ungraded practice. |
 
 **Enter** checks an answer, then acknowledges feedback. **Escape** saves and returns to work. Expand changes the view without restarting. **I made a typo** applies only to the current incorrect feedback before advancing; committed reviews cannot be retroactively changed.
+
+**All due** freezes the eligible stack after the normal startup refresh; newly arriving reviews wait for the next session. **Finish this batch** ends after the current group of five, leaving the rest due. Change the default in **Settings → Study → Review session**. Recaps show twenty subjects per page; practice from a recap stays bounded to that page.
 
 Original vocabulary pronunciation has replay, named voices and explicit download/error states. **Settings → Audio** makes voice testing and autoplay choices visible. Meaning listening and kana dictation each keep a separate saved session and five-new-word daily allowance. Returning to saved audio practice stays silent.
 

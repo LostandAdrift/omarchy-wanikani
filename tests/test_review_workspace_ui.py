@@ -65,6 +65,15 @@ CASES=r'''
   owner.session=state("meaning");tryCompare(input(),"activeFocus",true)
   keyClick("v");compare(input().text,"v");keyClick(Qt.Key_Return);compare(owner.actions[0],{method:"answer",args:{text:"v"}})
  }
+ function test_all_due_total_and_remaining_are_visible_at_narrow_width(){
+  var value=state("reading");value.all_reviews=true;value.total=137;value.completed=23
+  make(value);surface.width=360;wait(10)
+  compare(findChild(page,"study-session-total").text,"23 / 137 subjects")
+  compare(findChild(page,"study-reviews-remaining").text,"114 left in this session")
+  verify(findChild(page,"study-reviews-remaining").visible)
+  owner.session=Object.assign({},value,{finishing:true,total:25})
+  compare(findChild(page,"study-reviews-remaining").text,"2 left before this batch ends")
+ }
  function test_capture_authored_feedback(){
   make(state("reading","feedback"));wait(30)
   var dir=__CAPTURE__;if(dir){grabImage(surface).save(dir+"/review-dark.png");Color.background="#fffdf5";Color.foreground="#222222";Color.accent="#006699";wait(30);grabImage(surface).save(dir+"/review-light.png")}

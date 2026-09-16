@@ -7,7 +7,7 @@ reported; omitted material stays in the passage as unchanged, unlinked text.
 import json
 import unicodedata
 
-from .common import UserError, epoch
+from .common import UserError, epoch, session_queue_limit
 
 
 MAX_TEXT = 256
@@ -19,7 +19,8 @@ TYPE_ORDER = {"vocabulary": 0, "kana_vocabulary": 1, "kanji": 2}
 
 
 def _protected(engine):
-    rows = engine.store.rows("""SELECT json_extract(body,'$.queue') AS queue,json_type(body,'$.queue') AS queue_type
+    rows = engine.store.rows("""SELECT json_extract(body,'$.queue') AS queue,json_type(body,'$.queue') AS queue_type,
+        json_extract(body,'$.mode') AS mode,json_type(body,'$.all_reviews') AS all_reviews
       FROM sessions INDEXED BY sessions_unfinished_graded
       WHERE json_extract(body,'$.phase')!='complete'
         AND json_extract(body,'$.mode')!='practice' LIMIT ?""", (MAX_SESSIONS + 1,))
@@ -30,9 +31,10 @@ def _protected(engine):
         if row["queue_type"] != "array":
             return None
         queue = json.loads(row["queue"])
-        # Durable sessions contain at most twenty subjects. If their structure
-        # is damaged, withhold links instead of guessing which answers to hide.
-        if not isinstance(queue, list) or len(queue) > 20:
+        # All-due reviews protect their entire frozen stack, including entries
+        # beyond the first batch. Unmarked oversized records still fail closed.
+        limit = session_queue_limit({"mode": row["mode"], "all_reviews": row["all_reviews"] == "true"})
+        if not isinstance(queue, list) or len(queue) > limit:
             return None
         for item in queue:
             if not isinstance(item, dict) or type(item.get("subject_id")) is not int:
